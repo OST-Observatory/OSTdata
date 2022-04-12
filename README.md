@@ -1,5 +1,6 @@
-
 # OSTdata
+
+This project is based on the Astronomical Observation Tracking System (AOTS, https://github.com/vosjo/AOTS), primarily developed by Joris (vosjo).
 
 ## Installing Django
 
