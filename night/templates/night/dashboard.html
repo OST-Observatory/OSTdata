@@ -1,0 +1,97 @@
+{% extends "landing.html" %}
+
+{% load static %}
+
+{% block head %}
+{% include "datatables.html" %}
+{% endblock %}
+
+{% block headertitle %} Dashboard {% endblock %}
+
+<!--{% block navigation %}
+   <a href="/stars/stars"> INDEX </a>
+   <strong>|</strong>
+   <a href="/stars/tags" class="active"> Tags </a>
+{% endblock %}-->
+
+
+{% block content %}
+
+{% if private_nights %}
+<section class='data-section' id="private_nights">
+
+<h3 class='indent'>Private nights</h3>
+
+<div class="flex-data-container j-center">
+
+    <i>"Dashboard for private nights!"</i>
+
+<!--    {% for project in private_nights %} -->
+
+<!--      <div class='project-container'  id="project-{{project.pk}}">
+
+         <h3>
+         <a href= {% url 'systems:star_list' project.slug %}>{{project.name}}</a>
+         </h3>
+
+         <div>
+
+         {% if project.logo %}
+         <img class="project-logo" src="{{project.logo.url}}" alt="{{project.name}} logo">
+         {% else %}
+         <img class="project-logo" src="{% static "images/default_logo.png" %}" alt="{{project.name}} logo">
+         {% endif %}
+
+         </div>
+
+         <i>{{project.description}}</i>
+
+      </div>-->
+<!--    {% endfor %} -->
+
+</div>
+
+<hr>
+
+</section>
+{% endif %}
+
+
+<section class='data-section' id="public_nights">
+
+<h3 class='indent'>Public nights</h3>
+
+
+<div class="flex-data-container j-center">
+
+    <i>"Dashboard for public nights!"</i>
+
+<!--   {% for project in public_projects %}
+
+      <div class='project-container'  id="project-{{project.pk}}">
+
+         <h3>
+         <a href= {% url 'systems:star_list' project.slug %}>{{project.name}}</a>
+         </h3>
+
+         <div>
+
+         {% if project.logo %}
+         <img class="project-logo" src="{{project.logo.url}}" alt="{{project.name}} logo">
+         {% else %}
+         <img class="project-logo" src="{% static "images/default_logo.png" %}" alt="{{project.name}} logo">
+         {% endif %}
+
+         </div>
+
+         <i>{{project.description}}</i>
+
+      </div>
+   {% endfor %}-->
+
+</div>
+
+
+</section>
+
+{% endblock %}

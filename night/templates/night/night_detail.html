@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block head %}
+    {% include "bokeh.html" %}
+
+    <script type="text/javascript" src="{% static 'js/nights_detail.js' %}"></script>
+
+
+{% endblock %}
+
+{% block headertitle %}
+    Night: {{ night.name }}
+{% endblock %}
+
+{% block content %}
+<h2>Details on night: {{ night.name }}</h2>
+    <section class='data-section' id="summary">
+
+        <h3>Summary</h3>
+        <div class="flex-data-container">
+
+            <div class="tag-container">
+                <h3>Tags</h3>
+                {% if user.is_authenticated %}
+                    <i id="tagEditButton" class="material-icons button edit" title="Edit"
+                        night_id={{ night.pk }}>edit</i>
+                {% endif %}
+
+                <div class="flex-data-container" id="tag_list" night_id={{ night.pk }}>
+                    <p>Loading...</p>
+                </div>
+
+            </div>
+
+        </div>
+
+<!--             <hr> -->
+
+    </section>
+
+<!-- Divs necessary for editing on page stuff with ajax -->
+<div id="tagAdd" title="Add a tag">
+    <ul id="tagOptions">
+        {% for tag in tags %}
+            <li><label><input id="tag_pk_{{ tag.pk }}" name="tags" type="checkbox"
+                                value="{{ tag.pk }}"/>{{ tag.name }}</label></li>
+        {% endfor %}
+    </ul>
+</div>
+{% endblock %}

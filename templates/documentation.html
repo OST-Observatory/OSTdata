@@ -1,0 +1,65 @@
+
+{% extends "landing.html" %}
+
+{% load static %}
+
+{% block head %}
+<!--
+{   % include "datatables.html" %}
+<script type="text/javascript" src="{% static 'js/tags_list.js' %}"></script>-->
+{% endblock %}
+
+{% block headertitle %} Documentation {% endblock %}
+
+{% block content %}
+
+<section class='data-section' id="documentation_section">
+
+<h3 class='indent'>Docs</h3>
+
+
+<div class="flex-data-container j-center">
+
+
+      <div class='docs-container'>
+
+         <h3>
+         How to ...
+         </h3>
+
+         <div>
+
+         <a href="/media/docs/Manual_1.pdf">
+         <img class="project-logo" width="250px" src="{% static "images/docs_default_logo.png" %}">
+         </a>
+
+         </div>
+
+<!--          <i>{{project.description}}</i> -->
+
+      </div>
+
+
+      <div class='docs-container'>
+
+         <h3>
+         How to ...
+         </h3>
+
+         <div>
+
+         <a href="/media/docs/Manual_2.pdf">
+         <img class="project-logo" width="250px" src="{% static "images/docs_default_logo.png" %}">
+
+         </div>
+
+<!--          <i>{{project.description}}</i> -->
+
+      </div>
+
+</div>
+
+
+</section>
+
+{% endblock %}
