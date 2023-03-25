@@ -2,7 +2,7 @@ from django.contrib import admin
 
 # Register your models here.
 
-from .models import Night
+from .models import Obs_run
 
 
-admin.site.register(Night)
+admin.site.register(Obs_run)

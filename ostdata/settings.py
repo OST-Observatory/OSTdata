@@ -32,7 +32,7 @@ SECRET_KEY = env("SECRET_KEY")
 # Application definition
 
 INSTALLED_APPS = [
-    'night.apps.NightConfig',
+    'obs_run.apps.RunConfig',
     'users.apps.UsersConfig',
     'tags.apps.TagsConfig',
     'django.contrib.admin',
@@ -81,7 +81,7 @@ TEMPLATES = [
 REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': (
         'rest_framework.permissions.IsAuthenticatedOrReadOnly',
-        'ostdata.custom_permissions.IsAllowedOnNight',
+        'ostdata.custom_permissions.IsAllowedOnRun',
     ),
 
     'DEFAULT_RENDERER_CLASSES': (
@@ -160,11 +160,19 @@ STATICFILES_DIRS = ['site_static',]
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # Uploaded files
-MEDIA_ROOT = 'media'
-MEDIA_URL = '/media/'
+# MEDIA_ROOT = 'media'
+# MEDIA_URL = '/media/'
 
 # Load specific settings for developement of production
 if env("DEVICE") in platform.node():
-   from .settings_production import DEBUG, ALLOWED_HOSTS, DATABASES, LOGGING
+   from .settings_production import (
+        DEBUG,
+        ALLOWED_HOSTS,
+        DATABASES,
+        LOGGING,
+        DEFAULT_FROM_EMAIL,
+        FORCE_SCRIPT_NAME,
+        CSRF_TRUSTED_ORIGINS,
+        )
 else:
    from .settings_development import DEBUG, ALLOWED_HOSTS, DATABASES, LOGGING

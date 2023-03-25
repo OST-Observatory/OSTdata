@@ -3,11 +3,11 @@ from django.contrib import messages
 from django.http import HttpResponseRedirect
 from django.shortcuts import reverse
 
-from .models import Night
+from .models import Obs_run
 
 ############################################################################
 
-def invalid_form(request, redirect, project_slug):
+def invalid_form(request, redirect):
     """
         Handel invalid forms
     """
@@ -21,25 +21,25 @@ def invalid_form(request, redirect, project_slug):
 
     #   Return and redirect
     return HttpResponseRedirect(
-        reverse(redirect, kwargs={'project': project_slug})
+        reverse(redirect)
     )
 
 ############################################################################
 
-def populate_nights(night_data):
+def populate_runs(run_data):
     """
         Analyse provided dictionary and populate the corresponding
-        `Night` object
+        `Obs_run` object
 
         Parameters
         ----------
-        night_data      : `dictionary`
-            Information to be added to the `Night` object
+        run_data          : `dictionary`
+            Information to be added to the `Obs_run` object
     """
     #   Check for duplicates
-    duplicates = Night.objects.filter(name=night_data["main_id"])
+    duplicates = Obs_run.objects.filter(name=run_data["main_id"])
 
     if len(duplicates) != 1:
-        return False, "System exists already: {}".format(night_data["main_id"])
+        return False, "Observation run exists already: {}".format(run_data["main_id"])
 
-    return True, "New system ({}) created".format(night_data["main_id"])
+    return True, "New observation run ({}) created".format(run_data["main_id"])

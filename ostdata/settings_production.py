@@ -1,3 +1,4 @@
+from pathlib import Path
 
 from os.path import join
 
@@ -8,6 +9,9 @@ import environ
 # Initialise environment variables
 env = environ.Env()
 environ.Env.read_env()
+
+# Build paths inside the project like this: os.path.join(BASE_DIR, ...)
+BASE_DIR = Path(__file__).resolve().parent.parent
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = False
@@ -24,6 +28,10 @@ DATABASES = {
         'PORT': env("DATABASE_PORT"),
     }
 }
+
+FORCE_SCRIPT_NAME = '/data_archive'
+
+CSRF_TRUSTED_ORIGINS = env.list("TRUSTED_ORIGIN")
 
 # Logging
 # https://docs.djangoproject.com/en/dev/topics/logging/#configuring-logging
@@ -45,7 +53,11 @@ LOGGING = {
             #'class': 'logging.handlers.RotatingFileHandler',
             #'maxBytes': 1024 * 1024 * 100,  # 100 mb
             #   TODO: Replace with Path
-            'filename': join(env("LOG_DIR", default='/tmp/'),'not_django.log'),
+            'filename': join(
+                BASE_DIR,
+                env("LOG_DIR", default='/tmp/'),
+                'not_django.log',
+                ),
             'formatter': 'standard'
         },
         'django': {
@@ -54,7 +66,11 @@ LOGGING = {
             #'class': 'logging.handlers.RotatingFileHandler',
             #'maxBytes': 1024 * 1024 * 100,  # 100 mb
             #   TODO: Replace with Path
-            'filename': join(env("LOG_DIR", default='/tmp/'),'django.log'),
+            'filename': join(
+                BASE_DIR,
+                env("LOG_DIR", default='/tmp/'),
+                'django.log',
+                ),
             'formatter': 'standard'
         },
     },
@@ -72,3 +88,7 @@ LOGGING = {
         },
     },
 }
+
+# Email settings
+
+DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL")

@@ -4,21 +4,21 @@ from django_filters import rest_framework as filters
 
 from rest_framework import viewsets
 
-from .serializers import NightSerializer, NightListSerializer
+from .serializers import RunSerializer, RunListSerializer
 
-from night.models import Night
+from obs_run.models import Obs_run
 from tags.models import Tag
 
-from ostdata.custom_permissions import get_allowed_nights_to_view_for_user
+from ostdata.custom_permissions import get_allowed_runs_to_view_for_user
 
 
 # ===============================================================
-# NIGHTS
+#   OBSERVATION RUNS
 # ===============================================================
 
-class NightFilter(filters.FilterSet):
+class RunFilter(filters.FilterSet):
     '''
-        Filter definitions for table with nights
+        Filter definitions for table with observation runs
     '''
     #   Name filter
     name = filters.CharFilter(
@@ -31,7 +31,7 @@ class NightFilter(filters.FilterSet):
     #   Status filter
     status = filters.MultipleChoiceFilter(
         field_name="observing_status",
-        choices=Night.REDUCTION_STATUS_CHOICES,
+        choices=Obs_run.REDUCTION_STATUS_CHOICES,
         )
 
     #   Tag filter
@@ -42,14 +42,14 @@ class NightFilter(filters.FilterSet):
         return queryset.filter(name__icontains=value)
 
     class Meta:
-        model = Night
+        model = Obs_run
         fields = ['name']
 
     @property
     def qs(self):
         parent = super().qs
 
-        parent = get_allowed_nights_to_view_for_user(parent, self.request.user)
+        parent = get_allowed_runs_to_view_for_user(parent, self.request.user)
 
         #   Get the column order from the GET dictionary
         getter = self.request.query_params.get
@@ -63,22 +63,22 @@ class NightFilter(filters.FilterSet):
             return parent
 
 
-class NightViewSet(viewsets.ModelViewSet):
+class RunViewSet(viewsets.ModelViewSet):
     """
         Returns a list of all stars/objects in the database
     """
 
-    queryset = Night.objects.all()
-    serializer_class = NightSerializer
+    queryset = Obs_run.objects.all()
+    serializer_class = RunSerializer
 
     filter_backends = (DjangoFilterBackend,)
-    filterset_class = NightFilter
+    filterset_class = RunFilter
 
     def get_serializer_class(self):
         if self.action == 'list':
-            return NightListSerializer
+            return RunListSerializer
         if self.action == 'retrieve':
-            return NightSerializer
-        return NightSerializer
+            return RunSerializer
+        return RunSerializer
 
 

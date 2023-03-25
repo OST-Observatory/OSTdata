@@ -6,7 +6,7 @@
 
 {% endblock %}
 
-{% block headertitle %} Observation nights: Index {% endblock %}
+{% block headertitle %} Observation runs: Index {% endblock %}
 
 
 {% block content %}
@@ -146,14 +146,14 @@
    </ul>
 </div>
 
-<div id="addNights">
-   <div id='single-add' class='night-form'>
+<div id="addRuns">
+   <div id='single-add' class='run-form'>
 
    <fieldset>
-   <legend>Add Night</legend>
+   <legend>Add observation run</legend>
         <div class="ui-controlgroup-horizontal">
 
-        <form action="{% url "nights:night_list" %}" method="post" enctype="multipart/form-data" class="" id="night-upload-form">
+        <form action="{% url "obs_runs:run_list" %}" method="post" enctype="multipart/form-data" class="" id="run-upload-form">
 
         {% if user.is_authenticated %}
             {% csrf_token %}
@@ -209,6 +209,6 @@
    <div id='bulk-add' class='bulk-system-form'></div>
 </div>
 
-<script type="text/javascript" src="{% static 'js/nights_list.js' %}"></script>
+<script type="text/javascript" src="{% static 'js/obs_runs_list.js' %}"></script>
 
 {% endblock %}

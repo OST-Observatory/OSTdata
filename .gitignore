@@ -22,4 +22,5 @@ ostdata/.env
 *.csv#
 *.back
 .idea/
+db.sqlite3.save
 !media/docs/Bulk_system_example.csv

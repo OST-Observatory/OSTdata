@@ -25,7 +25,7 @@ DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
         #'NAME': os.path.join(BASE_DIR, 'db.sqlite3'),
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'NAME': os.path.join(BASE_DIR, 'db.sqlite3'),
     }
 }
 
@@ -47,9 +47,8 @@ LOGGING = {
         'file': {
             'level': 'DEBUG',
             'class': 'logging.FileHandler',
-            #   TODO: Replace with Path
             'filename': os.path.join(
-                env("LOG_DIR", default='/tmp/'),
+                os.path.join(BASE_DIR, env("LOG_DIR", default='/tmp/')),
                 'debug.log'
                 ),
             'formatter': 'standard'

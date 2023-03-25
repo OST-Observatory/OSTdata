@@ -3,15 +3,15 @@ from django.contrib import messages
 from django.http import HttpResponse, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, reverse
 
-from .models import Night
+from .models import Obs_run
 
 from tags.models import Tag
 
-from ostdata.custom_permissions import check_user_can_view_night
+from ostdata.custom_permissions import check_user_can_view_run
 
-from .forms import UploadNightForm
+from .forms import UploadRunForm
 
-from .auxil import invalid_form, populate_nights
+from .auxil import invalid_form, populate_runs
 
 ############################################################################
 
@@ -22,72 +22,72 @@ def dashboard(request):
 
     #   TODO: Add filter for time, so that only recent objects are shown
 
-    public_nights = Night.objects \
+    public_runs = Obs_run.objects \
         .filter(is_public__exact=True).order_by('name')
-    private_nights = None
+    private_runs = None
 
     if not request.user.is_anonymous:
         user = request.user
-        private_nights = Night.objects \
+        private_runs = Obs_run.objects \
             .filter(is_public__exact=False) \
-            .filter(pk__in=user.get_read_nights().values('pk')) \
+            .filter(pk__in=user.get_read_runs().values('pk')) \
             .order_by('name')
 
-    context = {'public_nights': public_nights,
-               'private_nights': private_nights,
+    context = {'public_runs': public_runs,
+               'private_runs': private_runs,
                }
 
-    return render(request, 'night/dashboard.html', context)
+    return render(request, 'obs_run/dashboard.html', context)
 
 ############################################################################
 
-def night_list(request):
+def obs_run_list(request):
     '''
-        View showing a list of all nights
+        View showing a list of all observation runs
     '''
 
-    upload_form = UploadNightForm()
+    upload_form = UploadRunForm()
 
     #   Handle uploads
     if request.method == 'POST' and request.user.is_authenticated:
-        upload_form = UploadNightForm(
+        upload_form = UploadRunForm(
                 request.POST,
                 request.FILES,
             )
         if upload_form.is_valid():
             #   Sanitize uploaded data
-            night_data = upload_form.cleaned_data
+            run_data = upload_form.cleaned_data
 
-            #   Initialize `Night` model
-            night = Night(
-                name=night_data["main_id"],
-                is_public=night_data["is_public"],
+            #   Initialize `Obs_run` model
+            run = Obs_run(
+                name=run_data["main_id"],
+                is_public=run_data["is_public"],
             )
-            night.save()
+            run.save()
 
             try:
-                success, message = populate_nights(night_data)
+                success, message = populate_runs(run_data)
                 if success:
                     level = messages.SUCCESS
                 else:
                     level = messages.ERROR
-                    night.delete()
+                    run.delete()
                 messages.add_message(request, level, message)
             except Exception as e:
                 print(e)
-                night.delete()
+                run.delete()
                 messages.add_message(
                     request,
                     messages.ERROR,
                     "Exception occurred when adding: {}".format(
-                        night_data["main_id"]
+                        run_data["main_id"]
                         ),
                 )
 
-            return HttpResponseRedirect(reverse('nights:night_list'))
+            return HttpResponseRedirect(reverse('runs:run_list'))
         else:
             #   Handel invalid form
-            invalid_form(request, 'nights:night_list')
+            invalid_form(request, 'runs:run_list')
 
     elif request.method != 'GET' and not request.user.is_authenticated:
         messages.add_message(
@@ -100,21 +100,21 @@ def night_list(request):
         'form_system': upload_form,
         }
 
-    return render(request, 'night/night_list.html', context)
+    return render(request, 'obs_run/obs_run_list.html', context)
 
 ############################################################################
 
-@check_user_can_view_night
-def night_detail(request, night_id, **kwargs):
+@check_user_can_view_run
+def obs_run_detail(request, run_id, **kwargs):
     """
-        Detailed view for night
+        Detailed view for observation run
     """
 
-    night   = get_object_or_404(Night, pk=night_id)
+    run   = get_object_or_404(Obs_run, pk=run_id)
     context = {
-        'night': night,
+        'run': run,
         'tags': Tag.objects.all(),
     }
 
-    return render(request, 'night/night_detail.html', context)
+    return render(request, 'obs_run/obs_run_detail.html', context)
     #return HttpResponse("This will be a night detail page!")

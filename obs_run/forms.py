@@ -3,7 +3,7 @@ from django import forms
 
 from tags.models import Tag
 
-class UploadNightForm(forms.Form):
+class UploadRunForm(forms.Form):
     #   Target name
     main_id = forms.CharField(max_length=20, required=True)
 

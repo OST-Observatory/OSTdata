@@ -1,14 +1,14 @@
-let night = {}
+let run = {}
 
 $(document).ready(function () {
 
-    //  Load the night info
-    let night_id = $('#tag_list').attr('night_id')
+    //  Load the observation run info
+    let run_id = $('#tag_list').attr('run_id')
     $.ajax({
-        url: "/api/nights/" + night_id + '/',
+        url: "/api/runs/" + run_id + '/',
         type: "GET",
         success: function (json) {
-            night = json;
+            run = json;
             makepage();
         },
         error: function (xhr, errmsg, err) {
@@ -42,8 +42,8 @@ function makepage() {
 //  included tags in the tag edit window.
 function show_tags() {
     $('#tag_list').empty(); // remove all existing tags
-    for (i = 0; i < night.tags.length; i++) {
-        let tag = night.tags[i];
+    for (i = 0; i < run.tags.length; i++) {
+        let tag = run.tags[i];
         $('#tag_pk_' + tag.pk).prop("checked", true);
         $('#tag_list').append(
             "<div class='tag' id='tag-" + tag.pk + "' style='border-color:" + tag.color + "' title='" + tag.info + "'>" + tag.name + "</div>"
@@ -64,15 +64,15 @@ function openTagEditBox() {
     update_tag_window.dialog("open");
 }
 
-// Update the tags attached to this night
+// Update the tags attached to this observation run
 function update_tags() {
     let new_tags = $("#tagOptions input:checked").map(
         function () {
             return this.value;
         }).get();
-    let night_pk = $('#tagEditButton').attr('night_id')
+    let run_pk = $('#tagEditButton').attr('run_id')
     $.ajax({
-        url: "/api/nights/" + night_pk + '/',
+        url: "/api/runs/" + run_pk + '/',
         type: "PATCH",
         contentType: "application/json; charset=utf-8",
 
@@ -80,7 +80,7 @@ function update_tags() {
 
         success: function (json) {
             // update the tags of the star variable, and update the page
-            night.tags = json.tags;
+            run.tags = json.tags;
             show_tags();
             update_tag_window.dialog("close");
         },

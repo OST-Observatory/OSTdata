@@ -1,18 +1,18 @@
 
-var night_table = null;
+var run_table = null;
 var edit_status_window = null;
 var edit_tags_window = null;
 var all_tags = null;
-var add_nights_window = null;
+var add_runs_window = null;
 
 
 $(document).ready(function () {
 
-    night_table = $('#datatable').DataTable({
+    run_table = $('#datatable').DataTable({
     dom: 'l<"toolbar">frtip',
     serverSide: true,
     ajax: {
-        url: '/api/nights/?format=datatables&keep=reduction_status_display',
+        url: '/api/runs/?format=datatables&keep=reduction_status_display',
         //adding "&keep=id,rank" will force return of id and rank fields
         data: get_filter_keywords,
         contentType: "application/json; charset=utf-8",
@@ -51,8 +51,8 @@ $(document).ready(function () {
         $("div.toolbar").html(
             "<input id='tag-button'  class='tb-button' value='Edit Tags' type='button' disabled>" +
             "<input id='status-button' class='tb-button' value='Change Status' type='button' disabled>" +
-            "<input id='addnight-button' class='tb-button' value='Add Night' type='button'>" +
-            "<input id='deletenight-button' class='tb-button' value='Delete Night(s)' type='button' disabled>");
+            "<input id='addrun-button' class='tb-button' value='Add Observation run' type='button'>" +
+            "<input id='deleterun-button' class='tb-button' value='Delete Observation run(s)' type='button' disabled>");
     }
     else {$("div.toolbar").html(
         "<input id='tag-button'  class='tb-button' value='Edit Tags' type='button' disabled>" +
@@ -62,7 +62,7 @@ $(document).ready(function () {
     // Event listener to the two range filtering inputs to redraw on input
     $('#filter-form').submit( function(event) {
         event.preventDefault();
-        night_table.draw();
+        run_table.draw();
     });
 
     // Make the filter button open the filter menu
@@ -82,7 +82,7 @@ $(document).ready(function () {
     // Check and uncheck tables rows
     $('#datatable tbody').on( 'click', 'td.select-control', function () {
         let tr = $(this).closest('tr');
-        let row = night_table.row( tr );
+        let row = run_table.row( tr );
         if ( $(row.node()).hasClass('selected') ) {
             deselect_row(row);
         } else {
@@ -95,14 +95,14 @@ $(document).ready(function () {
             // Deselect all
             $(this).text('check_box_outline_blank')
 
-            night_table.rows().every( function ( rowIdx, tableLoop, rowLoop ) {
+            run_table.rows().every( function ( rowIdx, tableLoop, rowLoop ) {
                 deselect_row(this); // Open this row
             });
         } else {
             // Close all rows
             $(this).text('check_box')
 
-            night_table.rows().every( function ( rowIdx, tableLoop, rowLoop ) {
+            run_table.rows().every( function ( rowIdx, tableLoop, rowLoop ) {
                 select_row(this); // close the row
             });
         }
@@ -124,7 +124,7 @@ $(document).ready(function () {
         modal: true,
     });
 
-    add_nights_window = $("#addNights").dialog({
+    add_runs_window = $("#addRuns").dialog({
         autoOpen: false,
         width: '875',
         modal: true,
@@ -133,20 +133,20 @@ $(document).ready(function () {
     //   Event listeners for edit buttons
     $( "#status-button").click( openStatusEditWindow );
     $( "#tag-button").click( openTagEditWindow );
-    $( "#deletenight-button").click( deleteNights );
-    $( "#addnight-button").click( openAddNightsWindow );
+    $( "#deleterun-button").click( deleteRuns );
+    $( "#addrun-button").click( openAddRunsWindow );
 
 
     //   Reset check boxes when changing number of displayed objects in table
     $('#datatable_length').change(function() {
-        night_table.rows().every( function (rowIdx, tableLoop, rowLoop) {
+        run_table.rows().every( function (rowIdx, tableLoop, rowLoop) {
             deselect_row(this);
         });
     });
 
     //   Reset check boxes when switching to the next table page
     $('#datatable_paginate').click(function() {
-        night_table.rows().every( function (rowIdx, tableLoop, rowLoop) {
+        run_table.rows().every( function (rowIdx, tableLoop, rowLoop) {
             deselect_row(this);
         });
     });
@@ -173,7 +173,7 @@ function get_filter_keywords( d ) {
 // Table renderers
 
 function selection_render( data, type, full, meta ) {
-    if ( $(night_table.row(meta['row']).node()).hasClass('selected') ){
+    if ( $(run_table.row(meta['row']).node()).hasClass('selected') ){
         return '<i class="material-icons button select" title="Select">check_box</i>';
     } else {
         return '<i class="material-icons button select" title="Select">check_box_outline_blank</i>';
@@ -181,7 +181,7 @@ function selection_render( data, type, full, meta ) {
 }
 
 function name_render( data, type, full, meta ) {
-    // Create a link to the detail for the night name
+    // Create a link to the detail for the observation run name
     return "<a href='"+full['href']+"'>"+data+"</a>";
 }
 
@@ -218,24 +218,24 @@ function status_render( data, type, full, meta ) {
 function select_row(row) {
     $(row.node()).find("i[class*=select]").text('check_box')
     $(row.node()).addClass('selected');
-    if ( night_table.rows('.selected').data().length < night_table.rows().data().length ) {
+    if ( run_table.rows('.selected').data().length < run_table.rows().data().length ) {
         $('#select-all').text('indeterminate_check_box');
     } else {
         $('#select-all').text('check_box');
     }
     $('#tag-button').prop('disabled', false)
     $('#status-button').prop('disabled', false)
-    $('#deletenight-button').prop('disabled', false)
+    $('#deleterun-button').prop('disabled', false)
 }
 
 function deselect_row(row) {
     $(row.node()).find("i[class*=select]").text('check_box_outline_blank')
     $(row.node()).removeClass('selected');
-    if ( night_table.rows('.selected').data().length === 0 ) {
+    if ( run_table.rows('.selected').data().length === 0 ) {
         $('#select-all').text('check_box_outline_blank');
         $('#tag-button').prop('disabled', true)
         $('#status-button').prop('disabled', true)
-        $('#deletenight-button').prop('disabled', true)
+        $('#deleterun-button').prop('disabled', true)
     } else {
         $('#select-all').text('indeterminate_check_box');
     }
@@ -302,16 +302,16 @@ function updateStatus() {
     } else {
         $('#status-error').text('');
 
-        night_table.rows('.selected').every( function ( rowIdx, tableLoop, rowLoop ) {
-            updateNightStatus(this, new_status.filter(':checked').val());
+        run_table.rows('.selected').every( function ( rowIdx, tableLoop, rowLoop ) {
+            updateRunStatus(this, new_status.filter(':checked').val());
         });
 
     }
 }
 
-function updateNightStatus(row, status) {
+function updateRunStatus(row, status) {
     $.ajax({
-        url : "/api/nights/"+row.data()['pk']+'/',
+        url : "/api/runs/"+row.data()['pk']+'/',
         type : "PATCH",
         data : { reduction_status: status },
 
@@ -347,7 +347,7 @@ function openTagEditWindow() {
     }
 
     //  Count how many objects each tag has
-    night_table.rows('.selected').every( function ( rowIdx, tableLoop, rowLoop ) {
+    run_table.rows('.selected').every( function ( rowIdx, tableLoop, rowLoop ) {
         let tags = this.data()['tags'];
         for (tag in tags) {
             all_tag_counts[tags[tag]['pk']] ++;
@@ -357,14 +357,14 @@ function openTagEditWindow() {
 //     console.log(all_tag_counts);
 
     //  Set the checkbox states depending on the number of objects
-    let selected_nights = night_table.rows('.selected').data().length
+    let selected_runs = run_table.rows('.selected').data().length
     for (tag in all_tag_counts) {
         //  Standard unchecked state, no object has this tag
         $(".tristate[value='"+tag+"']").prop("checked", false);
         $(".tristate[value='"+tag+"']").prop("indeterminate",false);
         $(".tristate[value='"+tag+"']").removeClass("indeterminate");
 
-        if ( all_tag_counts[tag] == selected_nights ){
+        if ( all_tag_counts[tag] == selected_runs ){
             //  Checked state, all objects have this tag
             $(".tristate[value='"+tag+"']").prop("checked", true);
         } else if ( all_tag_counts[tag] > 0 ) {
@@ -387,8 +387,8 @@ function updateTags() {
     console.log(checked_tags);
     console.log(indeterminate_tags);
 
-    // Update the tags for each selected night
-    night_table.rows('.selected').every( function ( rowIdx, tableLoop, rowLoop ) {
+    // Update the tags for each selected observation run
+    run_table.rows('.selected').every( function ( rowIdx, tableLoop, rowLoop ) {
         let new_tags     = checked_tags;
         let current_tags = this.data()['tags'].map( function (x) { return x.pk; } );
 
@@ -397,17 +397,17 @@ function updateTags() {
                 new_tags.push(indeterminate_tags[tag])
             }
         }
-        update_night_tags(this, new_tags);
+        update_run_tags(this, new_tags);
     });
 
 }
 
-function update_night_tags(row, new_tags){
-    let night_pk = row.data()['pk']
+function update_run_tags(row, new_tags){
+    let run_pk = row.data()['pk']
     //    console.log(row.data());
     //    console.log(new_tags);
     $.ajax({
-        url : "/api/nights/"+night_pk+'/',
+        url : "/api/runs/"+run_pk+'/',
         type : "PATCH",
         contentType: "application/json; charset=utf-8",
 
@@ -432,11 +432,11 @@ function update_night_tags(row, new_tags){
 
 // -----
 
-function deleteNights(){
-    if (confirm('Are you sure you want to delete these Nights? This can NOT be undone!')===true){
+function deleteRuns(){
+    if (confirm('Are you sure you want to delete these Observation runs? This can NOT be undone!')===true){
     let rows = [];
     // get list of files
-    night_table.rows('.selected').every(function (rowIdx, tableLoop, rowLoop) {
+    run_table.rows('.selected').every(function (rowIdx, tableLoop, rowLoop) {
         let row = this;
         rows.push(row);
     });
@@ -456,22 +456,22 @@ function deleteNights(){
         //                                  the use of await
         p = p.then( async function () {
         await $.ajax({
-            url : "/api/nights/"+pk+'/',
+            url : "/api/runs/"+pk+'/',
             type : "DELETE",
             success : function(json) {
                 n += 1;
-                night_table.row(row).remove().draw('full-hold');
+                run_table.row(row).remove().draw('full-hold');
                 $('#select-all').text('check_box_outline_blank');
                 $('#tag-button').prop('disabled', true);
                 $('#status-button').prop('disabled', true);
-                $('#deletenight-button').prop('disabled', true);
+                $('#deleterun-button').prop('disabled', true);
                 $('#progress-bar').val(n)
             },
             error : function(xhr,errmsg,err) {
                 n += 1;
                 $('#progress-bar').val(n)
                 if (xhr.status === 403){
-                    alert('You have to be logged in to delete this nights.');
+                    alert('You have to be logged in to delete this observation runs.');
                 } else{
                     alert(xhr.status + ": " + xhr.responseText);
                 }
@@ -486,14 +486,14 @@ function deleteNights(){
 // -------------
 
 
-function openAddNightsWindow() {
-   add_nights_window = $("#addNights").dialog({
+function openAddRunsWindow() {
+   add_runs_window = $("#addRuns").dialog({
       autoOpen: false,
-      title: "Add Night(s)",
-      close: function() { add_nights_window.dialog( "close" ); },
+      title: "Add Observation run(s)",
+      close: function() { add_runs_window.dialog( "close" ); },
    });
 
-   add_nights_window.dialog( "open" );
+   add_runs_window.dialog( "open" );
 }
 
 

@@ -5,24 +5,23 @@ $(document).ready(function () {
 
    // Table functionality
    tag_table = $('#tagtable').DataTable({
-//    autoWidth: true,
-//    paging: false,
-//    info: false,
-   serverSide: true,
-   ajax: {
-      url: '/api/tags/?format=datatables',
-//       data: function ( d ) {
-//         d.project = $('#project-pk').attr('project');
-//       },
-   },
-   columns: [
-      { data: 'name' },
-      { data: 'description' },
-      { data: 'color', render: color_render},
-      { data: 'pk', render: action_render, width: '100',
-        className: 'dt-center', visible: user_authenticated},
-   ],
-
+   //    autoWidth: true,
+   //    paging: false,
+   //    info: false,
+      serverSide: true,
+      ajax: {
+         url: '/api/tags/?format=datatables',
+   //       data: function ( d ) {
+   //         d.project = $('#project-pk').attr('project');
+   //       },
+      },
+      columns: [
+         { data: 'name' },
+         { data: 'description' },
+         { data: 'color', render: color_render},
+         { data: 'pk', render: action_render, width: '100',
+         className: 'dt-center', visible: user_authenticated},
+      ],
    });
 
    function color_render( data, type, full, meta ) {
@@ -37,9 +36,11 @@ $(document).ready(function () {
    }
 
    // Initializing the dialog window
-   var tag_window = $("#addEditTag").dialog({autoOpen: false,
-            width: 'auto',
-            modal: true});
+   var tag_window = $("#addEditTag").dialog({
+      autoOpen: false,
+      width: 'auto',
+      modal: true
+   });
 
    // add event listeners
    $( ".tagAddButton").click( openTagAddBox );
@@ -72,10 +73,11 @@ function addTag() {
    $.ajax({
       url : "/api/tags/",
       type : "POST",
-      data : { name :        $('#tag-name').val(),
-               description : $('#tag-description').val(),
-               color :       $('#tag-color').val(),
-               },
+      data : {
+         name :        $('#tag-name').val(),
+         description : $('#tag-description').val(),
+         color :       $('#tag-color').val(),
+      },
 
       success : function(json) {
             tag_window.dialog( "close" );
@@ -107,18 +109,19 @@ function editTag(tabelrow, data) {
    $.ajax({
       url : "/api/tags/"+data['pk']+'/',
       type : "PATCH",
-      data : { name :        $('#tag-name').val(),
-               description : $('#tag-description').val(),
-               color :       $('#tag-color').val(),
-               },
+      data : {
+         name :        $('#tag-name').val(),
+         description : $('#tag-description').val(),
+         color :       $('#tag-color').val(),
+      },
 
       success : function(json) {
-            tag_window.dialog( "close" );
-            tag_table.row(tabelrow).data(json).draw();
+         tag_window.dialog( "close" );
+         tag_table.row(tabelrow).data(json).draw();
       },
 
       error : function(xhr,errmsg,err) {
-            console.log(xhr.status + ": " + xhr.responseText);
+         console.log(xhr.status + ": " + xhr.responseText);
       }
    });
 };

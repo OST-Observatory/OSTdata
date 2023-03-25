@@ -8,16 +8,16 @@ from rest_framework.serializers import (
     ReadOnlyField,
 )
 
-from night.models import Night
+from obs_run.models import Obs_run
 from tags.models import Tag
 #from tags.api.serializers import SimpleTagSerializer, TagSerializer
 from tags.api.serializers import TagSerializer
 
 # ===============================================================
-# NIGHTS
+#   OBSERVATION RUNS
 # ===============================================================
 
-class NightListSerializer(ModelSerializer):
+class RunListSerializer(ModelSerializer):
 
     tags = SerializerMethodField()
     #datasets = SerializerMethodField()
@@ -31,7 +31,7 @@ class NightListSerializer(ModelSerializer):
     )
 
     class Meta:
-        model = Night
+        model = Obs_run
         fields = [
             'pk',
             'name',
@@ -61,14 +61,14 @@ class NightListSerializer(ModelSerializer):
             #return []
 
     def get_href(self, obj):
-        return reverse('nights:night_detail', args=[obj.pk])
+        return reverse('runs:run_detail', args=[obj.pk])
 
     def get_reduction_status_display(self, obj):
         return obj.get_reduction_status_display()
 
 ################################################################################
 
-class NightSerializer(ModelSerializer):
+class RunSerializer(ModelSerializer):
 
     tags = SerializerMethodField()
     tag_ids = PrimaryKeyRelatedField(
@@ -83,7 +83,7 @@ class NightSerializer(ModelSerializer):
     owner = ReadOnlyField(source='added_by.username')
 
     class Meta:
-        model = Night
+        model = Obs_run
         fields = [
             'pk',
             'name',
@@ -105,23 +105,23 @@ class NightSerializer(ModelSerializer):
         return tags
 
     def get_href(self, obj):
-        return reverse('nights:night_detail', args=[obj.pk])
+        return reverse('runs:run_detail', args=[obj.pk])
 
     def get_reduction_status_display(self, obj):
         return obj.get_reduction_status_display()
 
 ################################################################################
 
-class SimpleNightSerializer(ModelSerializer):
+class SimpleRunSerializer(ModelSerializer):
    """
    Basic serializer only returning the most basic information
-   available for the Night object
+   available for the Obs_run object
    """
 
    href = SerializerMethodField()
 
    class Meta:
-      model = Night
+      model = Obs_run
       fields = [
             'pk',
             'name',
@@ -130,4 +130,4 @@ class SimpleNightSerializer(ModelSerializer):
       read_only_fields = ('pk',)
 
    def get_href(self, obj):
-      return reverse('nights:night_detail', args=[obj.pk])
+      return reverse('runs:run_detail', args=[obj.pk])

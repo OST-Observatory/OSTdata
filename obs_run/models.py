@@ -8,7 +8,7 @@ from tags.models import Tag
 
 ############################################################################
 
-class Night(models.Model):
+class Obs_run(models.Model):
     #   Name
     name = models.CharField(max_length=200)
 
@@ -17,17 +17,17 @@ class Night(models.Model):
 
     readonly_users  = models.ManyToManyField(
         settings.AUTH_USER_MODEL,
-        related_name='readonly_night',
+        related_name='readonly_run',
         blank=True,
     )
     readwrite_users = models.ManyToManyField(
         settings.AUTH_USER_MODEL,
-        related_name='readwrite_night',
+        related_name='readwrite_run',
         blank=True,
     )
     managers        = models.ManyToManyField(
         settings.AUTH_USER_MODEL,
-        related_name='managed_night',
+        related_name='managed_run',
         blank=True,
     )
 
@@ -52,7 +52,7 @@ class Night(models.Model):
     note = models.TextField(default='', blank=True)
 
     #   Tags
-    tags = models.ManyToManyField(Tag, related_name='nights', blank=True)
+    tags = models.ManyToManyField(Tag, related_name='runs', blank=True)
 
     #   Bookkeeping
     added_on      = models.DateTimeField(auto_now_add=True)
@@ -61,7 +61,7 @@ class Night(models.Model):
         settings.AUTH_USER_MODEL,
         on_delete=models.SET(get_sentinel_user),
         null=True,
-        related_name='added_night',
+        related_name='added_run',
     )
 
     #   Representation of self

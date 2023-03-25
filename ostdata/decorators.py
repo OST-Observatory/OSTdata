@@ -1,7 +1,7 @@
 
 from django.shortcuts import get_object_or_404
 
-from night.models import Night
+from obs_run.models import Obs_run
 
 def user_login_required_for_edit(function):
    '''
@@ -11,18 +11,18 @@ def user_login_required_for_edit(function):
 
    def wrap(request, *args, **kwargs):
 
-      night = get_object_or_404(Night, slug=kwargs.get('name', None))
+      run = get_object_or_404(Obs_run, slug=kwargs.get('name', None))
 
-      if night in request.user.readonly_nights.objects.all():
+      if run in request.user.readonly_runs.objects.all():
          raise PermissionDenied
 
-      elif night in request.user.readwriteown_nights.objects.all():
+      elif run in request.user.readwriteown_runs.objects.all():
          if Star.objects.get(pk=kwargs['star_id']).added_by == request.user:
             return function(request, *args, **kwargs)
          else:
             raise PermissionDenied
 
-      elif night in request.user.readwrite_nights.objects.all():
+      elif run in request.user.readwrite_runs.objects.all():
          return function(request, *args, **kwargs)
 
       else:

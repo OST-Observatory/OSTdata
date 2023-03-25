@@ -65,6 +65,7 @@ To run OSTdata locally, using the simple sqlite database and the included server
 ```
 python manage.py makemigrations obs_run
 python manage.py makemigrations objects
+python manage.py makemigrations users
 python manage.py makemigrations tags
 python manage.py migrate
 ```
@@ -179,6 +180,7 @@ Instructions on how to generate a secret key can be found here: https://tech.ser
 ```
 python manage.py makemigrations obs_run
 python manage.py makemigrations objects
+python manage.py makemigrations users
 python manage.py makemigrations tags
 python manage.py migrate
 ```

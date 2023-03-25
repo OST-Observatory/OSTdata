@@ -4,17 +4,17 @@
 {% block head %}
     {% include "bokeh.html" %}
 
-    <script type="text/javascript" src="{% static 'js/nights_detail.js' %}"></script>
+    <script type="text/javascript" src="{% static 'js/obs_runs_detail.js' %}"></script>
 
 
 {% endblock %}
 
 {% block headertitle %}
-    Night: {{ night.name }}
+    Observation run: {{ run.name }}
 {% endblock %}
 
 {% block content %}
-<h2>Details on night: {{ night.name }}</h2>
+<h2>Details on observation run: {{ run.name }}</h2>
     <section class='data-section' id="summary">
 
         <h3>Summary</h3>
@@ -24,10 +24,10 @@
                 <h3>Tags</h3>
                 {% if user.is_authenticated %}
                     <i id="tagEditButton" class="material-icons button edit" title="Edit"
-                        night_id={{ night.pk }}>edit</i>
+                        run_id={{ run.pk }}>edit</i>
                 {% endif %}
 
-                <div class="flex-data-container" id="tag_list" night_id={{ night.pk }}>
+                <div class="flex-data-container" id="tag_list" run_id={{ run.pk }}>
                     <p>Loading...</p>
                 </div>
 

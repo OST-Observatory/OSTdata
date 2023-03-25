@@ -12,6 +12,9 @@ class Tag(models.Model):
     #   Identifier
     name = models.CharField(max_length=75)
 
+    #   Rights management
+    is_public = models.BooleanField(default=True)
+
     #   Description
     description = models.TextField(default='')
 

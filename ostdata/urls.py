@@ -19,7 +19,7 @@ from django.views.generic import RedirectView, TemplateView
 
 from rest_framework import routers
 
-from night import views as night_views
+from obs_run import views as run_views
 
 router = routers.DefaultRouter()
 
@@ -36,12 +36,12 @@ urlpatterns = [
         'w/documentation/',
         TemplateView.as_view(template_name='documentation.html')
     ),
-    path('w/dashboard/', night_views.dashboard, name='dashboard'),
-    path('w/nights/', include('night.urls')),
+    path('w/dashboard/', run_views.dashboard, name='dashboard'),
+    path('w/runs/', include('obs_run.urls')),
     path('w/tags/', include('tags.urls')),
 
     path('api/', include(router.urls), name='api'),
-    path('api/nights/', include("night.api.urls", namespace='nights-api') ),
+    path('api/runs/', include("obs_run.api.urls", namespace='runs-api') ),
     path('api/tags/', include("tags.api.urls", namespace='tags-api') ),
 
     path(r'admin/', admin.site.urls),
