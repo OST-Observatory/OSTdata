@@ -2,13 +2,21 @@
 
 This project is based on the Astronomical Observation Tracking System (AOTS, https://github.com/vosjo/AOTS), primarily developed by Joris (vosjo).
 
-## Installing Django
+## Installing Django and dependencies
 
-This will install OSTdata using a python virtualenv to avoid conflicts with other packages.
+In the following we will install OSTdata, Django and all dependencies using a python virtualenv to avoid conflicts with other packages and projects.
 
 ### 1. Prerequisites
 
-You need the python-dev package and virtualenv. Moreover you should update pip:
+Create a directory where all files and the required Python modules can be placed:
+```
+mkdir ostdata
+cd ostdata
+```
+
+For the rest of this guide, we will assume that this directory is located in the user's home directory.
+
+You need the python-dev package and virtualenv  (we assume here a Debian system or one of its derivatives, such as Ubuntu). Moreover you should update pip:
 ```
 sudo apt-get install python-dev-is-python3
 pip install -U pip
@@ -38,7 +46,7 @@ export LC_ALL=C
 
 ### 3. Clone OSTdata from github
 ```
-git clone https://github.com/ostlight/OSTdata.git
+git clone https://github.com/OST-Observatory/OSTdata.git
 ```
 
 ### 4. Install the requirements
@@ -55,10 +63,9 @@ To run OSTdata locally, using the simple sqlite database and the included server
 
 ### 1. Setup the database
 ```
-python manage.py makemigrations users
-python manage.py makemigrations stars
-python manage.py makemigrations observations
-python manage.py makemigrations analysis
+python manage.py makemigrations obs_run
+python manage.py makemigrations objects
+python manage.py makemigrations tags
 python manage.py migrate
 ```
 
@@ -73,7 +80,7 @@ and drop the database or remove the db.sqlite3 file.
 ### 2. Create a admin user
 ```
 python manage.py createsuperuser
->>> Username: admin
+>>> Username: admin_user_name
 >>> Email address: admin@example.com
 >>> Password: **********
 >>> Password (again): *********
@@ -90,6 +97,12 @@ python manage.py runserver
 ## Setup postgres database for production
 
 This is only necessary if you want to run in production.
+
+Install the postgres database:
+
+```
+sudo apt install postgresql
+```
 
 Start postgres command line:
 ```
@@ -129,8 +142,6 @@ Exit the psql:
 \q
 ```
 
-
-
 ## Running OSTdata in production using a postgres database
 
 Instructions modified from: https://www.digitalocean.com/community/tutorials/how-to-set-up-django-with-postgres-nginx-and-gunicorn-on-ubuntu-18-04
@@ -159,16 +170,16 @@ DATABASE_HOST=localhost
 DATABASE_PORT=
 DEVICE=the_name_of_your_device_used_in_production
 ALLOWED_HOSTS=server_url,server_ip,localhost
-LOG_DIR=/home/ostdata/www/ostdata/OSTdata/logs/
+LOG_DIR=logs/
 ```
+
 Instructions on how to generate a secret key can be found here: https://tech.serhatteker.com/post/2020-01/django-create-secret-key/
 
 ### 3. Setup the database
 ```
-python manage.py makemigrations users
-python manage.py makemigrations stars
-python manage.py makemigrations observations
-python manage.py makemigrations analysis
+python manage.py makemigrations obs_run
+python manage.py makemigrations objects
+python manage.py makemigrations tags
 python manage.py migrate
 ```
 
@@ -183,7 +194,7 @@ and drop the database or remove the db.sqlite3 file.
 ### 4. Create a admin user
 ```
 python manage.py createsuperuser
->>> Username: admin
+>>> Username: admin_user_name
 >>> Email address: admin@example.com
 >>> Password: **********
 >>> Password (again): *********
@@ -195,7 +206,6 @@ You should use a different username instead of admin to increase security.
 ```
 python manage.py collectstatic
 ```
-
 
 
 ## Setup gunicorn
@@ -211,11 +221,14 @@ Add the following content to this file (adjust the path as needed):
 Description=gunicorn socket
 
 [Socket]
-ListenStream=/home/ostdata/www/ostdata/run/gunicorn.sock
+ListenStream=/path_to_home_dir/ostdata/run/gunicorn.sock
 
 [Install]
 WantedBy=sockets.target
 ```
+
+Replace 'path_to_home_dir' with the actual home directory.
+
 
 ### 2. Define the service file
 ```
@@ -233,15 +246,15 @@ After=network.target
 [Service]
 User=ostdata
 Group=www-data
-WorkingDirectory=/home/ostdata/www/ostdata/OSTdata
-ExecStart=/home/ostdata/www/ostdata/ostdata_env/bin/gunicorn \
+WorkingDirectory=/path_to_home_dir/ostdata/OSTdata
+ExecStart=/path_to_home_dir/ostdata/ostdata_env/bin/gunicorn \
           --access-logfile - \
           --workers 3 \
           --timeout 600 \
-          --error-logfile /home/ostdata/www/ostdata/OSTdata/logs/gunicorn_error.log \
+          --error-logfile /path_to_home_dir/ostdata/OSTdata/logs/gunicorn_error.log \
           --capture-output \
           --log-level info \
-          --bind unix:/home/ostdata/www/ostdata/run/gunicorn.sock \
+          --bind unix:/path_to_home_dir/ostdata/run/gunicorn.sock \
           OSTdata.wsgi:application
 
 [Install]
@@ -257,13 +270,16 @@ sudo systemctl enable gunicorn_ostdata.socket
 ```
 
 Check status of gunicorn with and the log files with:
+
 ```
 sudo systemctl status gunicorn_ostdata.socket
 sudo journalctl -u gunicorn_ostdata.socket
 ```
+
 Check that a gunicorn.sock file is created:
+
 ```
-ls /home/ostdata/www/ostdata/OSTdata/OSTdata/run/
+ls /path_to_home_dir/ostdata/OSTdata/OSTdata/run/
 >>> gunicorn.sock
 ```
 
@@ -282,7 +298,7 @@ sudo systemctl status gunicorn_ostdata
 ## Setup logroate
 To enable log rotation the following file should be added to /etc/logrotate.d:
 ```
-/home/ostdata/www/ostdata/OSTdata/logs/django.log {
+/home/ostdata/www/ostdata/OSTdata/logs/*.log {
   rotate 14
   daily
   compress
@@ -292,17 +308,6 @@ To enable log rotation the following file should be added to /etc/logrotate.d:
   missingok
   su ostdata www-data
 }
-/home/ostdata/www/ostdata/OSTdata/logs/not_django.log {
-  rotate 14
-  daily
-  compress
-  delaycompress
-  nocreate
-  notifempty
-  missingok
-  su ostdata www-data
-}
-
 ```
 Change user name, group, and the log directory as needed.
 
@@ -310,66 +315,71 @@ Alternatively, 'logging.handlers.RotatingFileHandler' can be selected as class
 for the logging handlers in settings_production.py.
 
 
-## Configure NGNIX
+## Configure Apache web server
+
+We will deploy the website using the Gunicorn Unix socket defined above on an Apache web server. The Apache reverse proxy functionality will be used for this purpose.
+
+The website should be available on a specific subpage. In our case this is "data_archive". For this to work the variable 'FORCE_SCRIPT_NAME' in 'settings_production.py' is set to '/data_archive'.
+
+### 1. Activate proxy modules
+
+In the first step we will activate the necessary proxy modules.
 
 ```
-sudo nano /etc/nginx/sites-available/ostdata
+sudo a2enmod proxy
+sudo a2enmod proxy_http
 ```
 
+### 2. Configure the virtual host
+
+The second step is to configure the virtual host. Add the following to your virtual host definition in '/etc/apache2/sites-enabled'.
+
 ```
-server {
-    listen 80;
-    server_name a15.astro.physik.uni-potsdam.de;
+SSLProxyEngine on
+SSLProxyVerify none
+SSLProxyCheckPeerCN off
+SSLProxyCheckPeerName off
+ProxyPreserveHost On
 
-    location /favicon.ico {
-        alias /home/ostdata/www/ostdata/OSTdata/static/favicon.ico;
-        access_log off;
-        log_not_found off;
-    }
+ProxyPass /data_archive/static/ !
 
-    location /static/ {
-        root /home/ostdata/www/ostdata/OSTdata;
-    }
-
-    location /media/ {
-      root /home/ostdata/www/ostdata/OSTdata;
-    }
-
-    location / {
-        include proxy_params;
-        proxy_pass http://unix:/home/ostdata/www/ostdata/run/gunicorn.sock;
-    }
-
-}
+Define SOCKET_NAME /path_to_home_directory/ostdata/run/gunicorn.sock
+ProxyPass /data_archive unix://${SOCKET_NAME}|http://%{HTTP_HOST}
+ProxyPassReverse /data_archive unix://${SOCKET_NAME}|http://%{HTTP_HOST}
 ```
 
-Now, we can enable the file by linking it to the sites-enabled directory:
+The first block of lines ensures that our Django weather station app trusts our web server, while the second block ensures that requests for static files are not directed to the Unix socket, as these files are supplied directly by the Apache server (see next step). The third block of commands directs requests to the 'data_archive' page to the Unix socket, and thus to our Django weather app. Replace 'path_to_home_directory' with the actual path to your home directory.
+
+
+### 3. Serve static files
+
+Since Django itself does not serve files, the static files must be served directly from the Apache server. For this purpose, we create a configuration file in "/etc/apache2/conf-available", which we name "data_archive.conf".
+
+Add the following lines to this file:
+
 ```
-sudo ln -s /etc/nginx/sites-available/ostdata /etc/nginx/sites-enabled
+Alias /data_archive/robots.txt /path_to_home_directory/ostdata/OSTdata/templates/robots.txt
+Alias "/data_archive/static" "/path_to_home_directory/ostdata/OSTdata/static"
+
+<Directory /path_to_home_directory/ostdata/OSTdata/static>
+        Require all granted
+</Directory>
 ```
 
-Set the maximum body size for uploads by clients in the ngnix configuration file:
+As always, replace 'path_to_home_directory' with the correct path.
+
+Activate this configuration file with:
+
 ```
-sudo nano /etc/nginx/nginx.conf
+sudo a2enconf data_archive
 ```
 
-Add the following text in the http configuration block:
+### 4. Restart the Apache server
+
+Restart the Apache web server so that the changes take into effect:
+
 ```
-# set client body size to 10M #
-client_max_body_size 10M;
+sudo systemctl restart apache2
 ```
 
-Test for syntax errors:
-```
-sudo nginx -t
-```
-
-When there are no errors restart ngnix:
-```
-sudo systemctl restart nginx
-```
-
-Finally, we need to open up our firewall to normal traffic on port 80
-```
-sudo ufw allow 'Nginx Full'
-```
+The weather station website should now be up and running.
