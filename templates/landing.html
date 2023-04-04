@@ -4,6 +4,7 @@
 <html lang="en">
 <head>
    <link href="{% static 'base.css' %}" rel="stylesheet" type="text/css">
+   <!-- jquery UI css -->
    <link href="{% static 'jquery-ui.css' %}" rel="stylesheet" type="text/css">
    <link rel="icon"href="{% static 'favicon.ico' %}">
 
@@ -12,6 +13,7 @@
         integrity="sha256-/xUj+3OJU5yExlq6GSYGSHk7tPXikynS7ogEvDej/m4="
         crossorigin="anonymous"></script>
    <script type="text/javascript" src="{% static 'js/base_js.js' %}"></script>
+   <!-- jquery UI js -->
    <script type="text/javascript" src="{% static 'js/jquery-ui.min.js' %}"></script>
 
    {% block head %}{% endblock %}
@@ -43,7 +45,15 @@
             </li>
             <li>
                <i class="icon material-icons">assignment</i>
-               <a href="/w/runs/"> Observation runs</a>
+               <a href={% url 'obs_runs:run_list' %}>Observation runs</a>
+               <ul>
+                <li><a href={% url 'obs_runs:run_list' %}>Observation runs</a></li>
+                <li><a href={% url 'tags:tag_list' %}>Tags</a></li>
+               </ul>
+            </li>
+            <li>
+               <i class="icon material-icons">star</i>
+               <a href={% url 'objects:object_list' %}>Objects</a>
             </li>
             {% if user.is_authenticated %}
             <li>

@@ -12,7 +12,7 @@ $(document).ready(function () {
     dom: 'l<"toolbar">frtip',
     serverSide: true,
     ajax: {
-        url: '/api/runs/?format=datatables&keep=reduction_status_display',
+        url: '/api/runs/runs/?format=datatables&keep=reduction_status_display,n_img,n_ser,start_time,end_time,pk,spectroscopy',
         //adding "&keep=id,rank" will force return of id and rank fields
         data: get_filter_keywords,
         contentType: "application/json; charset=utf-8",
@@ -20,7 +20,7 @@ $(document).ready(function () {
     },
     searching: false,
     orderMulti: false, //Can only order on one column at a time
-    order: [2],
+    order: [1],
     columns: [
         {  orderable:      false,
             className:      'select-control',
@@ -30,7 +30,10 @@ $(document).ready(function () {
             searchable: false,
         },
         { data: 'name', render: name_render },
-    //       { data: 'datasets', render: dataset_render , searchable: false, orderable: false },
+        { data: 'objects', render: objects_render },
+        { data: 'photometry', render: observation_render },
+        { data: 'n_fits', render: n_file_render },
+        { data: 'expo_time', render: expo_time_render },
         { data: 'tags', render: tag_render , searchable: false, orderable: false },
         { data: 'reduction_status', render: status_render,
             width: '70',
@@ -51,7 +54,7 @@ $(document).ready(function () {
         $("div.toolbar").html(
             "<input id='tag-button'  class='tb-button' value='Edit Tags' type='button' disabled>" +
             "<input id='status-button' class='tb-button' value='Change Status' type='button' disabled>" +
-            "<input id='addrun-button' class='tb-button' value='Add Observation run' type='button'>" +
+            // "<input id='addrun-button' class='tb-button' value='Add Observation run' type='button'>" +
             "<input id='deleterun-button' class='tb-button' value='Delete Observation run(s)' type='button' disabled>");
     }
     else {$("div.toolbar").html(
@@ -124,17 +127,17 @@ $(document).ready(function () {
         modal: true,
     });
 
-    add_runs_window = $("#addRuns").dialog({
-        autoOpen: false,
-        width: '875',
-        modal: true,
-    });
+    // add_runs_window = $("#addRuns").dialog({
+    //     autoOpen: false,
+    //     width: '875',
+    //     modal: true,
+    // });
 
     //   Event listeners for edit buttons
     $( "#status-button").click( openStatusEditWindow );
     $( "#tag-button").click( openTagEditWindow );
     $( "#deleterun-button").click( deleteRuns );
-    $( "#addrun-button").click( openAddRunsWindow );
+    // $( "#addrun-button").click( openAddRunsWindow );
 
 
     //   Reset check boxes when changing number of displayed objects in table
@@ -152,7 +155,7 @@ $(document).ready(function () {
     });
 });
 
-
+// ----------------------------------------------------------------------
 // Table filter functionality
 
 function get_filter_keywords( d ) {
@@ -169,7 +172,7 @@ function get_filter_keywords( d ) {
     return d
 }
 
-
+// ----------------------------------------------------------------------
 // Table renderers
 
 function selection_render( data, type, full, meta ) {
@@ -181,20 +184,51 @@ function selection_render( data, type, full, meta ) {
 }
 
 function name_render( data, type, full, meta ) {
-    // Create a link to the detail for the observation run name
-    return "<a href='"+full['href']+"'>"+data+"</a>";
+    //  Create a link to the detail for the observation run name
+    let start = full['start_time'].split('.')[0];
+    let end = full['end_time'].split(" ")[1].split('.')[0];
+    let href = "<a href='"+full['href']+"'>"+start+'-'+end+"</a>";
+    return href;
 }
 
-// function dataset_render( data, type, full, meta ) {
-//    // Render the tags as a list of divs with the correct color.
-//    var result = ""
-//    var ds = data[0];
-//    for (i = 0; i < data.length; i++) {
-//       ds = data[i];
-//       result += "<div class='dataset' style='background-color:"+ds.color+"' title='"+ds.name+"'>"+ "<a href='"+ds.href+"'>"+ds.name.charAt(0)+"</a></div>";
-//    }
-//    return result;
-// }
+function objects_render( data, type, full, meta ) {
+    //  Create links to the objects
+    let hrefs = [];
+    for (i = 0; i < data.length; i++) {
+    // for (obj in data) {
+        let obj = data[i];
+        hrefs.push("<a href='"+obj.href+"'> "+obj.name+"</a>");
+    }
+    return hrefs;
+}
+
+function observation_render(data, type, full, meta) {
+    if (data && full['spectroscopy']) {
+        return "<i class='material-icons status-icon valid' title='Spectra taken'></i> / <i class='material-icons status-icon valid' title='Photometry taken'></i>"
+    } else if (data && !full['spectroscopy']) {
+        return "<i class='material-icons status-icon valid' title='Spectra taken'></i> / <i class='material-icons status-icon invalid' title='No Photometry taken'></i>"
+    } else if (!data && full['spectroscopy']) {
+        return "<i class='material-icons status-icon invalid' title='No Spectra taken'></i> / <i class='material-icons status-icon valid' title='Photometry taken'></i>"
+    } else {
+        return "<i class='material-icons status-icon' title='Observation type not known'>question_mark</i> / <i class='material-icons status-icon' title='Observation type not known'>question_mark</i>"
+    }
+}
+
+function n_file_render( data, type, full, meta ) {
+    //  Render file numbers
+    return data + "/" + full['n_img'] + "/" + full['n_ser'];
+}
+
+function expo_time_render( data, type, full, meta ) {
+    //  Render exposure time to significant digits
+    if (data === 0) {
+        return '-'
+    }
+    if (data >= 1) {
+        return data
+    }
+    return data.toFixed(2);
+}
 
 function tag_render( data, type, full, meta ) {
     // Render the tags as a list of divs with the correct color.
@@ -212,7 +246,7 @@ function status_render( data, type, full, meta ) {
             full['reduction_status_display'] +'"></i>'
 }
 
-
+// ----------------------------------------------------------------------
 // Selection and Deselection of rows
 
 function select_row(row) {
@@ -241,48 +275,17 @@ function deselect_row(row) {
     }
 }
 
-// Edit status and tags functionality
+// Allow unchecking of radio buttons in the filter window
+// $('input[type=radio]').click(allow_unselect);
 
-function load_tags() {
-    //   Clear tag options of the add-system form
-    $("#id_tags").empty();
-
-    //   Load all tags and add them to the window
-    $.ajax({
-        url : "/api/tags/",
-        type : "GET",
-        success : function(json) {
-            all_tags = json.results;
-
-            for (var i=0; i<all_tags.length; i++) {
-                tag = all_tags[i];
-
-                $('#tagOptions').append("<li title='" + tag['description'] +
-                "'><input class='tristate' name='tags' type='checkbox' value='"
-                + tag['pk'] + "' /> " + tag['name'] + "</li>" );
-
-                $('#tag_filter_options').append(
-                "<li><label><input id='id_status_" + i + "' name='tags' type='radio' value='" +
-                tag['pk'] + "' /> " + tag['name'] + "</label></li>");
-
-                //  Add tag options to add-system form
-                $('#id_tags').append('<li><label for="id_tags_'+i+'"><input id="id_tags_'+i+'" type="checkbox" name="tags" value="'+tag['pk']+'"> '+tag['name'].replace(/\_/g, ' ')+'</label></li>')
-
-            }
-
-            $('#tagOptions').on('change', ':checkbox', function(event){ cylceTristate(event, this); });
-
-            $('input[type=radio]').click(allow_unselect);
-
-        },
-        error : function(xhr,errmsg,err) {
-            console.log(xhr.status + ": " + xhr.responseText);
-            all_tags = [];
+function allow_unselect(e){
+    if (e.ctrlKey) {
+            $(this).prop('checked', false);
         }
-    });
 }
 
-// ------------
+// ----------------------------------------------------------------------
+//  STATUS
 
 function openStatusEditWindow() {
     edit_status_window = $("#editStatus").dialog({
@@ -311,13 +314,14 @@ function updateStatus() {
 
 function updateRunStatus(row, status) {
     $.ajax({
-        url : "/api/runs/"+row.data()['pk']+'/',
+        url : "/api/runs/runs/"+row.data()['pk']+'/',
         type : "PATCH",
         data : { reduction_status: status },
 
         success : function(json) {
             edit_status_window.dialog( "close" );
-            row.data(json).draw('page');
+            // row.data(json).draw('page');
+            $(".fullwidth.dataTable").DataTable().draw('page');
         },
 
         error : function(xhr,errmsg,err) {
@@ -331,83 +335,73 @@ function updateRunStatus(row, status) {
     });
 }
 
-// -------------
+// ----------------------------------------------------------------------
+//  TAGS
+
+function load_tags() {
+    //   Clear tag options of the add-system form
+    $("#id_tags").empty();
+
+    //   Load all tags and add them to the window
+    $.ajax({
+        url : "/api/tags/",
+        type : "GET",
+        success : function(json) {
+            all_tags = json.results;
+
+            for (var i=0; i<all_tags.length; i++) {
+                tag = all_tags[i];
+
+                $('#tagOptions').append("<li title='" + tag['description'] +
+                "'><input name='tags' type='checkbox' value='"
+                + tag['pk'] + "' /> " + tag['name'] + "</li>" );
+
+                $('#tag_filter_options').append(
+                "<li><label><input id='id_status_" + i + "' name='tags' type='radio' value='" +
+                tag['pk'] + "' /> " + tag['name'] + "</label></li>");
+
+            }
+
+            $('input[type=radio]').click(allow_unselect);
+
+        },
+        error : function(xhr,errmsg,err) {
+            console.log(xhr.status + ": " + xhr.responseText);
+            all_tags = [];
+        }
+    });
+}
 
 function openTagEditWindow() {
     edit_tags_window = $("#editTags").dialog({
         title: "Add/Remove Tags",
         buttons: { "Update": updateTags},
+        // buttons: { "Update": update_run_tags},
         close: function() { edit_tags_window.dialog( "close" ); }
     });
 
-    //  Reset the counts per tag
-    let all_tag_counts = {}
-    for ( tag in all_tags ) {
-        all_tag_counts[all_tags[tag]['pk']] = 0
-    }
-
-    //  Count how many objects each tag has
-    run_table.rows('.selected').every( function ( rowIdx, tableLoop, rowLoop ) {
-        let tags = this.data()['tags'];
-        for (tag in tags) {
-            all_tag_counts[tags[tag]['pk']] ++;
-        }
-    });
-
-//     console.log(all_tag_counts);
-
-    //  Set the checkbox states depending on the number of objects
-    let selected_runs = run_table.rows('.selected').data().length
-    for (tag in all_tag_counts) {
-        //  Standard unchecked state, no object has this tag
-        $(".tristate[value='"+tag+"']").prop("checked", false);
-        $(".tristate[value='"+tag+"']").prop("indeterminate",false);
-        $(".tristate[value='"+tag+"']").removeClass("indeterminate");
-
-        if ( all_tag_counts[tag] == selected_runs ){
-            //  Checked state, all objects have this tag
-            $(".tristate[value='"+tag+"']").prop("checked", true);
-        } else if ( all_tag_counts[tag] > 0 ) {
-            //  Indeterminate state, some objects have this tag
-            $(".tristate[value='"+tag+"']").prop("indeterminate", true);
-            $(".tristate[value='"+tag+"']").addClass("indeterminate");
-        }
-    }
     edit_tags_window.dialog( "open" );
 }
 
 function updateTags() {
-    // Get the checked and indeterminate tags
-    let checked_tags = $(".tristate:checked:not(.indeterminate)").map(
-        function () { return parseInt(this.value); } ).get();
-    let indeterminate_tags = $(".tristate.indeterminate").map(
-        function () { return parseInt(this.value); } ).get();
-
-    console.log($(".tristate:checked:not(.indeterminate)"))
-    console.log(checked_tags);
-    console.log(indeterminate_tags);
+    // Get the checked tags
+    let new_tags = $("input[name='tags']").filter(':checked');
+    new_tags = new_tags.map(
+        function () { return parseInt(this.value); }
+        ).get()
 
     // Update the tags for each selected observation run
     run_table.rows('.selected').every( function ( rowIdx, tableLoop, rowLoop ) {
-        let new_tags     = checked_tags;
-        let current_tags = this.data()['tags'].map( function (x) { return x.pk; } );
-
-        for ( tag in indeterminate_tags ) {
-            if ( current_tags.indexOf(indeterminate_tags[tag]) > -1 ) {
-                new_tags.push(indeterminate_tags[tag])
-            }
-        }
         update_run_tags(this, new_tags);
     });
 
 }
 
 function update_run_tags(row, new_tags){
-    let run_pk = row.data()['pk']
-    //    console.log(row.data());
-    //    console.log(new_tags);
+    let run_pk = row.data()['pk'];
+
     $.ajax({
-        url : "/api/runs/"+run_pk+'/',
+        url : "/api/runs/runs/"+run_pk+'/',
         type : "PATCH",
         contentType: "application/json; charset=utf-8",
 
@@ -415,8 +409,8 @@ function update_run_tags(row, new_tags){
 
         success : function(json) {
             // update the table and close the edit window
-            row.data( json ).draw('page');
             edit_tags_window.dialog( "close" );
+            $(".fullwidth.dataTable").DataTable().draw('page');
         },
 
         error : function(xhr,errmsg,err) {
@@ -430,7 +424,7 @@ function update_run_tags(row, new_tags){
     });
 }
 
-// -----
+// ----------------------------------------------------------------------
 
 function deleteRuns(){
     if (confirm('Are you sure you want to delete these Observation runs? This can NOT be undone!')===true){
@@ -456,7 +450,7 @@ function deleteRuns(){
         //                                  the use of await
         p = p.then( async function () {
         await $.ajax({
-            url : "/api/runs/"+pk+'/',
+            url : "/api/runs/runs/"+pk+'/',
             type : "DELETE",
             success : function(json) {
                 n += 1;
@@ -483,42 +477,14 @@ function deleteRuns(){
     }
 }
 
-// -------------
-
-
-function openAddRunsWindow() {
-   add_runs_window = $("#addRuns").dialog({
-      autoOpen: false,
-      title: "Add Observation run(s)",
-      close: function() { add_runs_window.dialog( "close" ); },
-   });
-
-   add_runs_window.dialog( "open" );
-}
-
-
 // ----------------------------------------------------------------------
 
-// Tristate checkbox functionality
-function cylceTristate(event, checkbox) {
-    checkbox = $(checkbox);
-    // Add extra indeterminate state in between unchecked and checked
-    if ( checkbox.prop("checked") & !checkbox.hasClass("indeterminate") ) {
-        checkbox.prop("checked", false);
-        checkbox.prop("indeterminate", true);
-        checkbox.addClass("indeterminate");
-    } else if ( checkbox.prop("checked") & checkbox.hasClass("indeterminate") ) {
-        checkbox.prop("indeterminate", false);
-        checkbox.removeClass("indeterminate");
-    }
-}
-
-
-// Allow unchecking of radio buttons in the filter window
-$('input[type=radio]').click(allow_unselect);
-
-function allow_unselect(e){
-    if (e.ctrlKey) {
-            $(this).prop('checked', false);
-        }
-}
+// function openAddRunsWindow() {
+//    add_runs_window = $("#addRuns").dialog({
+//       autoOpen: false,
+//       title: "Add Observation run(s)",
+//       close: function() { add_runs_window.dialog( "close" ); },
+//    });
+//
+//    add_runs_window.dialog( "open" );
+// }

@@ -1,7 +1,6 @@
-from django.shortcuts import render
 from django.contrib import messages
 from django.http import HttpResponse, HttpResponseRedirect
-from django.shortcuts import get_object_or_404, reverse
+from django.shortcuts import render, get_object_or_404, reverse
 
 from .models import Obs_run
 
@@ -107,14 +106,14 @@ def obs_run_list(request):
 @check_user_can_view_run
 def obs_run_detail(request, run_id, **kwargs):
     """
-        Detailed view for observation run
+        Detailed view for an observation run
     """
 
-    run   = get_object_or_404(Obs_run, pk=run_id)
+    obs_run = get_object_or_404(Obs_run, pk=run_id)
+
     context = {
-        'run': run,
+        'run': obs_run,
         'tags': Tag.objects.all(),
     }
 
     return render(request, 'obs_run/obs_run_detail.html', context)
-    #return HttpResponse("This will be a night detail page!")

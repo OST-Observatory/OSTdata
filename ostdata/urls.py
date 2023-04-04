@@ -39,10 +39,12 @@ urlpatterns = [
     path('w/dashboard/', run_views.dashboard, name='dashboard'),
     path('w/runs/', include('obs_run.urls')),
     path('w/tags/', include('tags.urls')),
+    path('w/objects/', include('objects.urls')),
 
     path('api/', include(router.urls), name='api'),
     path('api/runs/', include("obs_run.api.urls", namespace='runs-api') ),
     path('api/tags/', include("tags.api.urls", namespace='tags-api') ),
+    path('api/objects/', include("objects.api.urls", namespace='objects-api') ),
 
     path(r'admin/', admin.site.urls),
 

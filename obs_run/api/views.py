@@ -1,67 +1,19 @@
+from rest_framework import viewsets
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
 
 from django_filters.rest_framework import DjangoFilterBackend
-from django_filters import rest_framework as filters
 
-from rest_framework import viewsets
+from obs_run.models import Obs_run, DataFile
 
-from .serializers import RunSerializer, RunListSerializer
+from .serializers import RunSerializer, RunListSerializer, DataFileSerializer
 
-from obs_run.models import Obs_run
-from tags.models import Tag
-
-from ostdata.custom_permissions import get_allowed_runs_to_view_for_user
+from .filter import RunFilter, DataFileFilter
 
 
 # ===============================================================
 #   OBSERVATION RUNS
 # ===============================================================
-
-class RunFilter(filters.FilterSet):
-    '''
-        Filter definitions for table with observation runs
-    '''
-    #   Name filter
-    name = filters.CharFilter(
-        field_name="name",
-        method='filter_name',
-        lookup_expr='icontains',
-        )
-
-
-    #   Status filter
-    status = filters.MultipleChoiceFilter(
-        field_name="observing_status",
-        choices=Obs_run.REDUCTION_STATUS_CHOICES,
-        )
-
-    #   Tag filter
-    tags = filters.ModelMultipleChoiceFilter(queryset=Tag.objects.all())
-
-    #   Method definitions for the filter definitions above
-    def filter_name(self, queryset, name, value):
-        return queryset.filter(name__icontains=value)
-
-    class Meta:
-        model = Obs_run
-        fields = ['name']
-
-    @property
-    def qs(self):
-        parent = super().qs
-
-        parent = get_allowed_runs_to_view_for_user(parent, self.request.user)
-
-        #   Get the column order from the GET dictionary
-        getter = self.request.query_params.get
-        if not getter('order[0][column]') is None:
-            order_column = int(getter('order[0][column]'))
-            order_name = getter('columns[%i][data]' % order_column)
-            if getter('order[0][dir]') == 'desc': order_name = '-'+order_name
-
-            return parent.order_by(order_name)
-        else:
-            return parent
-
 
 class RunViewSet(viewsets.ModelViewSet):
     """
@@ -82,3 +34,39 @@ class RunViewSet(viewsets.ModelViewSet):
         return RunSerializer
 
 
+
+@api_view(['GET'])
+def getRunDataFile(request, run_pk):
+    '''
+        Get all DataFile object associated with a observation run
+    '''
+
+    #   Get Observation run and DataFiles
+    obsrun = Obs_run.objects.get(pk=run_pk)
+    datafiles = obsrun.datafile_set.all()
+
+    pagination_class = None
+
+    #   Arrange DataFile infos
+    return_dict = {}
+    for datafile in datafiles:
+        return_dict[datafile.pk] = "{} - {}".format(
+            datafile.file_type,
+            datafile.exposure_type,
+        )
+    return Response(return_dict)
+
+# ===============================================================
+#   DATA FILE
+# ===============================================================
+
+class DataFileViewSet(viewsets.ModelViewSet):
+    """
+        Returns a list of all stars/objects in the database
+    """
+
+    queryset = DataFile.objects.all()
+    serializer_class = DataFileSerializer
+
+    filter_backends = (DjangoFilterBackend,)
+    filterset_class = DataFileFilter

@@ -35,6 +35,7 @@ INSTALLED_APPS = [
     'obs_run.apps.RunConfig',
     'users.apps.UsersConfig',
     'tags.apps.TagsConfig',
+    'objects.apps.ObjectsConfig',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',

@@ -3,11 +3,11 @@
 
 {% block head %}
 {% include "datatables.html" %}
-<script type="text/javascript" src="{% static 'js/obs_runs_detail.js' %}"></script>
+<script type="text/javascript" src="{% static 'js/objects_detail.js' %}"></script>
 {% endblock %}
 
 {% block headertitle %}
-    Observation run: {{ run.name }}
+    Object: {{ object.name }}
 {% endblock %}
 
 {% block content %}
@@ -22,10 +22,10 @@
                 <h3>Tags</h3>
                 {% if user.is_authenticated %}
                     <i id="tagEditButton" class="material-icons button edit" title="Edit"
-                        run_id={{ run.pk }}>edit</i>
+                        obj_id={{ object.pk }}>edit</i>
                 {% endif %}
 
-                <div class="flex-data-container" id="tag_list" run_id={{ run.pk }}>
+                <div class="flex-data-container" id="tag_list" obj_id={{ object.pk }}>
                     <p>Loading...</p>
                 </div>
 
@@ -38,35 +38,29 @@
     </section>
 
     <section class='data-section'>
-    <h3>Data files</h3>
+    <h3>Observation runs</h3>
 <!--     <section> -->
         <div class="table_wrapp">
-            <table id="datafiletable">
+            <table id="runtable">
             <thead>
-            <tr>
+                <tr>
                 <th><i id="select-all" class="material-icons button select" title="Select/Deselect All">check_box_outline_blank</i></th>
-                <th>File name</th>
-                <th>Observation date</th>
-                <th>Coordinates</th>
-                <th>File type</th>
-                <th>Image size</th>
-                <th>Exposure type</th>
+                <th>Date</th>
+                <th>Nobs</th>
                 <th>Exposure time [s]</th>
                 <th>Tags</th>
-            </tr>
+                <th>Status</th>
+                </tr>
             </thead>
             <tfoot>
-            <tr>
+                <tr>
                 <th></th>
-                <th>File name</th>
-                <th>Observation date</th>
-                <th>Coordinates</th>
-                <th>File type</th>
-                <th>Image size</th>
-                <th>Exposure type</th>
+                <th>Date</th>
+                <th>Nobs</th>
                 <th>Exposure time [s]</th>
                 <th>Tags</th>
-            </tr>
+                <th>Status</th>
+                </tr>
             </tfoot>
             </table>
         </div>

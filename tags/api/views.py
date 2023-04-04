@@ -8,7 +8,7 @@ from .serializers import TagSerializer
 
 from tags.models import Tag
 
-from ostdata.custom_permissions import get_allowed_objects_to_view_for_user
+from ostdata.custom_permissions import get_allowed_run_objects_to_view_for_user
 
 # ===============================================================
 # TAGS
@@ -24,7 +24,7 @@ class TagFilter(filters.FilterSet):
    #def qs(self):
       #parent = super().qs
 
-      #return get_allowed_objects_to_view_for_user(parent, self.request.user)
+      #return get_allowed_run_objects_to_view_for_user(parent, self.request.user)
 
 
 class TagViewSet(viewsets.ModelViewSet):

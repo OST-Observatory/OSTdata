@@ -7,6 +7,14 @@
         url(iconfont/MaterialIcons-Regular.ttf) format('truetype');
 }
 
+:root {
+/*   --base_color: #f1ad9d; */
+  --base_color: #fcab40;
+/*   --base_color: #f85c25; */
+  --light_color: #f8dc81;
+  --very_light_color: #faf4db;
+}
+
 .material-icons {
     font-family: 'Material Icons';
     font-weight: normal;
@@ -16,7 +24,7 @@
     line-height: 1;
     text-transform: none;
     letter-spacing: normal;
-    word-wrap: normal;
+    word-wrap: normal;light_color
     white-space: nowrap;
     direction: ltr;
     cursor: pointer;
@@ -36,10 +44,14 @@
 
 header {
    display:block;
-/*    background: #417690;   */
-   background: #fff;
-   box-shadow: 0 3px 10px -2px rgba(64, 117, 144, 0.3);
-   border-bottom: 3px solid rgba(64, 117, 144, 0.3); /*rgba(0,0,0,.1);*/
+/*    background: #417690; */
+/*    background: #fff; */
+   background: var(--very_light_color);
+/*    background: var(--light_color); */
+   box-shadow: 0 3px 10px -2px var(--base_color);
+/*    box-shadow: 0 3px 10px -2px var(--light_color); */
+/*    border-bottom: 3px solid var(--base_color); /*rgba(0,0,0,.1);*/ */
+   border-bottom: 3px solid var(--light_color); /*rgba(0,0,0,.1);*/
    margin-bottom: 40px;
 }
 
@@ -101,7 +113,10 @@ div#toolbar ul li{
 }
 
 div#toolbar ul li.active {background: rgba(0,0,0,.05);}
-div#toolbar ul li:hover{background: rgba(0,0,0,.15);}
+div#toolbar ul li:hover{
+/*    background: rgba(0,0,0,.15); */
+   background: var(--light_color);
+}
 div#toolbar ul li:hover > ul{display: flex;}
 
 div#toolbar ul li a{
@@ -156,9 +171,12 @@ div#subtoolbar ul li{
    float: left;
 }
 
-div#subtoolbar ul li.active > a{border-bottom: 2px solid rgba(64, 117, 144, 0.3);}
+div#subtoolbar ul li.active > a{border-bottom: 2px solid var(--base_color);}
 
-div#subtoolbar ul li:hover{background: rgba(0,0,0,.15);}
+div#subtoolbar ul li:hover{
+/*    background: rgba(0,0,0,.15); */
+   background: var(--light_color);
+}
 
 div#subtoolbar ul li a{
    display: block;
@@ -320,7 +338,7 @@ div.upload {
    margin: 5px;
    margin-top: 10px;
    font-weight: bold;
-/*    border: solid 1px rgba(64, 117, 144, 0.3); */
+/*    border: solid 1px var(--base_color); */
    border-style: solid;
    border-color: rgba(64, 117, 144, 0.4);
 }
@@ -378,7 +396,7 @@ hr.box {
    margin-top: 10px;
    margin-bottom: 10px;
    width: 95%;
-   border-top: 1px solid rgba(64, 117, 144, 0.3);
+   border-top: 1px solid var(--base_color);
 }
 
 /* Project Page */
@@ -393,7 +411,7 @@ div.project-container {
   padding-left: 5px;
   padding-right: 5px;
   margin: 5px;
-  border: solid 2px rgba(64, 117, 144, 0.3);
+  border: solid 2px var(--base_color);
   align-items: center;
 }
 
@@ -426,7 +444,7 @@ div.docs-container {
   padding-left: 5px;
   padding-right: 5px;
   margin: 5px;
-  border: solid 2px rgba(64, 117, 144, 0.3);
+  border: solid 2px var(--base_color);
   align-items: center;
 }
 
@@ -742,7 +760,7 @@ div.tag-container {
    margin: 5px;
    padding-left: 5px;
    padding-right: 5px;
-   border: solid 1px rgba(64, 117, 144, 0.3);
+   border: solid 1px var(--base_color);
    max-width: 98%;
    align-items: center;
    z-index:1;
@@ -758,7 +776,7 @@ div.buttons-container {
    margin-top: 30px;
    margin-bottom: 40px;
    padding: 5px;
-   border: solid 1px rgba(64, 117, 144, 0.3);
+   border: solid 1px var(--base_color);
    max-width: 9%;
    align-items: stretch;
 }
@@ -841,7 +859,7 @@ div.main-container h3 {
 
 div.border {
    margin: 5px;
-   border: solid 1px rgba(64, 117, 144, 0.3);
+   border: solid 1px var(--base_color);
 }
 
 div.maxw50 {
@@ -889,6 +907,11 @@ div.main-container-h i.edit{
 
 
 /* Table settings */
+
+div.table_wrapp {
+  margin-top: 10px;
+  margin-bottom: 10px;
+}
 
 th.underline {
    text-decoration: underline;
@@ -1088,12 +1111,12 @@ form.upload_2 {
    padding: 10px;
    margin: 5px;
    margin-top: 10px;
-   border: solid 1px rgba(64, 117, 144, 0.3);
+   border: solid 1px var(--base_color);
 }
 
 progress.progress {
    margin: 5px;
-   border: solid 1px rgba(64, 117, 144, 0.3);
+   border: solid 1px var(--base_color);
    height: 15px;
    border-radius: 9px;
    width: 99%;
@@ -1286,7 +1309,7 @@ html, body {
   height: 40px;
 }
 .site-footer {
-  background-image: linear-gradient(rgba(64, 117, 144, 0.1), rgba(64, 117, 144, 0.4));
+  background-image: linear-gradient(var(--very_light_color), var(--light_color));
 }
 
 footer div {

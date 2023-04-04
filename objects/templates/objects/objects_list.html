@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block head %}
+{% include "datatables.html" %}
+<script type="text/javascript" src="{% static 'js/objects_list.js' %}"></script>
+{% endblock %}
+
+{% block headertitle %} Objects: Index {% endblock %}
+
+
+{% block content %}
+
+<section>
+
+   <table id="datatable" class="fullwidth">
+   <thead>
+      <tr>
+      <th><i id="select-all" class="material-icons button select" title="Select/Deselect All">check_box_outline_blank</i></th>
+      <th>Name</th>
+      <th>Coordinates</th>
+<!--       <th>Class</th> -->
+<!--       <th>G-mag</th> -->
+      <th>Obs. runs</th>
+      <th>Tags</th>
+      </tr>
+   </thead>
+   <tfoot>
+      <tr>
+      <th></th>
+      <th>Name</th>
+      <th>Coordinates</th>
+<!--       <th>Class</th> -->
+<!--       <th>G-mag</th> -->
+      <th>Obs. runs</th>
+      <th>Tags</th>
+      </tr>
+   </tfoot>
+   </table>
+
+</section>
+
+    <!-- Divs necessary for editing on page stuff with ajax -->
+<div id="editTags">
+   <div id='tag-error' class='error-message'></div>
+   <ul id="tagOptions">
+   </ul>
+</div>
+<!--
+<script type="text/javascript" src="{% static 'js/obs_runs_list.js' %}"></script>-->
+
+{% endblock %}

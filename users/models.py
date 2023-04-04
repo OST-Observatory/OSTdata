@@ -2,7 +2,10 @@ from django.db import models
 
 from django.contrib.auth.models import AbstractUser
 
-from obs_run import models as run_models
+# from obs_run import models as run_models
+
+# from objects import models as object_models
+# from objects.models import Objects
 
 def get_sentinel_user():
    """
@@ -24,11 +27,19 @@ class User(AbstractUser):
 
    note = models.TextField(default='')
 
-   def get_read_runs(self):
+   # def get_read_runs(self):
+   #    if self.is_superuser:
+   #       return run_models.Obs_run.objects.all()
+   #    else:
+   #       return self.readonly_users.all().union(self.readwrite_users.all())
+
+   def get_read_model(self, model):
       if self.is_superuser:
-         return run_models.Obs_run.objects.all()
+         return model.objects.all()
+         # return object_models.Objects.objects.all()
       else:
          return self.readonly_users.all().union(self.readwrite_users.all())
+
 
    def can_read(self, run):
       """

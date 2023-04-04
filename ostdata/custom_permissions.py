@@ -40,7 +40,7 @@ class IsAllowedOnRun(permissions.BasePermission):
         return False
 
 
-def get_allowed_objects_to_view_for_user(qs, user):
+def get_allowed_run_objects_to_view_for_user(qs, user):
     """
     Function that will limit the provided queryset to the objects that
     the provided user can see.
@@ -54,8 +54,8 @@ def get_allowed_objects_to_view_for_user(qs, user):
     using th | operator!!!)
     """
 
-    #   Check if observation run is public
-    public = qs.filter(run__is_public__exact=True)
+    #   Check if the observation run is public
+    public = qs.filter(obsrun__is_public__exact=True)
 
     #   Check if user is logged in ...
     if user.is_anonymous:
@@ -64,7 +64,7 @@ def get_allowed_objects_to_view_for_user(qs, user):
     else:
         #   Check if user is allowed to view the observation run ...
         restricted = qs.filter(
-            run__pk__in=user.get_read_runs().values('pk')
+            obsrun__pk__in=user.get_read_model(Obs_run).values('pk')
             )
         if len(restricted) > 0:
             #   ... if this is the case return the specific queryset ...
@@ -72,11 +72,42 @@ def get_allowed_objects_to_view_for_user(qs, user):
         else:
             #   ... if not, return the public queryset
             return public
+#
+#
+# def get_allowed_runs_to_view_for_user(qs, user):
+#     """
+#     Function that will limit the provided queryset to observation runs that
+#     the provided user can see.
+#
+#     An anonymous user can see objects from all public runs. A logged
+#     in user can also see private runs that he/she has viewing rights
+#     for.
+#     """
+#
+#     #   Check if the observation run is public
+#     public = qs.filter(is_public__exact=True)
+#
+#     #   Check if user is logged in ...
+#     if user.is_anonymous:
+#         #   ... return the "public" queryset if not
+#         return public
+#     else:
+#         #   Check if user is allowed to view the observation run ...
+#         restricted = qs.filter(
+#             pk__in=user.get_read_runs().values('pk')
+#             )
+#         if len(restricted) > 0:
+#             #   ... if this is the case return the specific queryset ...
+#             return restricted
+#         else:
+#             #   ... if not, return the public queryset
+#             return public
 
 
-def get_allowed_runs_to_view_for_user(qs, user):
+
+def get_allowed_model_to_view_for_user(qs, user, model):
     """
-    Function that will limit the provided queryset to observation runs that
+    Function that will limit the provided queryset to objects that
     the provided user can see.
 
     An anonymous user can see objects from all public runs. A logged
@@ -84,7 +115,7 @@ def get_allowed_runs_to_view_for_user(qs, user):
     for.
     """
 
-    #   Check if observation run is public
+    #   Check if the object is public
     public = qs.filter(is_public__exact=True)
 
     #   Check if user is logged in ...
@@ -92,9 +123,9 @@ def get_allowed_runs_to_view_for_user(qs, user):
         #   ... return the "public" queryset if not
         return public
     else:
-        #   Check if user is allowed to view the observation run ...
+        #   Check if user is allowed to view the object ...
         restricted = qs.filter(
-            pk__in=user.get_read_runs().values('pk')
+            pk__in=user.get_read_model(model).values('pk')
             )
         if len(restricted) > 0:
             #   ... if this is the case return the specific queryset ...
@@ -102,7 +133,6 @@ def get_allowed_runs_to_view_for_user(qs, user):
         else:
             #   ... if not, return the public queryset
             return public
-
 
 def check_user_can_view_run(function):
     """

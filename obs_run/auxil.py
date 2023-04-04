@@ -3,6 +3,8 @@ from django.contrib import messages
 from django.http import HttpResponseRedirect
 from django.shortcuts import reverse
 
+from astropy.time import Time
+
 from .models import Obs_run
 
 ############################################################################
@@ -43,3 +45,4 @@ def populate_runs(run_data):
         return False, "Observation run exists already: {}".format(run_data["main_id"])
 
     return True, "New observation run ({}) created".format(run_data["main_id"])
+

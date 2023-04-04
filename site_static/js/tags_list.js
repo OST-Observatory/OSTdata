@@ -11,9 +11,6 @@ $(document).ready(function () {
       serverSide: true,
       ajax: {
          url: '/api/tags/?format=datatables',
-   //       data: function ( d ) {
-   //         d.project = $('#project-pk').attr('project');
-   //       },
       },
       columns: [
          { data: 'name' },

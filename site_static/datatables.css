@@ -1,4 +1,13 @@
 
+:root {
+/*   --base_color: #f1ad9d; */
+/*   --base_color: #f8dc81; */
+  --table_color: #f8dc81;
+/*   --hover_color: #fcab40; */
+  --hover_color: #faf4db;
+}
+
+
 table.dataTable {
     margin: 0 auto;
     clear: both;
@@ -20,12 +29,12 @@ table.dataTable tr {
 
 table.dataTable td,
 table.dataTable td {
-   border-bottom: 1px solid rgba(64, 117, 144, 0.3);
+   border-bottom: 1px solid var(--table_color);
 }
 
 table.dataTable thead tr,
 table.dataTable tfoot tr {
-   background: rgba(64, 117, 144, 0.3);
+   background: var(--table_color);
 }
 
 table.dataTable thead th,
@@ -102,7 +111,8 @@ table.dataTable tbody tr.selected {
 }
 
 table.dataTable tbody tr:hover {
-   background-color: #F0FFFF;
+/*    background-color: #F0FFFF; */
+   background-color: var(--hover_color);
 }
 
 table.dataTable tbody th,
@@ -632,3 +642,5 @@ progress.progress-bar {
 .not-visible{
         display: none;
     }
+
+
