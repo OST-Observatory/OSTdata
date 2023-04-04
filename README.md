@@ -172,6 +172,7 @@ DATABASE_PORT=
 DEVICE=the_name_of_your_device_used_in_production
 ALLOWED_HOSTS=server_url,server_ip,localhost
 LOG_DIR=logs/
+DEFAULT_FROM_EMAIL=example@email.com
 ```
 
 Instructions on how to generate a secret key can be found here: https://tech.serhatteker.com/post/2020-01/django-create-secret-key/

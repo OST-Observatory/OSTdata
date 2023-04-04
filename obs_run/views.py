@@ -29,7 +29,7 @@ def dashboard(request):
         user = request.user
         private_runs = Obs_run.objects \
             .filter(is_public__exact=False) \
-            .filter(pk__in=user.get_read_runs().values('pk')) \
+            .filter(pk__in=user.get_read_model(Obs_run).values('pk')) \
             .order_by('name')
 
     context = {'public_runs': public_runs,
