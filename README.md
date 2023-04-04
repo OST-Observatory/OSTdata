@@ -112,12 +112,12 @@ sudo -u postgres psql
 
 Create the database, user and connect them:
 ```
-CREATE DATABASE ostdb;
-CREATE USER ostuser WITH PASSWORD 'password';
-ALTER ROLE ostuser SET client_encoding TO 'utf8';
-ALTER ROLE ostuser SET default_transaction_isolation TO 'read committed';
-ALTER ROLE ostuser SET timezone TO 'UTC';
-GRANT ALL PRIVILEGES ON DATABASE ostdb TO ostuser;
+CREATE DATABASE ostdatadb;
+CREATE USER ostdatauser WITH PASSWORD 'password';
+ALTER ROLE ostdatauser SET client_encoding TO 'utf8';
+ALTER ROLE ostdatauser SET default_transaction_isolation TO 'read committed';
+ALTER ROLE ostdatauser SET timezone TO 'UTC';
+GRANT ALL PRIVILEGES ON DATABASE ostdatadb TO ostdatauser;
 ```
 
 List all databases:
@@ -127,15 +127,15 @@ List all databases:
 
 Connect to our database and list all tables:
 ```
-\c ostdb
+\c ostdatadb
 \dt
 ```
 
 To drop the database and recreate it when you want to completely reset everything (the user does not get deleted in this process):
 ```
-DROP DATABASE ostdb;
-CREATE DATABASE ostdb;
-GRANT ALL PRIVILEGES ON DATABASE ostdb TO ostuser;
+DROP DATABASE ostdatadb;
+CREATE DATABASE ostdatadb;
+GRANT ALL PRIVILEGES ON DATABASE ostdatadb TO ostdatauser;
 ```
 
 Exit the psql:
@@ -164,8 +164,8 @@ to be specified. If a special log directory is required or a different database
 user was defined during setup, this has to be specified here as well.
 ```
 SECRET_KEY=generate_and_add_your_secret_security_key_here
-DATABASE_NAME=ostdb
-DATABASE_USER=ostuser
+DATABASE_NAME=ostdatadb
+DATABASE_USER=ostdatauser
 DATABASE_PASSWORD=your_database_password
 DATABASE_HOST=localhost
 DATABASE_PORT=
