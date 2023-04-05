@@ -77,13 +77,18 @@ if __name__ == "__main__":
                         'flat' not in target and
                         'dark' not in target
                         ):
+
+                        #   Tolerance in degree
+                        t = 0.1
+                        t = 0.5
+
                         objs = Object.objects \
                             .filter(name__icontains=target) \
                             .filter(
-                                ra__range=(data_file.ra-0.1, data_file.ra+0.1)
+                                ra__range=(data_file.ra-t, data_file.ra+t)
                                 ) \
                             .filter(
-                                dec__range=(data_file.dec-0.1, data_file.dec+0.1)
+                                dec__range=(data_file.dec-t, data_file.dec+t)
                                 )
 
                         if len(objs) > 0:

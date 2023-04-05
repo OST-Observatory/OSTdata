@@ -95,7 +95,7 @@ class DataFile(models.Model):
     )
 
     #   The file
-    datafile = models.FilePathField()
+    datafile = models.FilePathField(max_length=150)
 
     #   File type (FITS, CR2, ...)
     file_type = models.CharField(max_length=50, default='')

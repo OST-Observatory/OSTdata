@@ -26,7 +26,7 @@ $(document).ready(function () {
         },
         searching: false,
         orderMulti: false, //Can only order on one column at a time
-        order: [1],
+        order: [[1, 'desc']],
         columns: [
             {  orderable:      false,
                 className:      'select-control',
