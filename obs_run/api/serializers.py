@@ -105,11 +105,18 @@ class RunListSerializer(ModelSerializer):
     def get_start_time(self, obj):
         #   Filter JD to avoid files with the default date (2000:01:01 00:00:00)
         data_files = obj.datafile_set.filter(hjd__gt=2451545).order_by('hjd')
-        return data_files[0].obs_date
+        if len(data_files) > 0:
+            return data_files[0].obs_date
+        else:
+            return '2000:01:01 00:00:00'
 
     def get_end_time(self, obj):
         data_files = obj.datafile_set.all().order_by('hjd').reverse()
-        return data_files[0].obs_date
+        if len(data_files) > 0:
+            return data_files[0].obs_date
+        else:
+            return '2000:01:01 00:00:00'
+
 
     def get_objects(self, obj):
         objects = ObjectSimpleSerializer(obj.object_set.all(), many=True).data
