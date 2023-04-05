@@ -254,11 +254,19 @@ function openTagEditBox() {
 
 // Update the tags attached to this observation run
 function update_tags() {
+    //  Sanitize ajax calls if the site does not run in the web server root dir
+    let script_name = $('#script_name').attr('name');
+    if ( script_name == 'None' ) {
+        script_name = '';
+    }
+
     let new_tags = $("#tagOptionsRun input:checked").map(
         function () {
             return this.value;
         }).get();
+
     let object_pk = $('#tagEditButton').attr('obj_id');
+
     $.ajax({
         url: script_name+"/api/objects/" + object_pk + '/',
         type: "PATCH",

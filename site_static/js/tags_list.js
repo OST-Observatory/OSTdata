@@ -73,6 +73,12 @@ function openTagAddBox() {
 };
 
 function addTag() {
+    //  Sanitize ajax calls if the site does not run in the web server root dir
+    let script_name = $('#script_name').attr('name');
+    if ( script_name == 'None' ) {
+        script_name = '';
+    }
+
    $.ajax({
       url : script_name+"/api/tags/",
       type : "POST",
@@ -109,6 +115,12 @@ function openTagEditBox(tabelrow, data) {
 };
 
 function editTag(tabelrow, data) {
+    //  Sanitize ajax calls if the site does not run in the web server root dir
+    let script_name = $('#script_name').attr('name');
+    if ( script_name == 'None' ) {
+        script_name = '';
+    }
+
    $.ajax({
       url : script_name+"/api/tags/"+data['pk']+'/',
       type : "PATCH",
@@ -131,6 +143,12 @@ function editTag(tabelrow, data) {
 
 // Delete method
 function deleteTag(tabelrow, data) {
+    //  Sanitize ajax calls if the site does not run in the web server root dir
+    let script_name = $('#script_name').attr('name');
+    if ( script_name == 'None' ) {
+        script_name = '';
+    }
+
    if (confirm('Are you sure you want to remove this Tag?')==true){
       $.ajax({
             url : script_name+"/api/tags/"+data['pk']+'/',

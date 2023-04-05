@@ -177,6 +177,13 @@ function update_tags() {
             return this.value;
         }).get();
     let run_pk = $('#tagEditButton').attr('run_id');
+
+    //  Sanitize ajax calls if the site does not run in the web server root dir
+    let script_name = $('#script_name').attr('name');
+    if ( script_name == 'None' ) {
+        script_name = '';
+    }
+
     $.ajax({
         url: script_name+"/api/runs/runs/" + run_pk + '/',
         type: "PATCH",
@@ -284,6 +291,13 @@ function load_tags() {
     //   Clear tag options of the add-system form
     $("#id_tags").empty();
 
+    //  Sanitize ajax calls if the site does not run in the web server root dir
+    let script_name = $('#script_name').attr('name');
+    if ( script_name == 'None' ) {
+        script_name = '';
+    }
+
+
     //   Load all tags and add them to the window
     $.ajax({
         url : script_name+"/api/tags/",
@@ -339,6 +353,12 @@ function updateTags() {
 }
 
 function update_file_tags(row, new_tags){
+    //  Sanitize ajax calls if the site does not run in the web server root dir
+    let script_name = $('#script_name').attr('name');
+    if ( script_name == 'None' ) {
+        script_name = '';
+    }
+
     let pk = row.data()['pk']
     $.ajax({
         url : script_name+"/api/runs/datafiles/"+pk+'/',

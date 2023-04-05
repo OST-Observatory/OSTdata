@@ -213,6 +213,12 @@ function allow_unselect(e){
 //  TAGS
 
 function load_tags() {
+    //  Sanitize ajax calls if the site does not run in the web server root dir
+    let script_name = $('#script_name').attr('name');
+    if ( script_name == 'None' ) {
+        script_name = '';
+    }
+
       // Clear tag options of the add-system form
     $("#id_tags").empty();
 
@@ -270,6 +276,12 @@ function updateTags() {
 }
 
 function update_objects_tags(row, new_tags){
+    //  Sanitize ajax calls if the site does not run in the web server root dir
+    let script_name = $('#script_name').attr('name');
+    if ( script_name == 'None' ) {
+        script_name = '';
+    }
+
     let pk = row.data()['pk']
 
     $.ajax({

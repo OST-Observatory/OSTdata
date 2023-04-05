@@ -319,6 +319,12 @@ function updateStatus() {
 }
 
 function updateRunStatus(row, status) {
+    //  Sanitize ajax calls if the site does not run in the web server root dir
+    let script_name = $('#script_name').attr('name');
+    if ( script_name == 'None' ) {
+        script_name = '';
+    }
+
     $.ajax({
         url : script_name+"/api/runs/runs/"+row.data()['pk']+'/',
         type : "PATCH",
@@ -347,6 +353,12 @@ function updateRunStatus(row, status) {
 function load_tags() {
     //   Clear tag options of the add-system form
     $("#id_tags").empty();
+
+    //  Sanitize ajax calls if the site does not run in the web server root dir
+    let script_name = $('#script_name').attr('name');
+    if ( script_name == 'None' ) {
+        script_name = '';
+    }
 
     //   Load all tags and add them to the window
     $.ajax({
@@ -406,6 +418,12 @@ function updateTags() {
 function update_run_tags(row, new_tags){
     let run_pk = row.data()['pk'];
 
+    //  Sanitize ajax calls if the site does not run in the web server root dir
+    let script_name = $('#script_name').attr('name');
+    if ( script_name == 'None' ) {
+        script_name = '';
+    }
+
     $.ajax({
         url : script_name+"/api/runs/runs/"+run_pk+'/',
         type : "PATCH",
@@ -447,6 +465,13 @@ function deleteRuns(){
         $("#progress-bar").prop("max", rows.length)
         $("#progress-bar").val(0)
     }
+
+    //  Sanitize ajax calls if the site does not run in the web server root dir
+    let script_name = $('#script_name').attr('name');
+    if ( script_name == 'None' ) {
+        script_name = '';
+    }
+
     let n = 0;
     //   Set Promise -> evaluates to a resolved Promise
     let p = $.when()
