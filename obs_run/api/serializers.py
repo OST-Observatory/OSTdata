@@ -103,7 +103,8 @@ class RunListSerializer(ModelSerializer):
         return total_expo_time
 
     def get_start_time(self, obj):
-        data_files = obj.datafile_set.all().order_by('hjd')
+        #   Filter JD to avoid files with the default date (2000:01:01 00:00:00)
+        data_files = obj.datafile_set.filter(hjd__gt=2451545).order_by('hjd')
         return data_files[0].obs_date
 
     def get_end_time(self, obj):

@@ -47,12 +47,12 @@ if __name__ == "__main__":
                     suffix = file_path.suffix
                     if suffix in ['.fit', '.fits', '.FIT', '.FITS']:
                         file_type = 'FITS'
-
-                    elif suffix in ['.CR2', '.JPG', '.jpg', '.jpeg', '.JPEG']:
-                        if suffix == '.CR2':
-                            file_type = 'CR2'
-                        else:
-                            file_type = 'JPG'
+                    elif suffix in ['.CR2', '.cr2']:
+                        file_type = 'CR2'
+                    elif suffix in ['.JPG', '.jpg', '.jpeg', '.JPEG']:
+                        file_type = 'JPG'
+                    elif suffix in ['.tiff', '.tif', '.TIF', '.TIFF']:
+                        file_type = 'TIFF'
                     elif suffix in ['.ser', '.SER']:
                         file_type = 'SER'
                     else:

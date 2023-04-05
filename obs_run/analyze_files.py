@@ -24,7 +24,7 @@ def set_file_info(datafile):
         #   Analyze FITS
         analyze_fits(datafile)
 
-    elif file_type in ['JPG', 'CR2']:
+    elif file_type in ['JPG', 'CR2', 'TIFF']:
         #   Analyze image files
         analyze_image(datafile)
 

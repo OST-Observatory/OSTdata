@@ -26,7 +26,10 @@ def analyze_image(datafile):
     tags = exifread.process_file(f)
 
     #   Get observation time and date
-    obs_date = tags['EXIF DateTimeOriginal'].values
+    try:
+        obs_date = tags['EXIF DateTimeOriginal'].values
+    except:
+        obs_date = '2000:01:01 01:00:00'
 
     #   Local timezone
     local = pytz.timezone("Europe/Berlin")
@@ -41,11 +44,20 @@ def analyze_image(datafile):
     jd = Time(obs_date, format='iso', scale='utc').jd
 
     #   Exposure time
-    exptime = float(tags['EXIF ExposureTime'].values[0])
+    try:
+        exptime = float(tags['EXIF ExposureTime'].values[0])
+    except:
+        exptime = 0.
 
     #   Image size
-    naxis1 = float(tags['EXIF ExifImageWidth'].values[0])
-    naxis2 = float(tags['EXIF ExifImageLength'].values[0])
+    try:
+        naxis1 = float(tags['EXIF ExifImageWidth'].values[0])
+    except:
+        naxis1 = -1
+    try:
+        naxis2 = float(tags['EXIF ExifImageLength'].values[0])
+    except:
+        naxis2 = -1
 
     #   Set values
     datafile.exposure_type = 'UK'

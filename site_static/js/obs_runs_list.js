@@ -36,7 +36,7 @@ $(document).ready(function () {
                 searchable: false,
             },
             { data: 'name', render: name_render },
-            { data: 'objects', render: objects_render },
+            { data: 'objects', render: objects_render, width: '30%', },
             { data: 'photometry', render: observation_render },
             { data: 'n_fits', render: n_file_render },
             { data: 'expo_time', render: expo_time_render },
@@ -231,7 +231,7 @@ function expo_time_render( data, type, full, meta ) {
         return '-'
     }
     if (data >= 1) {
-        return data
+        return data.toFixed(2);
     }
     return data.toFixed(2);
 }
