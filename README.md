@@ -258,7 +258,7 @@ ExecStart=/path_to_home_dir/ostdata/ostdata_env/bin/gunicorn \
           --capture-output \
           --log-level info \
           --bind unix:/path_to_home_dir/ostdata/run/gunicorn.sock \
-          OSTdata.wsgi:application
+          ostdata.wsgi:application
 
 [Install]
 WantedBy=multi-user.target

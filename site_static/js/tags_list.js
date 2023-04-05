@@ -3,6 +3,12 @@ var tag_table = null;
 
 $(document).ready(function () {
 
+    //  Sanitize ajax calls if the site does not run in the web server root dir
+    let script_name = $('#script_name').attr('name');
+    if ( script_name == 'None' ) {
+        script_name = '';
+    }
+
    // Table functionality
    tag_table = $('#tagtable').DataTable({
    //    autoWidth: true,
@@ -10,7 +16,7 @@ $(document).ready(function () {
    //    info: false,
       serverSide: true,
       ajax: {
-         url: '/api/tags/?format=datatables',
+         url: script_name+'/api/tags/?format=datatables',
       },
       columns: [
          { data: 'name' },
@@ -68,7 +74,7 @@ function openTagAddBox() {
 
 function addTag() {
    $.ajax({
-      url : "/api/tags/",
+      url : script_name+"/api/tags/",
       type : "POST",
       data : {
          name :        $('#tag-name').val(),
@@ -104,7 +110,7 @@ function openTagEditBox(tabelrow, data) {
 
 function editTag(tabelrow, data) {
    $.ajax({
-      url : "/api/tags/"+data['pk']+'/',
+      url : script_name+"/api/tags/"+data['pk']+'/',
       type : "PATCH",
       data : {
          name :        $('#tag-name').val(),
@@ -127,7 +133,7 @@ function editTag(tabelrow, data) {
 function deleteTag(tabelrow, data) {
    if (confirm('Are you sure you want to remove this Tag?')==true){
       $.ajax({
-            url : "/api/tags/"+data['pk']+'/',
+            url : script_name+"/api/tags/"+data['pk']+'/',
             type : "DELETE",
             success : function(json) {
                // remove the row from the table

@@ -7,12 +7,18 @@ let all_tags = null;
 
 $(document).ready(function () {
 
+    //  Sanitize ajax calls if the site does not run in the web server root dir
+    let script_name = $('#script_name').attr('name');
+    if ( script_name == 'None' ) {
+        script_name = '';
+    }
+
     // Table functionality
     file_table = $('#datafiletable').DataTable({
         dom: 'l<"toolbar">frtip',
         serverSide: true,
         ajax: {
-            url: '/api/runs/datafiles/?format=datatables&keep=pk,naxis2,dec_dms,ra_hms',
+            url: script_name+'/api/runs/datafiles/?format=datatables&keep=pk,naxis2,dec_dms,ra_hms',
             //adding "&keep=id,rank" will force return of id and rank fields
             data: get_filter_keywords,
             contentType: "application/json; charset=utf-8",
@@ -59,7 +65,7 @@ $(document).ready(function () {
     //  Load the observation run tags info
     let run_id = $('#tag_list').attr('run_id')
     $.ajax({
-        url: "/api/runs/runs/" + run_id + '/',
+        url: script_name+"/api/runs/runs/" + run_id + '/',
         type: "GET",
         success: function (json) {
             run = json;
@@ -172,7 +178,7 @@ function update_tags() {
         }).get();
     let run_pk = $('#tagEditButton').attr('run_id');
     $.ajax({
-        url: "/api/runs/runs/" + run_pk + '/',
+        url: script_name+"/api/runs/runs/" + run_pk + '/',
         type: "PATCH",
         contentType: "application/json; charset=utf-8",
 
@@ -280,7 +286,7 @@ function load_tags() {
 
     //   Load all tags and add them to the window
     $.ajax({
-        url : "/api/tags/",
+        url : script_name+"/api/tags/",
         type : "GET",
         success : function(json) {
             all_tags = json.results;
@@ -335,7 +341,7 @@ function updateTags() {
 function update_file_tags(row, new_tags){
     let pk = row.data()['pk']
     $.ajax({
-        url : "/api/runs/datafiles/"+pk+'/',
+        url : script_name+"/api/runs/datafiles/"+pk+'/',
         type : "PATCH",
         contentType: "application/json; charset=utf-8",
 

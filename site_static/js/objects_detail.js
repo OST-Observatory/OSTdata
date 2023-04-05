@@ -5,11 +5,17 @@ var run_table = null;
 $(document).ready(function () {
     let obj_pk = $('#tagEditButton').attr('obj_id');
 
+    //  Sanitize ajax calls if the site does not run in the web server root dir
+    let script_name = $('#script_name').attr('name');
+    if ( script_name == 'None' ) {
+        script_name = '';
+    }
+
     run_table = $('#runtable').DataTable({
         // dom: 'l<"toolbar">frtip',
         serverSide: true,
         ajax: {
-            url: '/api/objects/'+obj_pk+'/obsruns/?format=datatables&keep=reduction_status_display,n_img,n_ser,start_time,end_time',
+            url: script_name+'/api/objects/'+obj_pk+'/obsruns/?format=datatables&keep=reduction_status_display,n_img,n_ser,start_time,end_time',
             //adding "&keep=id,rank" will force return of id and rank fields
             data: get_filter_keywords,
             contentType: "application/json; charset=utf-8",
@@ -47,7 +53,7 @@ $(document).ready(function () {
     //  Load the object tags info
     let object_pk = $('#tag_list').attr('obj_id')
     $.ajax({
-        url: "/api/objects/" + object_pk + '/',
+        url: script_name+"/api/objects/" + object_pk + '/',
         type: "GET",
         success: function (json) {
             run = json;
@@ -254,7 +260,7 @@ function update_tags() {
         }).get();
     let object_pk = $('#tagEditButton').attr('obj_id');
     $.ajax({
-        url: "/api/objects/" + object_pk + '/',
+        url: script_name+"/api/objects/" + object_pk + '/',
         type: "PATCH",
         contentType: "application/json; charset=utf-8",
 

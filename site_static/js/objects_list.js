@@ -6,40 +6,46 @@ let all_tags = null;
 
 $(document).ready(function () {
 
+    //  Sanitize ajax calls if the site does not run in the web server root dir
+    let script_name = $('#script_name').attr('name');
+    if ( script_name == 'None' ) {
+        script_name = '';
+    }
+
     object_table = $('#datatable').DataTable({
-    dom: 'l<"toolbar">frtip',
-    serverSide: true,
-    ajax: {
-        url: '/api/objects/?format=datatables&keep=pk,href,dec_dms,ra_hms',
-        //adding "&keep=id,rank" will force return of id and rank fields
-        data: get_filter_keywords,
-        contentType: "application/json; charset=utf-8",
-        dataType: "json",
-    },
-    searching: false,
-    orderMulti: false, //Can only order on one column at a time
-    order: [1],
-    columns: [
-        {  orderable:      false,
-            className:      'select-control',
-            data:           null,
-            render: selection_render,
-            width:          '10',
-            searchable: false,
+        dom: 'l<"toolbar">frtip',
+        serverSide: true,
+        ajax: {
+            url: script_name+'/api/objects/?format=datatables&keep=pk,href,dec_dms,ra_hms',
+            //adding "&keep=id,rank" will force return of id and rank fields
+            data: get_filter_keywords,
+            contentType: "application/json; charset=utf-8",
+            dataType: "json",
         },
-        { data: 'name', render: name_render },
-        { data: 'ra', render: coordinates_render },
-        // { data: 'class' },
-        // { data: 'gmag' },
-        { data: 'obsrun', render: obsrun_render , searchable: false, orderable: false },
-        { data: 'tags', render: tag_render , searchable: false, orderable: false },
-    ],
-    paging: true,
-    pageLength: 50,
-    lengthMenu: [[10, 20, 50, 100, 1000], [10, 20, 50, 100, 1000]], // Use -1 for all.
-    scrollY: $(window).height() - $('header').outerHeight(true) - 196,
-    scrollCollapse: true,
-    autoWidth: true,
+        searching: false,
+        orderMulti: false, //Can only order on one column at a time
+        order: [1],
+        columns: [
+            {  orderable:      false,
+                className:      'select-control',
+                data:           null,
+                render: selection_render,
+                width:          '10',
+                searchable: false,
+            },
+            { data: 'name', render: name_render },
+            { data: 'ra', render: coordinates_render },
+            // { data: 'class' },
+            // { data: 'gmag' },
+            { data: 'obsrun', render: obsrun_render , searchable: false, orderable: false },
+            { data: 'tags', render: tag_render , searchable: false, orderable: false },
+        ],
+        paging: true,
+        pageLength: 50,
+        lengthMenu: [[10, 20, 50, 100, 1000], [10, 20, 50, 100, 1000]], // Use -1 for all.
+        scrollY: $(window).height() - $('header').outerHeight(true) - 196,
+        scrollCollapse: true,
+        autoWidth: true,
     });
 
     //  Add toolbar to table
@@ -212,7 +218,7 @@ function load_tags() {
 
       // Load all tags and add them to the window
     $.ajax({
-        url : "/api/tags/",
+        url : script_name+"/api/tags/",
         type : "GET",
         success : function(json) {
             all_tags = json.results;
@@ -267,7 +273,7 @@ function update_objects_tags(row, new_tags){
     let pk = row.data()['pk']
 
     $.ajax({
-        url : "/api/objects/"+pk+'/',
+        url : script_name+"/api/objects/"+pk+'/',
         type : "PATCH",
         contentType: "application/json; charset=utf-8",
 

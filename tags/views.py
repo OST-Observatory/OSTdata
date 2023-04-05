@@ -1,4 +1,5 @@
 from django.shortcuts import render
+from django.conf import settings
 
 def tag_list(request, project=None, **kwargs):
     """
@@ -7,4 +8,8 @@ def tag_list(request, project=None, **kwargs):
         through the API
     """
 
-    return render(request, 'tags/tag_list.html')
+    context = {
+        'script_name': settings.FORCE_SCRIPT_NAME,
+        }
+
+    return render(request, 'tags/tag_list.html', context)

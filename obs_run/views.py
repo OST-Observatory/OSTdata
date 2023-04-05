@@ -1,6 +1,7 @@
 from django.contrib import messages
 from django.http import HttpResponse, HttpResponseRedirect
 from django.shortcuts import render, get_object_or_404, reverse
+from django.conf import settings
 
 from .models import Obs_run
 
@@ -97,6 +98,7 @@ def obs_run_list(request):
 
     context = {
         'form_system': upload_form,
+        'script_name': settings.FORCE_SCRIPT_NAME,
         }
 
     return render(request, 'obs_run/obs_run_list.html', context)
@@ -114,6 +116,7 @@ def obs_run_detail(request, run_id, **kwargs):
     context = {
         'run': obs_run,
         'tags': Tag.objects.all(),
+        'script_name': settings.FORCE_SCRIPT_NAME,
     }
 
     return render(request, 'obs_run/obs_run_detail.html', context)
