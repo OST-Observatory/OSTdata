@@ -386,3 +386,11 @@ sudo systemctl restart apache2
 ```
 
 The weather station website should now be up and running.
+
+
+# Acknowledgements
+
+This projects uses code from the following projects:
+
+* The .ser parser from the [PlanetarySystemStacker (PSS)](https://github.com/Rolf-Hempel/PlanetarySystemStacker)
+
