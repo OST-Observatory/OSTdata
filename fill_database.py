@@ -10,6 +10,14 @@ from objects.models import Object
 from obs_run.models import Obs_run, DataFile
 
 if __name__ == "__main__":
+    #   Special targets
+    special_taget = [
+        'Sun', 'sun', 'Mercury', 'mercury', 'Venus', 'venus', 'Moon', 'moon',
+        'Mond', 'mond', 'Mars', 'mars', 'Jupiter', 'jupiter', 'Saturn',
+        'saturn', 'Uranus', 'uranus', 'Neptun', 'neptun', 'Pluto', 'pluto',
+        '	Autosave Image', 'calib', 'mosaic', 'ThAr',
+        ]
+
     #   Delete all Observation runs and DataFile entries in the database
     for run in Obs_run.objects.all():
         run.delete()
@@ -82,14 +90,18 @@ if __name__ == "__main__":
                         t = 0.1
                         t = 0.5
 
-                        objs = Object.objects \
-                            .filter(name__icontains=target) \
-                            .filter(
-                                ra__range=(data_file.ra-t, data_file.ra+t)
-                                ) \
-                            .filter(
-                                dec__range=(data_file.dec-t, data_file.dec+t)
-                                )
+                        if target in special_taget:
+                            objs = Object.objects \
+                                .filter(name__icontains=target)
+                        else:
+                            objs = Object.objects \
+                                .filter(name__icontains=target) \
+                                .filter(
+                                    ra__range=(data_file.ra-t, data_file.ra+t)
+                                    ) \
+                                .filter(
+                                    dec__range=(data_file.dec-t, data_file.dec+t)
+                                    )
 
                         if len(objs) > 0:
                             print('Object already known...')

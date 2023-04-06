@@ -155,7 +155,7 @@ function obsrun_render( data, type, full, meta ) {
         if ( name.indexOf('-') == -1 ) {
             name = name.slice(0,4)+'-'+name.slice(4,6)+'-'+name.slice(6,8);
         }
-        results.push("<a href='"+href+"'>"+name+"</a>");
+        results.push("<a href='"+href+"'> "+name+"</a>");
     }
    return results;
 }
