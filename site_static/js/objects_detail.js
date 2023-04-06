@@ -3,7 +3,7 @@ var run_table = null;
 
 
 $(document).ready(function () {
-    let obj_pk = $('#tagEditButton').attr('obj_id');
+    let obj_pk = $('#tag_list').attr('obj_id');
 
     //  Sanitize ajax calls if the site does not run in the web server root dir
     let script_name = $('#script_name').attr('name');
@@ -126,7 +126,7 @@ function get_filter_keywords( d ) {
     // let selected_tags = $("#tag_filter_options input:checked").map( function () { return parseInt(this.value); }).get();
 
     d = $.extend( {}, d, {
-        // "obsrun": $('#tagEditButton').attr('run_id'),
+        // "obsrun": $('#tag_list').attr('run_id'),
         // "name": $('#filter_name').val(),
         // "tags": selected_tags[0],
     } );
@@ -265,7 +265,7 @@ function update_tags() {
             return this.value;
         }).get();
 
-    let object_pk = $('#tagEditButton').attr('obj_id');
+    let object_pk = $('#tag_list').attr('obj_id');
 
     $.ajax({
         url: script_name+"/api/objects/" + object_pk + '/',

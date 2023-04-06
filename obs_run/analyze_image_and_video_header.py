@@ -53,11 +53,17 @@ def analyze_image(datafile):
     try:
         naxis1 = float(tags['EXIF ExifImageWidth'].values[0])
     except:
-        naxis1 = -1
+        try:
+            naxis1 = float(tags['Image ImageWidth'].values[0])
+        except:
+            naxis1 = -1
     try:
         naxis2 = float(tags['EXIF ExifImageLength'].values[0])
     except:
-        naxis2 = -1
+        try:
+            naxis2 = float(tags['Image ImageLength'].values[0])
+        except:
+            naxis2 = -1
 
     #   Set values
     datafile.exposure_type = 'UK'

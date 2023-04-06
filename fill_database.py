@@ -52,6 +52,8 @@ if __name__ == "__main__":
             for (root,dirs,files) in os.walk(run, topdown=True):
                 for f in files:
                     file_path = Path(root, f)
+                    print('File: ', file_path.absolute())
+
                     suffix = file_path.suffix
                     if suffix in ['.fit', '.fits', '.FIT', '.FITS']:
                         file_type = 'FITS'
@@ -73,7 +75,6 @@ if __name__ == "__main__":
                         )
                     data_file.save()
                     data_file.set_infos()
-                    print('File: ', file_path.absolute())
 
                     target = data_file.main_target
                     expo_type = data_file.exposure_type

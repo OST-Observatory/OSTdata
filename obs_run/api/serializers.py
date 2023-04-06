@@ -85,7 +85,8 @@ class RunListSerializer(ModelSerializer):
     def get_n_img(self, obj):
         jpegs = obj.datafile_set.filter(file_type__exact='JPG')
         cr2s = obj.datafile_set.filter(file_type__exact='CR2')
-        return len(jpegs) + len(cr2s)
+        tiffs = obj.datafile_set.filter(file_type__exact='TIFF')
+        return len(jpegs) + len(cr2s) + len(tiffs)
 
     def get_n_ser(self, obj):
         sers = obj.datafile_set.filter(file_type__exact='SER')

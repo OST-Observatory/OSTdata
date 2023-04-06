@@ -54,12 +54,18 @@ def extract_fits_header_info(header):
     try:
         data['ra'] = float(header.get('OBJCTRA', 0.))
     except Exception:
-        data['ra'] = Angle(header.get('OBJCTRA', 0.), unit='hour').degree
+        try:
+            data['ra'] = Angle(header.get('OBJCTRA', 0.), unit='hour').degree
+        except:
+            data['ra'] = 0.
 
     try:
         data['dec'] = float(header.get('OBJCTDEC', 0.))
     except Exception:
-        data['dec'] = Angle(header.get('OBJCTDEC', 0.), unit='degree').degree
+        try:
+            data['dec'] = Angle(header.get('OBJCTDEC', 0.), unit='degree').degree
+        except:
+            data['ra'] = 0.
 
     #   Telescope and instrument info
     data['instrument'] = header.get('INSTRUME', 'UK')

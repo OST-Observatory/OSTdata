@@ -192,6 +192,15 @@ function selection_render( data, type, full, meta ) {
 function name_render( data, type, full, meta ) {
     //  Create a link to the detail for the observation run name
     let start = full['start_time'].split('.')[0];
+    if ( start == '2000-01-01 00:00:00' ){
+        let name = ''
+        if ( data.indexOf('-') == -1 ) {
+            name = data.slice(0,4)+'-'+data.slice(4,6)+'-'+data.slice(6,8);
+        } else {
+            name = data;
+        }
+        return  "<a href='"+full['href']+"'>"+name+"</a>";
+    }
     let end = full['end_time'].split(" ")[1].split('.')[0];
     let href = "<a href='"+full['href']+"'>"+start+'-'+end+"</a>";
     return href;
