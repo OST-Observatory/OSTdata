@@ -108,14 +108,14 @@ class RunListSerializer(ModelSerializer):
         if len(data_files) > 0:
             return data_files[0].obs_date
         else:
-            return '2000:01:01 00:00:00'
+            return '2000-01-01 00:00:00'
 
     def get_end_time(self, obj):
         data_files = obj.datafile_set.all().order_by('hjd').reverse()
         if len(data_files) > 0:
             return data_files[0].obs_date
         else:
-            return '2000:01:01 00:00:00'
+            return '2000-01-01 00:00:00'
 
 
     def get_objects(self, obj):
