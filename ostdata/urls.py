@@ -34,7 +34,8 @@ urlpatterns = [
     ),
     path(
         'w/documentation/',
-        TemplateView.as_view(template_name='documentation.html')
+        TemplateView.as_view(template_name='documentation.html'),
+        name='documentation',
     ),
     path('w/dashboard/', run_views.dashboard, name='dashboard'),
     path('w/runs/', include('obs_run.urls')),

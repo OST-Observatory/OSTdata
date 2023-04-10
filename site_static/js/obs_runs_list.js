@@ -36,10 +36,10 @@ $(document).ready(function () {
                 searchable: false,
             },
             { data: 'name', render: name_render },
-            { data: 'objects', render: objects_render, width: '30%', },
+            { data: 'objects', render: objects_render, width: '30%', searchable: false, orderable: false },
             { data: 'photometry', render: observation_render },
-            { data: 'n_fits', render: n_file_render },
-            { data: 'expo_time', render: expo_time_render },
+            { data: 'n_fits', render: n_file_render, searchable: false, orderable: false },
+            { data: 'expo_time', render: expo_time_render, searchable: false, orderable: false },
             { data: 'tags', render: tag_render , searchable: false, orderable: false },
             { data: 'reduction_status', render: status_render,
                 width: '70',
@@ -48,7 +48,7 @@ $(document).ready(function () {
             },
         ],
         paging: true,
-        pageLength: 50,
+        pageLength: 20,
         lengthMenu: [[10, 20, 50, 100, 1000], [10, 20, 50, 100, 1000]], // Use -1 for all.
         scrollY: $(window).height() - $('header').outerHeight(true) - 196,
         scrollCollapse: true,
@@ -168,12 +168,43 @@ function get_filter_keywords( d ) {
     let selected_status = $("#status_options input:checked").map( function () { return this.value; }).get();
     let selected_tags = $("#tag_filter_options input:checked").map( function () { return parseInt(this.value); }).get();
 
-    d = $.extend( {}, d, {
-    "name": $('#filter_name').val(),
-    "status": selected_status[0],
-    "tags": selected_tags[0],
+    let selected_obs_type = $("#observation_options input:checked").map( function () { return this.value; }).get();
+    let photometry = false;
+    let spectroscopy = false;
+    if (selected_obs_type == 'S') {
+        photometry = false;
+        spectroscopy = true;
+    } else if (selected_obs_type == 'P') {
+        photometry = true;
+        spectroscopy = false;
+    } else if (selected_obs_type == 'B') {
+        photometry = true;
+        spectroscopy = true;
+    }
 
+    d = $.extend( {}, d, {
+        "name": $('#filter_date').val(),
+        "status": selected_status[0],
+        "tags": selected_tags[0],
+        "target": $('#filter_targets').val(),
+        "photometry": photometry,
+        "spectroscopy": spectroscopy,
     } );
+
+
+    if ($('#n_datafiles').val() != '') {
+        d = $.extend({}, d, {
+            "n_datafiles_min": parseFloat($('#n_datafiles').val().split(':')[0]) || '',
+            "n_datafiles_max": parseFloat($('#n_datafiles').val().split(':')[1]) || '',
+        });
+    }
+
+    // if ($('#exposure_time').val() != '') {
+    //     d = $.extend({}, d, {
+    //         "exposure_time_min": parseFloat($('#exposure_time').val().split(':')[0]) || '',
+    //         "exposure_time_max": parseFloat($('#exposure_time').val().split(':')[1]) || '',
+    //     });
+    // }
 
     return d
 }
@@ -361,7 +392,7 @@ function updateRunStatus(row, status) {
 
 function load_tags() {
     //   Clear tag options of the add-system form
-    $("#id_tags").empty();
+    // $("#id_tags").empty();
 
     //  Sanitize ajax calls if the site does not run in the web server root dir
     let script_name = $('#script_name').attr('name');

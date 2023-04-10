@@ -37,7 +37,7 @@ $(document).ready(function () {
             { data: 'ra', render: coordinates_render },
             // { data: 'class' },
             // { data: 'gmag' },
-            { data: 'obsrun', render: obsrun_render , searchable: false, orderable: false },
+            { data: 'obsrun', render: obsrun_render },
             { data: 'tags', render: tag_render , searchable: false, orderable: false },
         ],
         paging: true,
@@ -52,6 +52,29 @@ $(document).ready(function () {
     if (user_authenticated) {
         $("div.toolbar").html(
             "<input id='tag-button'  class='tb-button' value='Edit Tags' type='button' disabled>");
+    };
+
+    // Load the tags and add them to the tag selection list, and the tag edit window
+    load_tags();
+
+    // Event listener to the two range filtering inputs to redraw on input
+    $('#filter-form').submit( function(event) {
+        event.preventDefault();
+        object_table.draw();
+    });
+
+    // Make the filter button open the filter menu
+    $('#filter-dashboard-button').on('click', openNav);
+    function openNav() {
+        $("#filter-dashboard").toggleClass('visible');
+        $("#filter-dashboard-button").toggleClass('open');
+
+        let text = $('#filter-dashboard-button').text();
+        if (text === "filter_list"){
+                $('#filter-dashboard-button').text("close");
+        } else {
+                $('#filter-dashboard-button').text("filter_list");
+        }
     };
 
     // Check and uncheck tables rows
@@ -83,9 +106,6 @@ $(document).ready(function () {
         }
     });
 
-    // Load the tags and add them to the tag selection list, and the tag edit window
-    load_tags();
-
     //   Initialize edit windows
     edit_tags_window = $("#editTags").dialog({
         autoOpen: false,
@@ -116,13 +136,14 @@ $(document).ready(function () {
 // Table filter functionality
 
 function get_filter_keywords( d ) {
-    // let selected_tags = $("#tag_filter_options input:checked").map( function () { return parseInt(this.value); }).get();
+    let selected_tags = $("#tag_filter_options input:checked").map( function () { return parseInt(this.value); }).get();
 
     d = $.extend( {}, d, {
-    // "name": $('#filter_name').val(),
-    // "status": selected_status[0],
-    // "tags": selected_tags[0],
-
+        "name": $('#filter_name').val(),
+        "ra": $('#filter_ra').val(),
+        "dec": $('#filter_dec').val(),
+        "obs_run": $('#filter_obs_run').val(),
+        "tags": selected_tags[0],
     } );
 
     return d
@@ -213,6 +234,7 @@ function allow_unselect(e){
 //  TAGS
 
 function load_tags() {
+    console.log('innn');
     //  Sanitize ajax calls if the site does not run in the web server root dir
     let script_name = $('#script_name').attr('name');
     if ( script_name == 'None' ) {
@@ -220,7 +242,8 @@ function load_tags() {
     }
 
       // Clear tag options of the add-system form
-    $("#id_tags").empty();
+    // $("#id_tags").empty();
+    console.log('script_name', script_name);
 
       // Load all tags and add them to the window
     $.ajax({
@@ -232,6 +255,7 @@ function load_tags() {
             for (var i=0; i<all_tags.length; i++) {
                 tag = all_tags[i];
 
+                console.log('tags', tag);
                 $('#tagOptions').append("<li title='" + tag['description'] +
                 "'><input name='tags' type='checkbox' value='"
                 + tag['pk'] + "' /> " + tag['name'] + "</li>" );

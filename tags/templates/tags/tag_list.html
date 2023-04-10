@@ -8,39 +8,32 @@
 
 {% block headertitle %} Tags {% endblock %}
 
-<!--{% block navigation %}
-   <a href="/stars/stars"> INDEX </a>
-   <strong>|</strong>
-   <a href="/stars/tags" class="active"> Tags </a>
-{% endblock %}-->
-
-
 {% block content %}
 
-    <i display="none" id="script_name" name={{ script_name }}></i>
+   <i display="none" id="script_name" name={{ script_name }}></i>
 
-<section>
+   <section>
 
-   <table id="tagtable" width="100%">
-   <thead>
-      <tr>
-      <th>Name</th>
-      <th>Description</th>
-      <th>Color</th>
-      <th>Action <i class="tagAddButton material-icons button add" title="Add new">add_box</i></th>
-      </tr>
-   </thead>
-   <tfoot>
-      <tr>
-      <th>Name</th>
-      <th>Description</th>
-      <th>Color</th>
-      <th>Action <i class="tagAddButton material-icons button add" title="Add new">add_box</i></th>
-      </tr>
-   </tfoot>
-   </table>
+      <table id="tagtable" width="100%">
+      <thead>
+         <tr>
+         <th>Name</th>
+         <th>Description</th>
+         <th>Color</th>
+         <th>Action <i class="tagAddButton material-icons button add" title="Add new">add_box</i></th>
+         </tr>
+      </thead>
+      <tfoot>
+         <tr>
+         <th>Name</th>
+         <th>Description</th>
+         <th>Color</th>
+         <th>Action <i class="tagAddButton material-icons button add" title="Add new">add_box</i></th>
+         </tr>
+      </tfoot>
+      </table>
 
-</section>
+   </section>
 
    <div id="addEditTag">
       <table>

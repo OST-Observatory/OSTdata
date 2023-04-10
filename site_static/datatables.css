@@ -399,8 +399,8 @@ table.dataTable td {
 .dataTables_wrapper {
     position: relative;
     clear: both;
-    *zoom: 1;
-    zoom: 1;
+/*     *zoom: 1; */
+/*     zoom: 1; */
     padding-top: 5px;
     padding-bottom: 5px;
      width: 95%;

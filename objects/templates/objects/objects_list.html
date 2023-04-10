@@ -11,44 +11,86 @@
 
 {% block content %}
 
-    <i display="none" id="script_name" name={{ script_name }}></i>
+   <i display="none" id="script_name" name={{ script_name }}></i>
 
-<section>
+   <i class="material-icons button filter" id="filter-dashboard-button">filter_list</i>
 
-   <table id="datatable" class="fullwidth">
-   <thead>
-      <tr>
-      <th><i id="select-all" class="material-icons button select" title="Select/Deselect All">check_box_outline_blank</i></th>
-      <th>Name</th>
-      <th>Coordinates</th>
-<!--       <th>Class</th> -->
-<!--       <th>G-mag</th> -->
-      <th>Obs. runs</th>
-      <th>Tags</th>
-      </tr>
-   </thead>
-   <tfoot>
-      <tr>
-      <th></th>
-      <th>Name</th>
-      <th>Coordinates</th>
-<!--       <th>Class</th> -->
-<!--       <th>G-mag</th> -->
-      <th>Obs. runs</th>
-      <th>Tags</th>
-      </tr>
-   </tfoot>
-   </table>
+   <div id="filter-dashboard">
 
-</section>
+      <form method="get" action="/" class="table-filter" id="filter-form">
+         <h3 class="center"> Filter Objects </h3>
 
-    <!-- Divs necessary for editing on page stuff with ajax -->
-<div id="editTags">
-   <div id='tag-error' class='error-message'></div>
-   <ul id="tagOptions">
-   </ul>
-</div>
-<!--
-<script type="text/javascript" src="{% static 'js/obs_runs_list.js' %}"></script>-->
+         <div class="table-filter-item">
+            <p class="filter-label">Name:</p>
+            <input class="filter-input" id="filter_name" type="text">
+         </div>
+
+         <hr>
+
+         <div class="table-filter-item">
+               <p class="filter-label">Ra:</p>
+               <input class="filter-input" id="filter_ra" type="text" placeholder="min   --   max">
+         </div>
+
+         <div class="table-filter-item">
+               <p class="filter-label">Dec:</p>
+               <input class="filter-input" id="filter_dec" type="text" placeholder="min   --   max">
+         </div>
+
+         <hr>
+
+         <div class="table-filter-item">
+            <p class="filter-label">Obs. run:</p>
+            <input class="filter-input" id="filter_obs_run" type="text">
+         </div>
+
+         <hr>
+
+         <div class="table-filter-item">
+            <p class="filter-label">Tags:</p>
+            <ul id="tag_filter_options">
+            </ul>
+         </div>
+
+         <input type="submit" class="button filter" id="submit-search" value="Apply">
+         </form>
+
+   </div>
+
+   <section>
+
+      <table id="datatable" class="fullwidth">
+      <thead>
+         <tr>
+         <th><i id="select-all" class="material-icons button select" title="Select/Deselect All">check_box_outline_blank</i></th>
+         <th>Name</th>
+         <th>Coordinates</th>
+   <!--       <th>Class</th> -->
+   <!--       <th>G-mag</th> -->
+         <th>Obs. runs</th>
+         <th>Tags</th>
+         </tr>
+      </thead>
+      <tfoot>
+         <tr>
+         <th></th>
+         <th>Name</th>
+         <th>Coordinates</th>
+   <!--       <th>Class</th> -->
+   <!--       <th>G-mag</th> -->
+         <th>Obs. runs</th>
+         <th>Tags</th>
+         </tr>
+      </tfoot>
+      </table>
+
+   </section>
+
+   <!-- Divs necessary for editing on page stuff with ajax -->
+   <div id="editTags">
+      <div id='tag-error' class='error-message'></div>
+      <ul id="tagOptions">
+      </ul>
+   </div>
 
 {% endblock %}

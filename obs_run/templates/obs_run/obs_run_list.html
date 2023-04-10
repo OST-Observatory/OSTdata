@@ -3,6 +3,7 @@
 
 {% block head %}
 {% include "datatables.html" %}
+<script type="text/javascript" src="{% static 'js/obs_runs_list.js' %}"></script>
 
 {% endblock %}
 
@@ -11,146 +12,125 @@
 
 {% block content %}
 
-    <i display="none" id="script_name" name={{ script_name }}></i>
+   <i display="none" id="script_name" name={{ script_name }}></i>
 
-<i class="material-icons button filter" id="filter-dashboard-button">filter_list</i>
+   <i class="material-icons button filter" id="filter-dashboard-button">filter_list</i>
 
-<div id="filter-dashboard">
+   <div id="filter-dashboard">
 
-<!--    <form method="get" action="/stars/" class="table-filter" id="filter-form"> -->
-   <form method="get" action="/" class="table-filter" id="filter-form">
-   <h3 class="center"> Filter Systems </h3>
+      <form method="get" action="/" class="table-filter" id="filter-form">
+         <h3 class="center"> Filter Observation Runs </h3>
 
-   <div class="table-filter-item">
-      <p class="filter-label" title="Uses simbad name solver">Name:</p>
-      <input class="filter-input" id="filter_name" type="text" placeholder="identifier">
+         <div class="table-filter-item">
+            <p class="filter-label">Date:</p>
+            <input class="filter-input" id="filter_date" type="text">
+         </div>
+
+         <hr>
+
+         <div class="table-filter-item">
+               <p class="filter-label">Target:</p>
+               <input class="filter-input" id="filter_targets" type="text" placeholder="Target name">
+         </div>
+
+         <hr>
+
+         <div class="table-filter-item">
+            <p class="filter-label">Obs. type:</p>
+            <ul id="observation_options">
+               <li><label for="photometry"><input id="photometry" name="observation" type="checkbox" value="P"/> Photometry</label></li>
+               <li><label for="spectroscopy"><input id="spectroscopy" name="observation" type="checkbox" value="S"/> Spectroscopy</label></li>
+               <li><label for="undefined"><input id="undefined" name="observation" type="checkbox" value="B"/> Both</label></li>
+            </ul>
+         </div>
+
+         <hr>
+
+         <div class="table-filter-item">
+            <p class="filter-label">Nobs:</p>
+            <input class="filter-input" id="n_datafiles" type="text" placeholder="min:max">
+         </div>
+<!--
+         <hr>
+
+         <div class="table-filter-item">
+            <p class="filter-label">Exp. time:</p>
+            <input class="filter-input" id="exposure_time" type="text" placeholder="min:max">
+         </div>-->
+
+         <hr>
+
+         <div class="table-filter-item">
+            <p class="filter-label">Status: </p>
+            <ul id="status_options">
+               <li><label for="id_status_0"><input id="id_status_0" name="status" type="radio" value="PR" /> Partly reduced</label></li>
+               <li><label for="id_status_1"><input id="id_status_1" name="status" type="radio" value="FR" /> Fully reduced</label></li>
+               <li><label for="id_status_2"><input id="id_status_2" name="status" type="radio" value="ER" /> Reduction error</label></li>
+               <li><label for="id_status_3"><input id="id_status_3" name="status" type="radio" value="NE" /> New</label></li>
+            </ul>
+         </div>
+
+         <hr>
+
+         <div class="table-filter-item">
+            <p class="filter-label">Tags:</p>
+            <ul id="tag_filter_options">
+            </ul>
+         </div>
+
+         <input type="submit" class="button filter" id="submit-search" value="Apply">
+         </form>
+
    </div>
 
-<!--   <div class="table-filter-item">
-      <p class="filter-label" title="00:00:00 +00:00:00 or 000.000 +00.000">Co:</p>
-      <input class="filter-input" id="filter_co" type="text" placeholder="coodinate search">
-   </div>-->
+   <section>
 
-   <hr>
+      <table id="datatable" class="fullwidth">
+      <thead>
+         <tr>
+         <th><i id="select-all" class="material-icons button select" title="Select/Deselect All">check_box_outline_blank</i></th>
+         <th>Date</th>
+         <th>Main targets</th>
+         <th>Photo./Spectro.</th>
+         <th>Nobs</th>
+         <th>Exposure time [s]</th>
+         <th>Tags</th>
+         <th>Status</th>
+         </tr>
+      </thead>
+      <tfoot>
+         <tr>
+         <th></th>
+         <th>Date</th>
+         <th>Main targets</th>
+         <th>Photo./Spectro.</th>
+         <th>Nobs</th>
+         <th>Exposure time [s]</th>
+         <th>Tags</th>
+         <th>Status</th>
+         </tr>
+      </tfoot>
+      </table>
 
-<!--   <div class="table-filter-item">
-      <p class="filter-label">Ra:</p>
-      <input class="filter-input" id="filter_ra" type="text" placeholder="min:max">
-   </div>
+   </section>
 
-   <div class="table-filter-item">
-      <p class="filter-label">Dec:</p>
-      <input class="filter-input" id="filter_dec" type="text" placeholder="min:max">
-   </div>
-
-   <div class="table-filter-item">
-      <p class="filter-label">G-mag:</p>
-      <input class="filter-input" id="filter_mag" type="text" placeholder="min:max">
-   </div>
-
-   <hr>-->
-
-<!--   <div class="table-filter-item">
-      <p class="filter-label">#phot:</p>
-      <input class="filter-input" id="filter_nphot" type="text" placeholder="min:max">
-   </div>
-
-   <div class="table-filter-item">
-      <p class="filter-label">#spec:</p>
-      <input class="filter-input" id="filter_nspec" type="text" placeholder="min:max">
-   </div>
-
-   <div class="table-filter-item">
-      <p class="filter-label">#lc:</p>
-      <input class="filter-input" id="filter_nlc" type="text" placeholder="min:max">
-   </div>
-
-   <hr>-->
-
-<!--   <div class="table-filter-item">
-      <p class="filter-label">Class:</p>
-      <input class="filter-input" id="filter_class" type="text" placeholder="class">
-   </div>
-
-   <div class="table-filter-item">
-      <p class="filter-label">Type: </p>
-      <ul id="classification_options">
-         <li><label for="id_classtype_0"><input id="id_classtype_0" name="status" type="checkbox" value="PH" /> Photometric</label></li>
-         <li><label for="id_classtype_1"><input id="id_classtype_1" name="status" type="checkbox" value="SP" /> Spectroscopic</label></li>
+   <!-- Divs necessary for editing on page stuff with ajax -->
+   <div id="editStatus" class="ui-dialog">
+      <div id='status-error' class='error-message'></div>
+      <ul id="statusOptions">
+         <li><input type="radio" name="new-status" value="PR"> Partly reduced </li>
+         <li><input type="radio" name="new-status" value="FR"> Fully reduced </li>
+         <li><input type="radio" name="new-status" value="ER"> Reduction error   </li>
+         <li><input type="radio" name="new-status" value="NE"> New        </li>
       </ul>
    </div>
 
-   <hr>-->
-
-   <div class="table-filter-item">
-      <p class="filter-label">Status: </p>
-      <ul id="status_options">
-         <li><label for="id_status_0"><input id="id_status_0" name="status" type="radio" value="PR" /> Partly reduced</label></li>
-         <li><label for="id_status_1"><input id="id_status_1" name="status" type="radio" value="FR" /> Fully reduced</label></li>
-         <li><label for="id_status_2"><input id="id_status_2" name="status" type="radio" value="ER" /> Reduction error</label></li>
-         <li><label for="id_status_3"><input id="id_status_3" name="status" type="radio" value="NE" /> New</label></li>
+   <div id="editTags">
+      <div id='tag-error' class='error-message'></div>
+      <ul id="tagOptions">
       </ul>
    </div>
 
-   <hr>
-
-   <div class="table-filter-item">
-      <p class="filter-label">Tags:</p>
-      <ul id="tag_filter_options">
-      </ul>
-   </div>
-
-   <input type="submit" class="button filter" id="submit-search" value="Apply">
-   </form>
-
-</div>
-
-<section>
-
-<table id="datatable" class="fullwidth">
-<thead>
-   <tr>
-   <th><i id="select-all" class="material-icons button select" title="Select/Deselect All">check_box_outline_blank</i></th>
-   <th>Date</th>
-   <th>Main targets</th>
-   <th>Photo./Spectro.</th>
-   <th>Nobs</th>
-   <th>Exposure time [s]</th>
-   <th>Tags</th>
-   <th>Status</th>
-   </tr>
-</thead>
-<tfoot>
-   <tr>
-   <th></th>
-   <th>Date</th>
-   <th>Main targets</th>
-   <th>Photo./Spectro.</th>
-   <th>Nobs</th>
-   <th>Exposure time [s]</th>
-   <th>Tags</th>
-   <th>Status</th>
-   </tr>
-</tfoot>
-</table>
-
-</section>
-
-<div id="editStatus" class="ui-dialog">
-   <div id='status-error' class='error-message'></div>
-   <ul id="statusOptions">
-      <li><input type="radio" name="new-status" value="PR"> Partly reduced </li>
-      <li><input type="radio" name="new-status" value="FR"> Fully reduced </li>
-      <li><input type="radio" name="new-status" value="ER"> Reduction error   </li>
-      <li><input type="radio" name="new-status" value="NE"> New        </li>
-   </ul>
-</div>
-
-<div id="editTags">
-   <div id='tag-error' class='error-message'></div>
-   <ul id="tagOptions">
-   </ul>
-</div>
 <!--
 <div id="addRuns">
    <div id='single-add' class='run-form'>
@@ -214,7 +194,5 @@
    </div>
    <div id='bulk-add' class='bulk-system-form'></div>
 </div>-->
-
-<script type="text/javascript" src="{% static 'js/obs_runs_list.js' %}"></script>
 
 {% endblock %}

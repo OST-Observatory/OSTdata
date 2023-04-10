@@ -15,7 +15,7 @@ if __name__ == "__main__":
         'Sun', 'sun', 'Mercury', 'mercury', 'Venus', 'venus', 'Moon', 'moon',
         'Mond', 'mond', 'Mars', 'mars', 'Jupiter', 'jupiter', 'Saturn',
         'saturn', 'Uranus', 'uranus', 'Neptun', 'neptun', 'Pluto', 'pluto',
-        '	Autosave Image', 'calib', 'mosaic', 'ThAr',
+        'Autosave Image', 'calib', 'mosaic', 'ThAr',
         ]
 
     #   Delete all Observation runs and DataFile entries in the database
