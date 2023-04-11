@@ -60,7 +60,7 @@
                <i class="icon material-icons">account_circle</i>
                <a href="#">{{user}}</a>
                <ul>
-               <li><a href={% url 'logout' %}?next={{request.path}}>Log Out</a></li>
+               <li><a href={% url 'logout' %}?next={{dashboard}}>Log Out</a></li>
                <li><a href={% url 'password_change' %}?next={{request.path}}>Change password</a></li>
                </ul>
             </li>
