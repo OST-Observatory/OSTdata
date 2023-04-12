@@ -119,6 +119,10 @@ class DataFile(models.Model):
         default=UNKNOWN,
     )
 
+    #   Telescope and instrument
+    instrument = models.CharField(max_length=50, default='')
+    telescope = models.CharField(max_length=50, default='')
+
     #   Exposure parameters
     hjd = models.FloatField(default=-1)
     obs_date = models.CharField(max_length=50, default='')
@@ -132,6 +136,21 @@ class DataFile(models.Model):
     main_target = models.CharField(max_length=50, default='Unknown')
     ra = models.FloatField(default=-1)
     dec = models.FloatField(default=-1)
+
+    #   Observing conditions
+    airmass =  models.FloatField(default=-1)
+    #   Ambient temperature in deg C
+    ambient_temperature =  models.FloatField(default=-1)
+    #   Dewpoint in deg C
+    dewpoint =  models.FloatField(default=-1)
+    #   Barometric pressure in hPa
+    pressure =  models.FloatField(default=-1)
+    #   Humidity in %
+    humidity =  models.FloatField(default=-1)
+    #   Wind speed in m/s
+    wind_speed =  models.FloatField(default=-1)
+    #   Wind direction in deg
+    wind_direction =  models.FloatField(default=-1)
 
     #   Tags
     # tags = models.ManyToManyField(Tag, related_name='datafile', blank=True)

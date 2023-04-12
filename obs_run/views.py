@@ -3,7 +3,14 @@ from django.http import HttpResponse, HttpResponseRedirect
 from django.shortcuts import render, get_object_or_404, reverse
 from django.conf import settings
 
+import numpy as np
+
+from bokeh.embed import components
+from bokeh.resources import CDN
+
 from .models import Obs_run
+
+from objects.models import Object
 
 from tags.models import Tag
 
@@ -12,6 +19,8 @@ from ostdata.custom_permissions import check_user_can_view_run
 from .forms import UploadRunForm
 
 from .auxil import invalid_form, populate_runs
+
+from .plotting import plot_observation_conditions
 
 ############################################################################
 
@@ -110,13 +119,106 @@ def obs_run_detail(request, run_id, **kwargs):
     """
         Detailed view for an observation run
     """
-
+    #   Get observation run
     obs_run = get_object_or_404(Obs_run, pk=run_id)
 
+    #   Prepare reduction status
+    reduction_status = obs_run.reduction_status
+
+    #   Prepare date string
+    name = obs_run.name
+    date_string = name[0:4]+'-'+name[4:6]+'-'+name[6:8]
+
+    #   Get pk and name of auxiliary objects
+    aux_objects_pk_name = obs_run.object_set.filter(is_main=False).values_list(
+        'pk',
+        'name',
+    )
+    auxillary_objects = []
+    for value in aux_objects_pk_name:
+        auxillary_objects.append(
+            (value[1], reverse('objects:object_detail', args=[value[0]]))
+            )
+
+    #   Get data associated with main objects (also from data files)
+    main_objects = []
+    main_objects_detail = []
+
+    #   Get all objects
+    objects_main = Object.objects.filter(is_main=True).filter(obsrun=obs_run)
+    for obj in objects_main:
+        #   Get Datafiles associated with these objects (restrict to current
+        #   Obs_run and to science data [exposure_type='LI'])
+        data_files = obj.datafiles.all() \
+            .filter(obsrun=obs_run) \
+            .filter(exposure_type='LI')
+
+        #   Get instruments & telescopes + sanitize the output with set and join
+        instruments = ', '.join(set(list(data_files.values_list(
+            'instrument',
+            flat=True
+            ))))
+        telescopes = ', '.join(set(data_files.values_list(
+            'telescope',
+            flat=True
+            )))
+
+        #   Get exposure times and airmass
+        exptime_airmass = data_files.values_list(
+            'exptime',
+            'airmass',
+            )
+        #   Convert to numpy array to facilitate processing
+        np_exptime_airmass = np.array(exptime_airmass, dtype=float)
+        #   Get minimal and maximum airmass
+        min_airmass = min(np_exptime_airmass[:,1])
+        max_airmass = max(np_exptime_airmass[:,1])
+        #   Get exposure time sum
+        total_exposure_time = np.sum(np_exptime_airmass[:,0])
+
+        main_objects_detail.append((
+            obj.name,
+            obj.ra,
+            obj.dec,
+            instruments,
+            telescopes,
+            f"{total_exposure_time:.1f}",
+            f"{min_airmass:.2f}",
+            f"{max_airmass:.2f}",
+            ))
+        main_objects.append((
+            obj.name,
+            reverse('objects:object_detail', args=[obj.pk]),
+            ))
+
+    #   Sanitize reduction status
+    if reduction_status == 'PR':
+        reduction_status_long = 'Partly reduced'
+    elif reduction_status == 'FR':
+        reduction_status_long = 'Fully reduced'
+    elif reduction_status == 'ER':
+        reduction_status_long = 'Reduction error'
+    elif reduction_status == 'NE':
+        reduction_status_long = 'New'
+
+    #   Plot observing conditions
+    conditions_plots = plot_observation_conditions(run_id)
+
+    #   Create HTML content
+    script, figures = components({'conditions_plots': conditions_plots}, CDN)
+
     context = {
+        'main_objects': main_objects,
+        'auxillary_objects': auxillary_objects,
+        'reduction_status': reduction_status_long,
+        'date_string': date_string,
         'run': obs_run,
         'tags': Tag.objects.all(),
         'script_name': settings.FORCE_SCRIPT_NAME,
+        'figures': figures,
+        'script': script,
+        # 'objects_main': objects_main,
+        'main_objects_detail': main_objects_detail,
     }
 
     return render(request, 'obs_run/obs_run_detail.html', context)

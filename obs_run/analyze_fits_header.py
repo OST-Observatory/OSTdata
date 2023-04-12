@@ -78,6 +78,16 @@ def extract_fits_header_info(header):
     data['naxis1'] = header.get('NAXIS1', -1)
     data['naxis2'] = header.get('NAXIS2', -1)
 
+    #   Observing conditions
+    data['airmass'] = header.get('AIRMASS', -1)
+    data['ambient_temperature'] = header.get('AOCAMBT', -1)
+    data['dewpoint'] = header.get('AOCDEW', -1)
+    data['pressure'] = header.get('AOCBAROM', -1)
+    data['humidity'] = header.get('AOCHUM', -1)
+    data['wind_speed'] = header.get('AOCWIND', -1)
+    data['wind_direction'] = header.get('AOCWINDD', -1)
+
+
     return data
 
 ############################################################################
@@ -107,6 +117,15 @@ def analyze_fits(datafile):
     datafile.naxis1 = header_data.get('naxis1', 0.)
     datafile.naxis2 = header_data.get('naxis2', 0.)
     datafile.main_target = header_data.get('objectname', 'Unknown')
+    datafile.instrument = header_data.get('instrument', 'Unknown')
+    datafile.telescope = header_data.get('telescope', 'Unknown')
+    datafile.airmass = header_data.get('airmass', -1)
+    datafile.ambient_temperature = header_data.get('ambient_temperature', -1)
+    datafile.dewpoint = header_data.get('dewpoint', -1)
+    datafile.pressure = header_data.get('pressure', -1)
+    datafile.humidity = header_data.get('humidity', -1)
+    datafile.wind_speed = header_data.get('wind_speed', -1)
+    datafile.wind_direction = header_data.get('wind_direction', -1)
 
     #   Image type definitions
     img_types = {

@@ -1,13 +1,15 @@
 {% extends "base.html" %}
 {% load static %}
+{% load conversion_tags %}
 
 {% block head %}
 {% include "datatables.html" %}
+{% include "bokeh.html" %}
 <script type="text/javascript" src="{% static 'js/obs_runs_detail.js' %}"></script>
 {% endblock %}
 
 {% block headertitle %}
-    Observation run: {{ run.name }}
+    Observation run: {{ date_string }}
 {% endblock %}
 
 {% block content %}
@@ -20,6 +22,58 @@
 
         <h3>Summary</h3>
         <div class="flex-data-container">
+
+            <div class="tag-container">
+                <h3>Basic Data </h3>
+                <table class="datatable">
+                    <tbody>
+                    <tr>
+                        <th>Spectroscopic observations:</th>
+                        {% if run.spectroscopy %}
+                            <td class="mono"><i class='material-icons status-icon smaller valid' title='Spectroscopy taken'></i></td>
+                        {% else %}
+                            <td class="mono"><i class='material-icons status-icon smaller invalid' title='No spectroscopy taken'></i></td>
+                        {% endif %}
+                    </tr>
+                    <tr>
+                        <th>Photometric observations:</th>
+                        {% if run.photometry %}
+                            <td class="mono"><i class='material-icons status-icon smaller valid' title='Photometry taken'></i></td>
+                        {% else %}
+                            <td class="mono"><i class='material-icons status-icon smaller invalid' title='No photometry taken'></i></td>
+                        {% endif %}
+                    </tr>
+                    <tr>
+                        <th>Reduction Status:</th>
+                        <td class="mono">{{ reduction_status }}</td>
+                    </tr>
+                    <tr>
+                        <th>Directory name:</th>
+                        <td class="mono">{{ run.name }}</td>
+                    </tr>
+                    <tr>
+                        <th>Open access:</th>
+                        {% if run.is_public %}
+                            <td class="mono"><i class='material-icons status-icon smaller valid' title='Data is in open access'></i></td>
+                        {% else %}
+                            <td class="mono"><i class='material-icons status-icon smaller invalid' title='Data is not in open access'></i></td>
+                        {% endif %}
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="tag-container">
+                <h3>Observing conditions</h3>
+                <div class='block'>
+                    {{ figures.conditions_plots|safe }}
+                </div>
+            </div>
+
+            <div class="tag-container">
+                <h3>Notes</h3>
+                <div id="noteField">{{ run.note|linebreaks }}</div>
+            </div>
 
             <div class="tag-container">
                 <h3>Tags</h3>
@@ -36,13 +90,91 @@
 
         </div>
 
+<!--         <hr> -->
+    </section>
+
+    <section class='data-section' id="objects">
+<!--         <h3>Objects</h3> -->
+        <h3>Main targets</h3>
+        <div class="flex-data-container">
+            <div class="tag-container">
+<!--                 <h4>Main targets</h4> -->
+                <div class="flex-data-container" id="identifier_list">
+                    {% for name, href in main_objects %}
+                        <div class="identifier" id="identifier-{{ name }}">
+                            <a href={{ href }}  target="_blank"> {{ name }} </a>
+    <!--                    {% if user.is_authenticated %}
+                            <i class="material-icons button delete" id="delete-object-{{ name.pk }}"
+                            title="Delete">delete</i>
+                        {% endif %}-->
+                        </div>
+                    {% empty %}
+                        <p> None known</p>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        {% for name, ra, dec, telescopes, instruments, total_exposure_time, min_airmass, max_airmass in main_objects_detail %}
+            <div class="flex-data-container">
+                <div class="tag-container">
+                    <h3>{{ name }} </h3>
+                    <div class="tag-container">
+                        <h3>Basic data</h3>
+                        <table class="datatable">
+                            <tbody>
+                            <tr>
+                                <th>Right ascension:</th>
+                                <td class="mono">{{ ra|dgr2hms }}</td>
+                            </tr>
+                            <tr>
+                                <th>Declination:</th>
+                                <td class="mono">{{ dec|dgr2dms }}</td>
+                            </tr>
+                            <tr>
+                                <th>Telescope:</th>
+                                <td class="mono">{{ telescopes }}</td>
+                            </tr>
+                            <tr>
+                                <th>Instrument:</th>
+                                <td class="mono">{{ instruments }}</td>
+                            </tr>
+                            <tr>
+                                <th>Exposure time:</th>
+                                <td class="mono">{{ total_exposure_time }}s</td>
+                            </tr>
+                            <tr>
+                                <th>Airmass:</th>
+                                <td class="mono">{{ min_airmass }} - {{ max_airmass }}</td>
+                            </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        {% endfor %}
+
+        {% if auxillary_objects|length > 0 %}
+            <h3>Auxiliary targets</h3>
+            <div class="flex-data-container">
+                <div class="tag-container">
+                    <div class="flex-data-container" id="identifier_list">
+                        {% for name, href in auxillary_objects %}
+                            <div class="identifier" id="identifier-{{ name }}">
+                            <a href={{ href }}  target="_blank"> {{ name }} </a>
+                            </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        {% endif %}
+
         <hr>
 
     </section>
 
     <section class='data-section'>
-    <h3>Data files</h3>
-<!--     <section> -->
+        <h3>Data files</h3>
         <div class="table_wrapp">
             <table id="datafiletable">
             <thead>
@@ -75,6 +207,8 @@
         </div>
 
     </section>
+
+    {{ script|safe }}
 
     <!-- Divs necessary for editing on page stuff with ajax -->
     <div id="tagAdd" title="Add a tag">

@@ -514,6 +514,10 @@ img.project-logo {
    content:'clear';
 }
 
+.status-icon.smaller {
+   font-size: 14.5px;
+}
+
 .status-icon.small {
    font-size: 12px;
 }
