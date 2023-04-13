@@ -115,41 +115,52 @@
             </div>
         </div>
 
-        {% for name, ra, dec, telescopes, instruments, total_exposure_time, min_airmass, max_airmass in main_objects_detail %}
+        {% for pk, name, ra, dec, instruments, telescopes, total_exposure_time, min_airmass, max_airmass, vis_script, vis_figure in main_objects_detail %}
             <div class="flex-data-container">
                 <div class="tag-container">
                     <h3>{{ name }} </h3>
-                    <div class="tag-container">
-                        <h3>Basic data</h3>
-                        <table class="datatable">
-                            <tbody>
-                            <tr>
-                                <th>Right ascension:</th>
-                                <td class="mono">{{ ra|dgr2hms }}</td>
-                            </tr>
-                            <tr>
-                                <th>Declination:</th>
-                                <td class="mono">{{ dec|dgr2dms }}</td>
-                            </tr>
-                            <tr>
-                                <th>Telescope:</th>
-                                <td class="mono">{{ telescopes }}</td>
-                            </tr>
-                            <tr>
-                                <th>Instrument:</th>
-                                <td class="mono">{{ instruments }}</td>
-                            </tr>
-                            <tr>
-                                <th>Exposure time:</th>
-                                <td class="mono">{{ total_exposure_time }}s</td>
-                            </tr>
-                            <tr>
-                                <th>Airmass:</th>
-                                <td class="mono">{{ min_airmass }} - {{ max_airmass }}</td>
-                            </tr>
-                            </tbody>
-                        </table>
+                    <div class="flex-data-container">
+                        <div class="tag-container">
+                            <h3>Basic data</h3>
+                            <table class="datatable">
+                                <tbody>
+                                <tr>
+                                    <th>Right ascension:</th>
+                                    <td class="mono">{{ ra|dgr2hms }}</td>
+                                </tr>
+                                <tr>
+                                    <th>Declination:</th>
+                                    <td class="mono">{{ dec|dgr2dms }}</td>
+                                </tr>
+                                <tr>
+                                    <th>Telescope:</th>
+                                    <td class="mono">{{ telescopes }}</td>
+                                </tr>
+                                <tr>
+                                    <th>Instrument:</th>
+                                    <td class="mono">{{ instruments }}</td>
+                                </tr>
+                                <tr>
+                                    <th>Exposure time:</th>
+                                    <td class="mono">{{ total_exposure_time }}s</td>
+                                </tr>
+                                <tr>
+                                    <th>Airmass:</th>
+                                    <td class="mono">{{ min_airmass }} - {{ max_airmass }}</td>
+                                </tr>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <div class="tag-container">
+                            <h3>Visibility</h3>
+                            <div class='block'>
+                                {{ vis_figure.visibility|safe }}
+                            </div>
+                        </div>
+                        {{ vis_script|safe }}
                     </div>
+
                 </div>
             </div>
         {% endfor %}

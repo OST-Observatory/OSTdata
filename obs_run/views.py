@@ -20,7 +20,7 @@ from .forms import UploadRunForm
 
 from .auxil import invalid_form, populate_runs
 
-from .plotting import plot_observation_conditions
+from .plotting import plot_observation_conditions, plot_visibility
 
 ############################################################################
 
@@ -163,20 +163,38 @@ def obs_run_detail(request, run_id, **kwargs):
             flat=True
             )))
 
-        #   Get exposure times and airmass
-        exptime_airmass = data_files.values_list(
+        #   Get exposure times, airmass and JD
+        exptime_airmass_jd = data_files.values_list(
             'exptime',
             'airmass',
+            'hjd',
             )
         #   Convert to numpy array to facilitate processing
-        np_exptime_airmass = np.array(exptime_airmass, dtype=float)
+        np_exptime_airmass_jd = np.array(exptime_airmass_jd, dtype=float)
         #   Get minimal and maximum airmass
-        min_airmass = min(np_exptime_airmass[:,1])
-        max_airmass = max(np_exptime_airmass[:,1])
+        min_airmass = min(np_exptime_airmass_jd[:,1])
+        max_airmass = max(np_exptime_airmass_jd[:,1])
         #   Get exposure time sum
-        total_exposure_time = np.sum(np_exptime_airmass[:,0])
+        total_exposure_time = np.sum(np_exptime_airmass_jd[:,0])
+        #   Get minimal and maximum JD
+        min_jd = min(np_exptime_airmass_jd[:,2])
+        # max_jd = max(np_exptime_airmass_jd[:,2])
 
+        #   Prepare visibility plots
+        visibility_plot = plot_visibility(
+            min_jd,
+            total_exposure_time,
+            obj.ra,
+            obj.dec,
+            )
+        vis_script, vis_figure = components(
+            {'visibility':visibility_plot},
+            CDN,
+            )
+
+        #   Fill list with infos
         main_objects_detail.append((
+            obj.pk,
             obj.name,
             obj.ra,
             obj.dec,
@@ -185,11 +203,14 @@ def obs_run_detail(request, run_id, **kwargs):
             f"{total_exposure_time:.1f}",
             f"{min_airmass:.2f}",
             f"{max_airmass:.2f}",
+            vis_script,
+            vis_figure,
             ))
         main_objects.append((
             obj.name,
             reverse('objects:object_detail', args=[obj.pk]),
             ))
+
 
     #   Sanitize reduction status
     if reduction_status == 'PR':
