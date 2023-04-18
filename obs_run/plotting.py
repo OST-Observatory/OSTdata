@@ -4,15 +4,26 @@ import datetime
 
 from astroplan import Observer
 
+from astropy import wcs
 from astropy.time import Time
 import astropy.units as u
+from astropy.table import Table
 from astropy.coordinates import SkyCoord, AltAz, get_moon, EarthLocation
+
+from skyfield.data import hipparcos
+from skyfield.api import load
 
 from bokeh import models as mpl
 from bokeh import plotting as bpl
 from bokeh.models import TabPanel, Tabs
 
-from .models import Obs_run
+import matplotlib.pyplot as plt
+
+import io
+
+import base64
+
+from .models import Obs_run, DataFile
 
 ############################################################################
 
@@ -133,8 +144,13 @@ def plot_visibility(start_hjd, exposure_time, ra, dec):
             Declination of the object in deg
     """
     #   Prepare figure
-    fig = bpl.figure(width=400, height=240, toolbar_location=None,
-                     y_range=(0, 90), x_axis_type="datetime")
+    fig = bpl.figure(
+      width=400,
+      height=240,
+      toolbar_location=None,
+      y_range=(0, 90),
+      x_axis_type="datetime",
+      )
 
     fig.toolbar.logo = None
     fig.title.align = 'center'
@@ -180,12 +196,12 @@ def plot_visibility(start_hjd, exposure_time, ra, dec):
 
         obj = SkyCoord(ra=ra * u.deg, dec=dec * u.deg, )
 
-        frame_star = AltAz(obstime=times, location=ost_location)
+        frame_obj = AltAz(obstime=times, location=ost_location)
 
-        obj_altaz = obj.transform_to(frame_star)
+        obj_altaz = obj.transform_to(frame_obj)
 
         moon = get_moon(times)
-        moon_altaz = moon.transform_to(frame_star)
+        moon_altaz = moon.transform_to(frame_obj)
 
         times = times.to_datetime()
 
@@ -225,10 +241,220 @@ def plot_visibility(start_hjd, exposure_time, ra, dec):
 
         print(e)
 
-        label = mpl.Label(x=75, y=40, x_units='screen', text='Could not calculate visibility', render_mode='css',
-                          border_line_color='red', border_line_alpha=1.0, text_color='red',
-                          background_fill_color='white', background_fill_alpha=1.0)
+        label = mpl.Label(
+          x=75,
+          y=40,
+          x_units='screen',
+          text='Could not calculate visibility',
+          render_mode='css',
+          border_line_color='red',
+          border_line_alpha=1.0,
+          text_color='red',
+          background_fill_color='white',
+          background_fill_alpha=1.0,
+          )
 
         fig.add_layout(label)
 
     return fig
+
+
+def plot_field_of_view(data_file_pk):
+    """
+        Plot star positions and show field of view
+
+        Parameters
+        ----------
+        data_file_pk    : `integer`
+            ID of the DataFile object, representing the observation
+    """
+    #   Get DataFile
+    datafile = DataFile.objects.get(pk=data_file_pk)
+    NAXIS1 = datafile.naxis1
+    NAXIS2 = datafile.naxis2
+
+    #   Generate WCS
+    w = wcs.WCS(header={
+        # Width of the output fits/image
+        'NAXIS1': NAXIS1,
+        # Height of the output fits/image
+        'NAXIS2': NAXIS2,
+        # Number of coordinate axes
+        'WCSAXES': 2,
+        # Pixel coordinate of reference point
+        'CRPIX1': int(datafile.naxis1 / 2),
+        # Pixel coordinate of reference point
+        'CRPIX2': int(datafile.naxis2 / 2),
+        # [deg] Coordinate increment at reference point
+        'CDELT1': datafile.fov_x / datafile.naxis1,
+        # [deg] Coordinate increment at reference point
+        'CDELT2': datafile.fov_y / datafile.naxis2,
+        # Units of coordinate increment and value
+        'CUNIT1': 'deg',
+        # Units of coordinate increment and value
+        'CUNIT2': 'deg',
+        'CTYPE1': 'RA---SIN',
+        'CTYPE2': 'DEC--SIN',
+        # [deg] Coordinate value at reference point
+        'CRVAL1': datafile.ra,
+        # [deg] Coordinate value at reference point
+        'CRVAL2': datafile.dec,
+    })
+
+
+    #   Draw star positions
+    with load.open(hipparcos.URL) as f:
+        stars = hipparcos.load_dataframe(f)
+
+    stars = Table.from_pandas(stars)
+
+    stars_loc_x, stars_loc_y = w.world_to_pixel(SkyCoord(
+      ra=stars["ra_degrees"] * u.deg,
+      dec=stars["dec_degrees"] * u.deg
+      ))
+
+    #   Limiting stellar magnitude
+    THRES_MAG = 18.5
+
+    #   Restrict stars to field of view and magnitude threshold
+    mask = (stars_loc_x > -NAXIS1) & (stars_loc_x < NAXIS1) & \
+           (stars_loc_y > -NAXIS2) & (stars_loc_y < NAXIS2) & \
+           (stars["magnitude"] < THRES_MAG)
+    stars = stars[mask]
+
+    mag_min = stars["magnitude"].min()
+    mag_max = stars["magnitude"].max()
+
+    STAR_MINSIZE = 1
+    STAR_MAXSIZE = 160
+
+    def mag2size(mag):
+        stars_sizes  = (np.exp(-mag) - np.exp(-mag_max)) * (STAR_MAXSIZE - STAR_MINSIZE) / np.exp(-mag_min) + STAR_MINSIZE
+        return stars_sizes
+
+    def size2mag(size):
+        # need to define the inverse function of mag2size
+        mag = -np.log((size - STAR_MINSIZE) * np.exp(-mag_min) / (STAR_MAXSIZE - STAR_MINSIZE) + np.exp(-mag_max))
+        return mag
+
+    # fig = plt.figure(figsize=(6.5,3.5))
+    # fig = plt.figure(figsize=(5,2.7))
+    fig = plt.figure(figsize=(5,2.8))
+    ax = fig.add_subplot(projection=w)
+
+    scatter = ax.scatter(
+        stars_loc_x[mask],
+        stars_loc_y[mask],
+        s=mag2size(stars["magnitude"]),
+        color="k",
+        )
+
+    box = ax.get_position()
+    ax.set_position([box.x0, box.y0, box.width * 0.8, box.height])
+
+    # find the legend item magnitudes
+    labels = np.arange(np.ceil(mag_min), np.floor(mag_max))
+
+    kw = dict(
+        prop="sizes",
+        num=labels,
+        color="k",
+        fmt="{x:.0f}",
+        func=size2mag,
+        )
+    legend = ax.legend(
+        *scatter.legend_elements(**kw),
+        loc='center left',
+        bbox_to_anchor=(1.2, 0.5),
+        title="Magnitude",
+        fontsize=7,
+        title_fontsize=7,
+        )
+
+
+    ax.grid(True, color="k", linestyle="dashed")
+
+    ax.set_xlim(-NAXIS1, NAXIS1)
+    ax.set_ylim(-NAXIS2, NAXIS2)
+
+    ax.tick_params(
+        axis='x',
+        labelbottom=True,
+        labeltop=True,
+        bottom=True,
+        top=True,
+        labelsize=7,
+        )
+    ax.tick_params(
+        axis='y',
+        labelleft=True,
+        labelright=True,
+        left=True,
+        right=True,
+        # fontsize=0.5,
+        labelsize=7,
+        )
+
+    # plt.xticks(fontsize = 1)
+
+    ax.set_xlabel(
+        "RA (J2000)",
+        fontsize=7,
+        )
+    ax.set_ylabel(
+        "Dec (J2000)",
+        fontsize=7,
+        )
+
+    ax.set_aspect("equal")
+    # ax.axvspan(*ax.get_xlim(), zorder=-100, color="white") # generate a white background for the plot
+    ax.invert_xaxis()
+
+    flike = io.BytesIO()
+    fig.savefig(flike)
+    b64 = base64.b64encode(flike.getvalue()).decode()
+    return b64
+
+    # #   Prepare figure
+    # fig = bpl.figure(
+    #   width=400,
+    #   height=240,
+    #   toolbar_location=None,
+    #   # y_range=(0, 90),
+    #   # x_axis_type="datetime",
+    #   )
+    #
+    #
+    # fig.toolbar.logo = None
+    # fig.title.align = 'center'
+    # fig.yaxis.axis_label = 'DEC (dgr)'
+    # fig.xaxis.axis_label = 'RA (dgr)'
+    # fig.yaxis.axis_label_text_font_size = '10pt'
+    # fig.xaxis.axis_label_text_font_size = '10pt'
+    # fig.min_border = 5
+    #
+    #
+    # fig.scatter(
+    #     x=stars_loc_x[mask],
+    #     y=stars_loc_y[mask],
+    #     marker="circle",
+    #     color='black',
+    #     radius=mag2size(stars["magnitude"]),
+    #     # fill_alpha=0.3,
+    #     # line_alpha=1.0,
+    #     # size=4,
+    #     # # size=mag2size(stars["magnitude"]),
+    #     # line_width=1.,
+    #     )
+    # # fig.circle(
+    # #     stars_loc_x[mask],
+    # #     stars_loc_y[mask],
+    # #     color='powderblue',
+    # #     fill_alpha=0.3,
+    # #     line_alpha=1.0,
+    # #     size=4,
+    # #     # size=mag2size(stars["magnitude"]),
+    # #     line_width=1.,
+    # #     )
+    #
+    # return fig

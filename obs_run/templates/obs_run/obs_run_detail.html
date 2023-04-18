@@ -94,76 +94,110 @@
     </section>
 
     <section class='data-section' id="objects">
-<!--         <h3>Objects</h3> -->
-        <h3>Main targets</h3>
-        <div class="flex-data-container">
-            <div class="tag-container">
-<!--                 <h4>Main targets</h4> -->
-                <div class="flex-data-container" id="identifier_list">
-                    {% for name, href in main_objects %}
-                        <div class="identifier" id="identifier-{{ name }}">
-                            <a href={{ href }}  target="_blank"> {{ name }} </a>
-    <!--                    {% if user.is_authenticated %}
-                            <i class="material-icons button delete" id="delete-object-{{ name.pk }}"
-                            title="Delete">delete</i>
-                        {% endif %}-->
-                        </div>
-                    {% empty %}
-                        <p> None known</p>
-                    {% endfor %}
-                </div>
-            </div>
-        </div>
-
-        {% for pk, name, ra, dec, instruments, telescopes, total_exposure_time, min_airmass, max_airmass, vis_script, vis_figure in main_objects_detail %}
-            <div class="flex-data-container">
+        {% if main_objects_detail|length > 0 %}
+    <!--         <h3>Objects</h3> -->
+            <h3>Main targets</h3>
+    <!--        <div class="flex-data-container">
                 <div class="tag-container">
-                    <h3>{{ name }} </h3>
-                    <div class="flex-data-container">
-                        <div class="tag-container">
-                            <h3>Basic data</h3>
-                            <table class="datatable">
-                                <tbody>
-                                <tr>
-                                    <th>Right ascension:</th>
-                                    <td class="mono">{{ ra|dgr2hms }}</td>
-                                </tr>
-                                <tr>
-                                    <th>Declination:</th>
-                                    <td class="mono">{{ dec|dgr2dms }}</td>
-                                </tr>
-                                <tr>
-                                    <th>Telescope:</th>
-                                    <td class="mono">{{ telescopes }}</td>
-                                </tr>
-                                <tr>
-                                    <th>Instrument:</th>
-                                    <td class="mono">{{ instruments }}</td>
-                                </tr>
-                                <tr>
-                                    <th>Exposure time:</th>
-                                    <td class="mono">{{ total_exposure_time }}s</td>
-                                </tr>
-                                <tr>
-                                    <th>Airmass:</th>
-                                    <td class="mono">{{ min_airmass }} - {{ max_airmass }}</td>
-                                </tr>
-                                </tbody>
-                            </table>
-                        </div>
+                    <div class="flex-data-container" id="identifier_list">
+                        {% for name, href in main_objects %}
+                            <div class="identifier" id="identifier-{{ name }}">
+                                <a href={{ href }}  target="_blank"> {{ name }} </a>
 
-                        <div class="tag-container">
-                            <h3>Visibility</h3>
-                            <div class='block'>
-                                {{ vis_figure.visibility|safe }}
                             </div>
-                        </div>
-                        {{ vis_script|safe }}
+                        {% empty %}
+                            <p> None known</p>
+                        {% endfor %}
                     </div>
-
                 </div>
-            </div>
-        {% endfor %}
+            </div>-->
+    <!--
+            <script type="text/javascript" src="//aladin.u-strasbg.fr/AladinLite/api/v2/latest/aladin.min.js"
+            charset="utf-8"></script>-->
+
+    <!--         fov_script, -->
+            {% for pk, name, ra, dec, instruments, telescopes, total_exposure_time, min_airmass, max_airmass, vis_script, vis_figure, fov_figure, href in main_objects_detail %}
+                <div class="flex-data-container">
+                    <div class="tag-container">
+                            <h3><a href={{ href}}>{{ name }}</a></h3>
+                        <div class="flex-data-container">
+                            <div class="tag-container">
+                                <h3>Basic data</h3>
+                                <table class="datatable">
+                                    <tbody>
+                                    <tr>
+                                        <th>Right ascension:</th>
+                                        <td class="mono">{{ ra|dgr2hms }}</td>
+                                    </tr>
+                                    <tr>
+                                        <th>Declination:</th>
+                                        <td class="mono">{{ dec|dgr2dms }}</td>
+                                    </tr>
+                                    <tr>
+                                        <th>Telescope:</th>
+                                        <td class="mono">{{ telescopes }}</td>
+                                    </tr>
+                                    <tr>
+                                        <th>Instrument:</th>
+                                        <td class="mono">{{ instruments }}</td>
+                                    </tr>
+                                    <tr>
+                                        <th>Exposure time:</th>
+                                        <td class="mono">{{ total_exposure_time }}s</td>
+                                    </tr>
+                                    <tr>
+                                        <th>Airmass:</th>
+                                        <td class="mono">{{ min_airmass }} - {{ max_airmass }}</td>
+                                    </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <div class="tag-container">
+                                <h3>Visibility</h3>
+                                <div class='block'>
+                                    {{ vis_figure.visibility|safe }}
+                                </div>
+                            </div>
+                            {{ vis_script|safe }}
+
+    <!--                        <div class="tag-container">
+                                <h3>Field of view</h3>
+                                <div class='block'>
+                                    {{ fov_figure.fov|safe }}
+                                </div>
+                            </div>
+                            {{ fov_script|safe }}-->
+
+                            <div class="tag-container">
+                                <h3>Field of view</h3>
+                                <div class='block'>
+                                    <img src='data:image/png;base64,{{ fov_figure }}'>
+                                </div>
+                            </div>
+
+    <!--
+                            <div class="tag-container" style="max-width:250px; height:255px;">
+                                <div id="aladin-lite-div" style="width:250px;height:250px;"></div>
+                                <script type="text/javascript">
+                                    let aladin = A.aladin('#aladin-lite-div', {
+                                        survey: "P/DSS2/color",
+                                        fov: 1.01 / 60,
+                                        target: "{{ra}} {{dec}}",
+                                        showZoomControl: false,
+                                        showLayersControl: false,
+                                        showGotoControl: false,
+                                        showFrame: false
+                                    });
+                                    aladin.addCatalog(A.catalogFromVizieR('I/345', '{{ra}} {{dec}}', 1.01 / 60, {onClick: 'showTable'}));
+                                </script>
+                            </div>-->
+                        </div>
+
+                    </div>
+                </div>
+            {% endfor %}
+        {% endif %}
 
         {% if auxillary_objects|length > 0 %}
             <h3>Auxiliary targets</h3>

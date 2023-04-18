@@ -73,10 +73,13 @@ def extract_fits_header_info(header):
     data['exptime'] = np.round(header.get('EXPTIME', -1), 0)
     data['observer'] = header.get('OBSERVER', 'UK')
     data['imagetyp'] = header.get('IMAGETYP', 'UK')
+    data['focal_length'] = header.get('FOCALLEN', 'UK')
 
     #   Image properties
     data['naxis1'] = header.get('NAXIS1', -1)
     data['naxis2'] = header.get('NAXIS2', -1)
+    data['pixel_size'] = header.get('XPIXSZ', -1)
+    # data['binning'] = header.get'XBINNING', -1)
 
     #   Observing conditions
     data['airmass'] = header.get('AIRMASS', -1)
@@ -86,7 +89,6 @@ def extract_fits_header_info(header):
     data['humidity'] = header.get('AOCHUM', -1)
     data['wind_speed'] = header.get('AOCWIND', -1)
     data['wind_direction'] = header.get('AOCWINDD', -1)
-
 
     return data
 
@@ -126,6 +128,24 @@ def analyze_fits(datafile):
     datafile.humidity = header_data.get('humidity', -1)
     datafile.wind_speed = header_data.get('wind_speed', -1)
     datafile.wind_direction = header_data.get('wind_direction', -1)
+    datafile.focal_length = header_data.get('focal_length', -1)
+    datafile.pixel_size = header_data.get('pixel_size', -1)
+
+    #   Calculate chip size in mm
+    if datafile.pixel_size != -1 and datafile.focal_length != -1:
+        pixel_size_mm = datafile.pixel_size / 1000
+        d = datafile.naxis1 * pixel_size_mm
+        h = datafile.naxis2 * pixel_size_mm
+
+        #   Calculate field of view
+        double_focal_len = 2 * datafile.focal_length
+        fov_x = 2 * np.arctan( d / double_focal_len )
+        fov_y = 2 * np.arctan( h / double_focal_len )
+
+        #   Convert to degree
+        two_pi = 2. * np.pi
+        datafile.fov_x = fov_x * 360. / two_pi
+        datafile.fov_y = fov_y * 360. / two_pi
 
     #   Image type definitions
     img_types = {

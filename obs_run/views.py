@@ -20,7 +20,11 @@ from .forms import UploadRunForm
 
 from .auxil import invalid_form, populate_runs
 
-from .plotting import plot_observation_conditions, plot_visibility
+from .plotting import (
+    plot_observation_conditions,
+    plot_visibility,
+    plot_field_of_view,
+    )
 
 ############################################################################
 
@@ -180,7 +184,7 @@ def obs_run_detail(request, run_id, **kwargs):
         min_jd = min(np_exptime_airmass_jd[:,2])
         # max_jd = max(np_exptime_airmass_jd[:,2])
 
-        #   Prepare visibility plots
+        #   Prepare visibility plot
         visibility_plot = plot_visibility(
             min_jd,
             total_exposure_time,
@@ -191,6 +195,13 @@ def obs_run_detail(request, run_id, **kwargs):
             {'visibility':visibility_plot},
             CDN,
             )
+
+        #   Prepare field of view plot
+        fov_plot = plot_field_of_view(data_files[0].pk)
+        # fov_script, fov_figure = components(
+        #     {'fov':fov_plot},
+        #     CDN,
+        #     )
 
         #   Fill list with infos
         main_objects_detail.append((
@@ -205,11 +216,15 @@ def obs_run_detail(request, run_id, **kwargs):
             f"{max_airmass:.2f}",
             vis_script,
             vis_figure,
-            ))
-        main_objects.append((
-            obj.name,
+            # fov_script,
+            # fov_figure,
+            fov_plot,
             reverse('objects:object_detail', args=[obj.pk]),
             ))
+        # main_objects.append((
+        #     obj.name,
+        #     reverse('objects:object_detail', args=[obj.pk]),
+        #     ))
 
 
     #   Sanitize reduction status
@@ -229,7 +244,7 @@ def obs_run_detail(request, run_id, **kwargs):
     script, figures = components({'conditions_plots': conditions_plots}, CDN)
 
     context = {
-        'main_objects': main_objects,
+        # 'main_objects': main_objects,
         'auxillary_objects': auxillary_objects,
         'reduction_status': reduction_status_long,
         'date_string': date_string,

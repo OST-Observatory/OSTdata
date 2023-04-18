@@ -122,6 +122,7 @@ class DataFile(models.Model):
     #   Telescope and instrument
     instrument = models.CharField(max_length=50, default='')
     telescope = models.CharField(max_length=50, default='')
+    focal_length = models.FloatField(default=-1)
 
     #   Exposure parameters
     hjd = models.FloatField(default=-1)
@@ -131,6 +132,11 @@ class DataFile(models.Model):
     #   Image parameters
     naxis1 = models.FloatField(default=-1)
     naxis2 = models.FloatField(default=-1)
+    pixel_size = models.FloatField(default=-1)
+
+    #   Filed of view
+    fov_x = models.FloatField(default=-1)
+    fov_y = models.FloatField(default=-1)
 
     #   Target infos
     main_target = models.CharField(max_length=50, default='Unknown')
