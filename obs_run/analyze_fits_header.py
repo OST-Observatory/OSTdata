@@ -73,7 +73,7 @@ def extract_fits_header_info(header):
     data['exptime'] = np.round(header.get('EXPTIME', -1), 0)
     data['observer'] = header.get('OBSERVER', 'UK')
     data['imagetyp'] = header.get('IMAGETYP', 'UK')
-    data['focal_length'] = header.get('FOCALLEN', 'UK')
+    data['focal_length'] = header.get('FOCALLEN', -1)
 
     #   Image properties
     data['naxis1'] = header.get('NAXIS1', -1)
