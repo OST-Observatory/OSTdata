@@ -132,7 +132,7 @@ def analyze_fits(datafile):
     datafile.pixel_size = header_data.get('pixel_size', -1)
 
     #   Calculate chip size in mm
-    if datafile.pixel_size != -1 and datafile.focal_length != -1:
+    if (datafile.pixel_size in [0, -1] and datafile.focal_length in [0, -1]:
         pixel_size_mm = datafile.pixel_size / 1000
         d = datafile.naxis1 * pixel_size_mm
         h = datafile.naxis2 * pixel_size_mm
