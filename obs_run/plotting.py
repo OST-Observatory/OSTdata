@@ -46,8 +46,8 @@ def plot_observation_conditions(obs_run_pk):
     obs_run = Obs_run.objects.get(pk=obs_run_pk)
 
     #   Get observing conditions
-    observing_conditions = obs_run.datafile_set.all().order_by('hjd') \
-        .values_list(
+    observing_conditions = obs_run.datafile_set.all().filter(hjd__gt = -1) \
+        .order_by('hjd').values_list(
             'hjd',
             'ambient_temperature',
             'dewpoint',
