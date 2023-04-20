@@ -158,11 +158,15 @@ def obs_run_detail(request, run_id, **kwargs):
             .filter(exposure_type='LI')
 
         #   Get instruments & telescopes + sanitize the output with set and join
-        instruments = ', '.join(set(list(data_files.values_list(
+        # instruments = ', '.join(set(list(data_files.values_list(
+        #     'instrument',
+        #     flat=True
+        #     ))))
+        instruments = ',\n'.join(set(list(data_files.values_list(
             'instrument',
             flat=True
             ))))
-        telescopes = ', '.join(set(data_files.values_list(
+        telescopes = ',\n'.join(set(data_files.values_list(
             'telescope',
             flat=True
             )))
