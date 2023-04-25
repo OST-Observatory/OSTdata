@@ -4,14 +4,19 @@ os.environ["DJANGO_SETTINGS_MODULE"] = "ostdata.settings"
 import re
 from pathlib import Path, PurePath
 
+import numpy as np
+
 from astroquery.simbad import Simbad
+from astropy.coordinates.angles import Angle
+from astropy.coordinates import SkyCoord
+import astropy.units as u
 
 import django
 django.setup()
 from django.db.models import F, ExpressionWrapper, DecimalField
+
 from objects.models import Object, Identifier
 from obs_run.models import Obs_run, DataFile
-from astropy.coordinates.angles import Angle
 
 if __name__ == "__main__":
     #   Special targets
@@ -136,14 +141,10 @@ if __name__ == "__main__":
                             #   Query Simbad for object name
                             customSimbad = Simbad()
                             customSimbad.add_votable_fields(
-                                # 'otype',
-                                # 'morphtype',
-                                # 'mt',
                                 'otypes',
                                 'ids',
                                 )
                             simbad_tbl = customSimbad.query_object(target)
-                            # print(simbad_tbl)
 
                             #   Get Simbad coordinates
                             if simbad_tbl is not None and len(simbad_tbl) > 0:
@@ -155,19 +156,66 @@ if __name__ == "__main__":
                                     simbad_tbl[0]['DEC'],
                                     unit='degree',
                                     ).degree
-                                # print(simbad_ra, data_file.ra)
-                                # print(simbad_dec, data_file.dec)
 
                                 if (simbad_ra < data_file.ra + t and
                                     simbad_dec > data_file.dec - t):
                                     object_ra = simbad_ra
                                     object_dec = simbad_dec
                                     object_simbad_resolved = True
+                                    object_data_table = simbad_tbl[0]
+
+                            #   Search Simbad based on coordinates
+                            if not object_simbad_resolved:
+                                regionSimbad = Simbad()
+                                regionSimbad.add_votable_fields(
+                                    'otypes',
+                                    'ids',
+                                    'distance_result',
+                                    # 'uvby',
+                                    'flux(V)',
+                                    )
+                                result_table = regionSimbad.query_region(
+                                    SkyCoord(
+                                        data_file.ra * u.deg,
+                                        data_file.dec * u.deg,
+                                        frame='icrs',
+                                        ),
+                                    radius='0d5m0s',
+                                    )
+
+                                if (result_table is not None and
+                                    len(result_table) > 0):
+
+                                    #   Get the brightest object if magnitudes
+                                    #   are available otherwise use the object
+                                    #   with the smallest distance to the
+                                    #   coordinates
+                                    if np.all(result_table['FLUX_V'].mask):
+                                        index = 0
+                                    else:
+                                        index = np.argmin(
+                                            result_table['FLUX_V'].data
+                                            )
+                                    simbad_ra = Angle(
+                                        result_table[index]['RA'],
+                                        unit='hour',
+                                        ).degree
+                                    simbad_dec = Angle(
+                                        result_table[index]['DEC'],
+                                        unit='degree',
+                                        ).degree
+                                    object_ra = simbad_ra
+                                    object_dec = simbad_dec
+                                    object_simbad_resolved = True
+                                    object_data_table = result_table[index]
+
 
                             #   Set object type based on Simbad
                             if object_simbad_resolved:
-                                otypes = simbad_tbl[0]['OTYPES']
+                                otypes = object_data_table['OTYPES']
 
+                                #   Decode information in object string to
+                                #   get a rough object estimate
                                 if 'ISM' in otypes or 'PN' in otypes:
                                     object_type = 'NE'
                                 elif 'Cl*' in otypes or 'As*' in otypes:
@@ -178,7 +226,7 @@ if __name__ == "__main__":
                                     object_type = 'ST'
 
                                 #   Set default name
-                                object_name = simbad_tbl[0]['MAIN_ID']
+                                object_name = object_data_table['MAIN_ID']
 
 
                             #     Make a new object
@@ -201,8 +249,8 @@ if __name__ == "__main__":
                                 obj.identifier_set.create(name=target)
 
                                 #   Get aliases from Simbad
-                                aliases = simbad_tbl[0]['IDS'].split('|')
-                                print(aliases)
+                                aliases = object_data_table['IDS'].split('|')
+                                # print(aliases)
 
                                 #   Create Simbad link
                                 sanitized_name = object_name.replace(" ", "") \
