@@ -21,10 +21,12 @@ from obs_run.models import Obs_run, DataFile
 if __name__ == "__main__":
     #   Special targets
     special_taget = [
+        'Autosave Image', 'calib', 'mosaic', 'ThAr',
+        ]
+    solar_system = [
         'Sun', 'sun', 'Mercury', 'mercury', 'Venus', 'venus', 'Moon', 'moon',
         'Mond', 'mond', 'Mars', 'mars', 'Jupiter', 'jupiter', 'Saturn',
         'saturn', 'Uranus', 'uranus', 'Neptun', 'neptun', 'Pluto', 'pluto',
-        'Autosave Image', 'calib', 'mosaic', 'ThAr',
         ]
 
     #   Delete all Observation runs and DataFile entries in the database
@@ -100,7 +102,7 @@ if __name__ == "__main__":
                         t = 0.1
                         t = 0.5
 
-                        if target in special_taget:
+                        if target in special_taget or target in solar_system:
                             objs = Object.objects \
                                 .filter(name__icontains=target)
                         else:
@@ -128,6 +130,36 @@ if __name__ == "__main__":
                             obj.datafiles.add(data_file)
                             obj.obsrun.add(new_run)
                             obj.is_main = True
+                            obj.save()
+
+                        #   Handling of Solar system objects
+                        elif target in solar_system:
+                            #     Make a new object
+                            obj = Object(
+                                name=target,
+                                ra=data_file.ra,
+                                dec=data_file.dec,
+                                object_type='SO',
+                                simbad_resolved=False,
+                            )
+                            obj.save()
+                            obj.obsrun.add(new_run)
+                            obj.datafiles.add(data_file)
+                            obj.save()
+
+                        #   Handling of special targets
+                        elif target in special_taget:
+                            #     Make a new object
+                            obj = Object(
+                                name=target,
+                                ra=data_file.ra,
+                                dec=data_file.dec,
+                                object_type='UK',
+                                simbad_resolved=False,
+                            )
+                            obj.save()
+                            obj.obsrun.add(new_run)
+                            obj.datafiles.add(data_file)
                             obj.save()
                         else:
                             print('New object')
