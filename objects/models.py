@@ -36,6 +36,39 @@ class Object(models.Model):
     #   Is it a main target
     is_main = models.BooleanField(default=True)
 
+    #   Was the target observed photometrically or/and spectroscopically
+    photometry = models.BooleanField(default=False)
+    spectroscopy = models.BooleanField(default=False)
+
+    #   Can the target be resolved by Simbad
+    simbad_resolved = models.BooleanField(default=False)
+
+    #   Object type
+    STAR_CLUSTER = 'SC'
+    SOLAR_SYSTEM = 'SO'
+    GALAXY = 'GA'
+    NEBULA = 'NE'
+    STAR = 'ST'
+    OTHER = 'OT'
+    UNKNOWN = 'UK'
+    OBJECT_TYPE_CHOICES = (
+        (GALAXY,       'Galaxy'),
+        (STAR_CLUSTER, 'Star cluster'),
+        (NEBULA,       'Nebula'),
+        (SOLAR_SYSTEM, 'Solar system'),
+        (STAR,         'Star'),
+        (OTHER,        'Other'),
+        (UNKNOWN,      'Unknown')
+    )
+    object_type = models.CharField(
+        max_length=2,
+        choices=OBJECT_TYPE_CHOICES,
+        default=UNKNOWN,
+    )
+
+    #   Field to add notes etc.
+    note = models.TextField(default='', blank=True)
+
     #   Tags
     # tags = models.ManyToManyField(Tag, related_name='objects', blank=True)
     tags = models.ManyToManyField(Tag, blank=True)
@@ -84,3 +117,27 @@ class Object(models.Model):
             self.ra,
             self.dec,
         )
+
+class Identifier(models.Model):
+    """
+    An alternative name for a object
+    """
+    #   Alternative names should be removed when the object is removed
+    obj = models.ForeignKey(Object, on_delete=models.CASCADE)
+
+    name = models.CharField(max_length=200)
+
+    href = models.CharField(max_length=400, blank=True)
+
+    #   Bookkeeping
+    added_on      = models.DateTimeField(auto_now_add=True)
+    last_modified = models.DateTimeField(auto_now=True)
+    added_by      = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET(get_sentinel_user),
+        null=True,
+    )
+
+    #   String representation of self
+    def __str__(self):
+        return "{} = {} ; {}".format(self.obj.name, self.name, self.href)

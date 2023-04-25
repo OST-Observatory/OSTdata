@@ -3,11 +3,15 @@ import os
 os.environ["DJANGO_SETTINGS_MODULE"] = "ostdata.settings"
 import re
 from pathlib import Path, PurePath
+
+from astroquery.simbad import Simbad
+
 import django
 django.setup()
 from django.db.models import F, ExpressionWrapper, DecimalField
-from objects.models import Object
+from objects.models import Object, Identifier
 from obs_run.models import Obs_run, DataFile
+from astropy.coordinates.angles import Angle
 
 if __name__ == "__main__":
     #   Special targets
@@ -96,13 +100,13 @@ if __name__ == "__main__":
                                 .filter(name__icontains=target)
                         else:
                             objs = Object.objects \
-                                .filter(name__icontains=target) \
                                 .filter(
                                     ra__range=(data_file.ra-t, data_file.ra+t)
                                     ) \
                                 .filter(
                                     dec__range=(data_file.dec-t, data_file.dec+t)
                                     )
+                                # .filter(name__icontains=target) \
 
                         if len(objs) > 0:
                             print('Object already known...')
@@ -122,16 +126,98 @@ if __name__ == "__main__":
                             obj.save()
                         else:
                             print('New object')
-                            #     Need to make a new star
+                            #   Set Defaults
+                            object_ra = data_file.ra
+                            object_dec = data_file.dec
+                            object_type = 'UK'
+                            object_simbad_resolved = False
+                            object_name = target
+
+                            #   Query Simbad for object name
+                            customSimbad = Simbad()
+                            customSimbad.add_votable_fields(
+                                # 'otype',
+                                # 'morphtype',
+                                # 'mt',
+                                'otypes',
+                                'ids',
+                                )
+                            simbad_tbl = customSimbad.query_object(target)
+                            # print(simbad_tbl)
+
+                            #   Get Simbad coordinates
+                            if simbad_tbl is not None and len(simbad_tbl) > 0:
+                                simbad_ra = Angle(
+                                    simbad_tbl[0]['RA'],
+                                    unit='hour',
+                                    ).degree
+                                simbad_dec = Angle(
+                                    simbad_tbl[0]['DEC'],
+                                    unit='degree',
+                                    ).degree
+                                # print(simbad_ra, data_file.ra)
+                                # print(simbad_dec, data_file.dec)
+
+                                if (simbad_ra < data_file.ra + t and
+                                    simbad_dec > data_file.dec - t):
+                                    object_ra = simbad_ra
+                                    object_dec = simbad_dec
+                                    object_simbad_resolved = True
+
+                            #   Set object type based on Simbad
+                            if object_simbad_resolved:
+                                otypes = simbad_tbl[0]['OTYPES']
+
+                                if 'ISM' in otypes or 'PN' in otypes:
+                                    object_type = 'NE'
+                                elif 'Cl*' in otypes or 'As*' in otypes:
+                                    object_type = 'SC'
+                                elif 'G' in otypes:
+                                    object_type = 'GA'
+                                elif '*' in otypes:
+                                    object_type = 'ST'
+
+                                #   Set default name
+                                object_name = simbad_tbl[0]['MAIN_ID']
+
+
+                            #     Make a new object
                             obj = Object(
-                                name=target,
-                                ra=data_file.ra,
-                                dec=data_file.dec,
+                                name=object_name,
+                                ra=object_ra,
+                                dec=object_dec,
+                                object_type=object_type,
+                                simbad_resolved=object_simbad_resolved,
                             )
                             obj.save()
                             obj.obsrun.add(new_run)
                             obj.datafiles.add(data_file)
                             obj.save()
+
+
+                            #   Set alias names
+                            if object_simbad_resolved:
+                                #   Add own alias
+                                obj.identifier_set.create(name=target)
+
+                                #   Get aliases from Simbad
+                                aliases = simbad_tbl[0]['IDS'].split('|')
+                                print(aliases)
+
+                                #   Create Simbad link
+                                sanitized_name = object_name.replace(" ", "") \
+                                                            .replace('+', "%2B")
+                                simbad_href = f"https://simbad.u-strasbg.fr/" \
+                                              f"simbad/sim-id?Ident=" \
+                                              f"{sanitized_name}"
+
+                                #   Set identifier objects
+                                for alias in aliases:
+                                    obj.identifier_set.create(
+                                        name=alias,
+                                        href=simbad_href,
+                                        )
+
                         print()
             print('----------------------------------------')
             print()

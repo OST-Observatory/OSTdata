@@ -1,9 +1,11 @@
 {% extends "base.html" %}
 {% load static %}
+{% load conversion_tags %}
 
 {% block head %}
 {% include "datatables.html" %}
 <script type="text/javascript" src="{% static 'js/objects_detail.js' %}"></script>
+<link rel="stylesheet" href="//aladin.u-strasbg.fr/AladinLite/api/v2/latest/aladin.min.css"/>
 {% endblock %}
 
 {% block headertitle %}
@@ -22,6 +24,67 @@
         <div class="flex-data-container">
 
             <div class="tag-container">
+                <h3>Basic Data </h3>
+                <table class="datatable">
+                    <tbody>
+                    <tr>
+                        <th>Right Ascension:</th>
+                        <td class="mono">{{ object.ra|dgr2hms }}</td>
+                    </tr>
+                    <tr>
+                        <th>Declination:</th>
+                        <td class="mono">{{ object.dec|dgr2dms }}</td>
+                    </tr>
+                    <tr>
+                        <th>Main Target:</th>
+                        {% if object.is_main %}
+                            <td class="mono"><i class='material-icons status-icon smaller valid' title='Target was the main target in at least one observation run'></i></td>
+                        {% else %}
+                            <td class="mono"><i class='material-icons status-icon smaller invalid' title='Target was only an auxiallary target'></i></td>
+                        {% endif %}
+                    </tr>
+                    <tr>
+                        <th>Resolved by SIMBAD:</th>
+                        {% if object.simbad_resolved %}
+                            <td class="mono"><i class='material-icons status-icon smaller valid' title='Target is resolved by Simbad'></i></td>
+                        {% else %}
+                            <td class="mono"><i class='material-icons status-icon smaller invalid' title='Target is not resolved by Simbad'></i></td>
+                        {% endif %}
+                    </tr>
+                    <tr>
+                        <th>Object type:</th>
+                        <td class="mono">{{ object.get_object_type_display }}</td>
+                    </tr>
+                    <tr>
+                        <th>Total Exposure Time:</th>
+                        <td class="mono">{{ total_exposure_time }}s</td>
+                    </tr>
+                    <tr>
+                        <th>Spectroscopic Observations:</th>
+                        {% if object.spectroscopy %}
+                            <td class="mono"><i class='material-icons status-icon smaller valid' title='Spectroscopy taken'></i></td>
+                        {% else %}
+                            <td class="mono"><i class='material-icons status-icon smaller invalid' title='No spectroscopy taken'></i></td>
+                        {% endif %}
+                    </tr>
+                    <tr>
+                        <th>Photometric Observations:</th>
+                        {% if object.photometry %}
+                            <td class="mono"><i class='material-icons status-icon smaller valid' title='Photometry taken'></i></td>
+                        {% else %}
+                            <td class="mono"><i class='material-icons status-icon smaller invalid' title='No photometry taken'></i></td>
+                        {% endif %}
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="tag-container">
+                <h3>Notes</h3>
+                <div id="noteField">{{ object.note|linebreaks }}</div>
+            </div>
+
+            <div class="tag-container">
                 <h3>Tags</h3>
                 {% if user.is_authenticated %}
                     <i id="tagEditButton" class="material-icons button edit" title="Edit"
@@ -34,6 +97,47 @@
 
             </div>
 
+            <div class="tag-container" style="max-width:250px; height:255px;">
+                <div id="aladin-lite-div" style="width:250px;height:250px;"></div>
+                <script type="text/javascript" src="//aladin.u-strasbg.fr/AladinLite/api/v2/latest/aladin.min.js" charset="utf-8"></script>
+                <script type="text/javascript">
+                    var aladin = A.aladin('#aladin-lite-div', {
+                        survey: "P/DSS2/color",
+                        fov: 0.5,
+                        target: "{{object.ra}} {{object.dec}}",
+                        showZoomControl: false,
+                        showLayersControl: false,
+                        showGotoControl: false,
+                        showFrame: false
+                    });
+                    // aladin.addCatalog(A.catalogFromVizieR('I/345', '{{object.ra}} {{object.dec}}', 0.1, {onClick: 'showTable'}));
+                </script>
+            </div>
+
+        </div>
+
+        <div class="flex-data-container">
+
+            <div class="tag-container">
+
+                <h3>Aliases</h3>
+
+                <div class="flex-data-container" id="identifier_list">
+                    {% for name in object.identifier_set.all %}
+                        {% if name.href != "" %}
+                            <div class="identifier" id="identifier-{{ name.pk }}">
+                            <a href={{ name.href }}  target="_blank"> {{ name.name }} </a>
+                        {% else %}
+                            <div class="identifier" id="identifier-{{ name.pk }}">{{ name.name }}
+                        {% endif %}
+
+                    </div>
+                    {% empty %}
+                        <p> None known.</p>
+                    {% endfor %}
+                    </div>
+
+                </div>
         </div>
 
         <hr>
