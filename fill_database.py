@@ -101,7 +101,7 @@ if __name__ == "__main__":
                         #   Tolerance in degree
                         t = 0.1
                         t = 0.5
-                        if '20210224' in data_file.data_file:
+                        if '20210224' in data_file.datafile._str:
                             t = 1.0
 
                         if target in special_taget or target in solar_system:
