@@ -41,7 +41,6 @@ if __name__ == "__main__":
 
     #   Input path
     data_path = sys.argv[1]
-    # data_path = 'test_data'
     data_path = Path(data_path)
 
     #   Regular expression definitions for allowed directory name
@@ -102,6 +101,8 @@ if __name__ == "__main__":
                         #   Tolerance in degree
                         t = 0.1
                         t = 0.5
+                        if '20210224' in data_file.data_file:
+                            t = 1.0
 
                         if target in special_taget or target in solar_system:
                             objs = Object.objects \
@@ -190,13 +191,14 @@ if __name__ == "__main__":
                                     unit='degree',
                                     ).degree
 
-                                #   Tolerance in degree
-                                tol = 1.
+                                # #   Tolerance in degree
+                                # tol = 0.5
+                                # tol = 1.
 
-                                if (data_file.ra < simbad_ra + tol and
-                                    data_file.ra > simbad_ra - tol and
-                                    data_file.dec < simbad_dec + tol and
-                                    data_file.dec > simbad_dec - tol):
+                                if (data_file.ra < simbad_ra + t and
+                                    data_file.ra > simbad_ra - t and
+                                    data_file.dec < simbad_dec + t and
+                                    data_file.dec > simbad_dec - t):
                                     object_ra = simbad_ra
                                     object_dec = simbad_dec
                                     object_simbad_resolved = True
