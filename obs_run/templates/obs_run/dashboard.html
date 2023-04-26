@@ -17,77 +17,13 @@
 
 {% block content %}
 
-{% if private_runs %}
-<section class='data-section' id="private_runs">
-
-<h3 class='indent'>Private observation runs</h3>
-
-<div class="flex-data-container j-center">
-
-    <i>"Dashboard for private observation runs!"</i>
-
-<!--    {% for project in private_runs %} -->
-
-<!--      <div class='project-container'  id="project-{{project.pk}}">
-
-         <h3>
-         <a href= {% url 'systems:star_list' project.slug %}>{{project.name}}</a>
-         </h3>
-
-         <div>
-
-         {% if project.logo %}
-         <img class="project-logo" src="{{project.logo.url}}" alt="{{project.name}} logo">
-         {% else %}
-         <img class="project-logo" src="{% static "images/default_logo.png" %}" alt="{{project.name}} logo">
-         {% endif %}
-
-         </div>
-
-         <i>{{project.description}}</i>
-
-      </div>-->
-<!--    {% endfor %} -->
-
-</div>
-
-<hr>
-
-</section>
-{% endif %}
-
-
 <section class='data-section' id="public_runs">
 
-<h3 class='indent'>Public observation runs</h3>
-
+<!-- <h3 class='indent'>Public observation runs</h3> -->
 
 <div class="flex-data-container j-center">
 
-    <i>"Dashboard for public observation runs!"</i>
-
-<!--   {% for project in public_projects %}
-
-      <div class='project-container'  id="project-{{project.pk}}">
-
-         <h3>
-         <a href= {% url 'systems:star_list' project.slug %}>{{project.name}}</a>
-         </h3>
-
-         <div>
-
-         {% if project.logo %}
-         <img class="project-logo" src="{{project.logo.url}}" alt="{{project.name}} logo">
-         {% else %}
-         <img class="project-logo" src="{% static "images/default_logo.png" %}" alt="{{project.name}} logo">
-         {% endif %}
-
-         </div>
-
-         <i>{{project.description}}</i>
-
-      </div>
-   {% endfor %}-->
+    <i>"Here will appear a Dashboard with a lot of useful information in the near future!"</i>
 
 </div>
 

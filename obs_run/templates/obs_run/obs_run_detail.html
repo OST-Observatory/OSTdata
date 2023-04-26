@@ -116,7 +116,7 @@
             charset="utf-8"></script>-->
 
     <!--         fov_script, -->
-            {% for pk, name, ra, dec, instruments, telescopes, total_exposure_time, min_airmass, max_airmass, vis_script, vis_figure, fov_figure, href in main_objects_detail %}
+            {% for pk, name, ra, dec, instruments, telescopes, total_exposure_time, min_airmass, max_airmass, vis_script, vis_figure, fov_figure, href, object_type in main_objects_detail %}
                 <div class="flex-data-container">
                     <div class="tag-container">
                             <h3><a href={{ href}}>{{ name }}</a></h3>
@@ -132,6 +132,10 @@
                                     <tr>
                                         <th>Declination:</th>
                                         <td class="mono">{{ dec|dgr2dms }}</td>
+                                    </tr>
+                                    <tr>
+                                        <th>Object type:</th>
+                                        <td class="mono">{{ object_type }}</td>
                                     </tr>
                                     <tr>
                                         <th>Telescope:</th>
@@ -174,6 +178,10 @@
                                 <div class='block'>
                                     <img src='data:image/png;base64,{{ fov_figure }}'>
                                 </div>
+                            </div>
+
+                            <div class="tag-container">
+                                <h3>Data reduction parameter</h3>
                             </div>
 
     <!--

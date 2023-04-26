@@ -224,6 +224,7 @@ def obs_run_detail(request, run_id, **kwargs):
             # fov_figure,
             fov_plot,
             reverse('objects:object_detail', args=[obj.pk]),
+            obj.get_object_type_display
             ))
         # main_objects.append((
         #     obj.name,

@@ -20,6 +20,7 @@ class ObjectListSerializer(ModelSerializer):
     obsrun = SerializerMethodField()
     tags = SerializerMethodField()
     href = SerializerMethodField()
+    object_type_display = SerializerMethodField()
     tag_ids = PrimaryKeyRelatedField(
         many=True,
         queryset=Tag.objects.all(),
@@ -41,6 +42,8 @@ class ObjectListSerializer(ModelSerializer):
             'is_main',
             'ra_hms',
             'dec_dms',
+            'object_type_display',
+            # 'simbad_resolved',
         ]
         read_only_fields = ('pk',)
 
@@ -55,3 +58,6 @@ class ObjectListSerializer(ModelSerializer):
 
     def get_href(self, obj):
         return reverse('objects:object_detail', args=[obj.pk])
+
+    def get_object_type_display(self, obj):
+        return obj.get_object_type_display()

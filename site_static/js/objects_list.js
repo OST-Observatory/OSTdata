@@ -35,7 +35,8 @@ $(document).ready(function () {
             },
             { data: 'name', render: name_render },
             { data: 'ra', render: coordinates_render },
-            // { data: 'class' },
+            { data: 'object_type_display' },
+            { data: 'is_main', render: main_target_render },
             // { data: 'gmag' },
             { data: 'obsrun', render: obsrun_render },
             { data: 'tags', render: tag_render , searchable: false, orderable: false },
@@ -186,6 +187,15 @@ function coordinates_render( data, type, full, meta ) {
     return full['ra_hms'] + ' ' + full['dec_dms'];
 }
 
+function main_target_render( data, type, full, meta ) {
+    //  Render main target boolean
+    if (data) {
+        return "<i class='material-icons status-icon valid' title='Main target of at least one observation run'></i>"
+    } else {
+        return "<i class='material-icons status-icon invalid' title='Only an auxiliary target</i>"
+    }
+}
+
 function tag_render( data, type, full, meta ) {
     // Render the tags as a list of divs with the correct color.
     let result = "";
@@ -234,7 +244,6 @@ function allow_unselect(e){
 //  TAGS
 
 function load_tags() {
-    console.log('innn');
     //  Sanitize ajax calls if the site does not run in the web server root dir
     let script_name = $('#script_name').attr('name');
     if ( script_name == 'None' ) {
@@ -243,7 +252,6 @@ function load_tags() {
 
       // Clear tag options of the add-system form
     // $("#id_tags").empty();
-    console.log('script_name', script_name);
 
       // Load all tags and add them to the window
     $.ajax({
@@ -255,7 +263,6 @@ function load_tags() {
             for (var i=0; i<all_tags.length; i++) {
                 tag = all_tags[i];
 
-                console.log('tags', tag);
                 $('#tagOptions').append("<li title='" + tag['description'] +
                 "'><input name='tags' type='checkbox' value='"
                 + tag['pk'] + "' /> " + tag['name'] + "</li>" );
