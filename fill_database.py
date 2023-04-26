@@ -95,13 +95,16 @@ if __name__ == "__main__":
                         target != 'Unknown' and
                         expo_type == 'LI' and
                         'flat' not in target and
-                        'dark' not in target
+                        'dark' not in target and
+                        data_file.ra != 0. and
+                        data_file.dec != 0.
                         ):
 
                         #   Tolerance in degree
                         t = 0.1
                         t = 0.5
-                        if '20210224' in data_file.datafile._str:
+                        if ('20210224' in data_file.datafile._str or
+                           '20220106' in data_file.datafile._str):
                             t = 1.0
 
                         if target in special_taget or target in solar_system:
@@ -116,7 +119,6 @@ if __name__ == "__main__":
                                     dec__range=(data_file.dec-t, data_file.dec+t)
                                     )
                                 # .filter(name__icontains=target) \
-
                         if len(objs) > 0:
                             print('Object already known...')
                             #   If there is one or more objects returned,
