@@ -40,7 +40,8 @@ if __name__ == "__main__":
         o.delete()
 
     #   Input path
-    data_path = 'test_data'
+    data_path = sys.argv[1]
+    # data_path = 'test_data'
     data_path = Path(data_path)
 
     #   Regular expression definitions for allowed directory name
@@ -189,10 +190,13 @@ if __name__ == "__main__":
                                     unit='degree',
                                     ).degree
 
-                                if (data_file.ra < simbad_ra + t and
-                                    data_file.ra > simbad_ra - t and
-                                    data_file.dec < simbad_dec + t and
-                                    data_file.dec > simbad_dec - t):
+                                #   Tolerance in degree
+                                tol = 1.
+
+                                if (data_file.ra < simbad_ra + tol and
+                                    data_file.ra > simbad_ra - tol and
+                                    data_file.dec < simbad_dec + tol and
+                                    data_file.dec > simbad_dec - tol):
                                     object_ra = simbad_ra
                                     object_dec = simbad_dec
                                     object_simbad_resolved = True
