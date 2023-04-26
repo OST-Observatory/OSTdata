@@ -189,8 +189,10 @@ if __name__ == "__main__":
                                     unit='degree',
                                     ).degree
 
-                                if (simbad_ra < data_file.ra + t and
-                                    simbad_dec > data_file.dec - t):
+                                if (data_file.ra < simbad_ra + t and
+                                    data_file.ra > simbad_ra - t and
+                                    data_file.dec < simbad_dec + t and
+                                    data_file.dec > simbad_dec - t):
                                     object_ra = simbad_ra
                                     object_dec = simbad_dec
                                     object_simbad_resolved = True
