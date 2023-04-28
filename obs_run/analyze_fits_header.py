@@ -49,7 +49,7 @@ def extract_fits_header_info(header):
         ).iso
 
     #   Target
-    data['objectname'] = header.get('OBJECT', '')
+    data['objectname'] = header.get('OBJECT', '-')
 
     try:
         data['ra'] = float(header.get('OBJCTRA', 0.))
@@ -115,10 +115,8 @@ def analyze_fits(datafile):
     datafile.exptime = header_data.get('exptime', 0.)
     datafile.ra = header_data.get('ra', -1)
     datafile.dec = header_data.get('dec', -1)
-    datafile.main_target = header_data.get('objectname', 'Unknown')
     datafile.naxis1 = header_data.get('naxis1', 0.)
     datafile.naxis2 = header_data.get('naxis2', 0.)
-    datafile.main_target = header_data.get('objectname', 'Unknown')
     datafile.instrument = header_data.get('instrument', 'Unknown')
     datafile.telescope = header_data.get('telescope', 'Unknown')
     datafile.airmass = header_data.get('airmass', -1)
@@ -171,5 +169,10 @@ def analyze_fits(datafile):
             break
     else:
         datafile.exposure_type = 'UK'
+
+    #   Set object name
+    if datafile.exposure_type in ['UK', 'LI']:
+        datafile.main_target = header_data.get('objectname', '-')
+        datafile.header_target_name = header_data.get('objectname', '-')
 
     datafile.save()

@@ -139,7 +139,8 @@ class DataFile(models.Model):
     fov_y = models.FloatField(default=-1)
 
     #   Target infos
-    main_target = models.CharField(max_length=50, default='Unknown')
+    main_target = models.CharField(max_length=50, default='-')
+    header_target_name = models.CharField(max_length=50, default='-')
     ra = models.FloatField(default=-1)
     dec = models.FloatField(default=-1)
 

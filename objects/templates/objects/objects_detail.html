@@ -25,58 +25,75 @@
 
             <div class="tag-container">
                 <h3>Basic Data </h3>
-                <table class="datatable">
-                    <tbody>
-                    <tr>
-                        <th>Right Ascension:</th>
-                        <td class="mono">{{ object.ra|dgr2hms }}</td>
-                    </tr>
-                    <tr>
-                        <th>Declination:</th>
-                        <td class="mono">{{ object.dec|dgr2dms }}</td>
-                    </tr>
-                    <tr>
-                        <th>Main Target:</th>
-                        {% if object.is_main %}
-                            <td class="mono"><i class='material-icons status-icon smaller valid' title='Target was the main target in at least one observation run'></i></td>
-                        {% else %}
-                            <td class="mono"><i class='material-icons status-icon smaller invalid' title='Target was only an auxiallary target'></i></td>
-                        {% endif %}
-                    </tr>
-                    <tr>
-                        <th>Resolved by SIMBAD:</th>
-                        {% if object.simbad_resolved %}
-                            <td class="mono"><i class='material-icons status-icon smaller valid' title='Target is resolved by Simbad'></i></td>
-                        {% else %}
-                            <td class="mono"><i class='material-icons status-icon smaller invalid' title='Target is not resolved by Simbad'></i></td>
-                        {% endif %}
-                    </tr>
-                    <tr>
-                        <th>Object type:</th>
-                        <td class="mono">{{ object.get_object_type_display }}</td>
-                    </tr>
-                    <tr>
-                        <th>Total Exposure Time:</th>
-                        <td class="mono">{{ total_exposure_time }}s</td>
-                    </tr>
-                    <tr>
-                        <th>Spectroscopic Observations:</th>
-                        {% if object.spectroscopy %}
-                            <td class="mono"><i class='material-icons status-icon smaller valid' title='Spectroscopy taken'></i></td>
-                        {% else %}
-                            <td class="mono"><i class='material-icons status-icon smaller invalid' title='No spectroscopy taken'></i></td>
-                        {% endif %}
-                    </tr>
-                    <tr>
-                        <th>Photometric Observations:</th>
-                        {% if object.photometry %}
-                            <td class="mono"><i class='material-icons status-icon smaller valid' title='Photometry taken'></i></td>
-                        {% else %}
-                            <td class="mono"><i class='material-icons status-icon smaller invalid' title='No photometry taken'></i></td>
-                        {% endif %}
-                    </tr>
-                    </tbody>
-                </table>
+
+                <div class="block">
+                    <div class="block">
+                        <table class="datatable">
+                            <tbody>
+                            <tr>
+                                <th>Right Ascension:</th>
+                                <td class="mono">{{ object.ra|dgr2hms }}</td>
+                            </tr>
+                            <tr>
+                                <th>Declination:</th>
+                                <td class="mono">{{ object.dec|dgr2dms }}</td>
+                            </tr>
+                            <tr>
+                                <th>Object type:</th>
+                                <td class="mono">{{ object.get_object_type_display }}</td>
+                            </tr>
+                            <tr>
+                                <th>Main Target:</th>
+                                {% if object.is_main %}
+                                    <td class="mono"><i class='material-icons status-icon smaller valid' title='Target was the main target in at least one observation run'></i></td>
+                                {% else %}
+                                    <td class="mono"><i class='material-icons status-icon smaller invalid' title='Target was only an auxiallary target'></i></td>
+                                {% endif %}
+                            </tr>
+                            <tr>
+                                <th>Resolved by SIMBAD:</th>
+                                {% if object.simbad_resolved %}
+                                    <td class="mono"><i class='material-icons status-icon smaller valid' title='Target is resolved by Simbad'></i></td>
+                                {% else %}
+                                    <td class="mono"><i class='material-icons status-icon smaller invalid' title='Target is not resolved by Simbad'></i></td>
+                                {% endif %}
+                            </tr>
+                        </table>
+                    </div>
+
+                    <div class="block">
+                        <table class='datatable'>
+                            <tbody>
+                            <tr>
+                                <th>Spectroscopic Observations:</th>
+                                {% if object.spectroscopy %}
+                                    <td class="mono"><i class='material-icons status-icon smaller valid' title='Spectroscopy taken'></i></td>
+                                {% else %}
+                                    <td class="mono"><i class='material-icons status-icon smaller invalid' title='No spectroscopy taken'></i></td>
+                                {% endif %}
+                            </tr>
+                            <tr>
+                                <th>Photometric Observations:</th>
+                                {% if object.photometry %}
+                                    <td class="mono"><i class='material-icons status-icon smaller valid' title='Photometry taken'></i></td>
+                                {% else %}
+                                    <td class="mono"><i class='material-icons status-icon smaller invalid' title='No photometry taken'></i></td>
+                                {% endif %}
+                            </tr>
+                            <tr>
+                                <th>Total Exposure Time:</th>
+                                <td class="mono">{{ total_exposure_time }}s</td>
+                            </tr>
+                            </tbody>
+                            <tr>
+                                <th>Internal Identifiers:</th>
+<!--                                 <th>Names used during observations:</th> -->
+                                <td class="mono">{{ obs_names }}</td>
+                            </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
             </div>
 
             <div class="tag-container">
@@ -118,13 +135,31 @@
         </div>
 
         <div class="flex-data-container">
+<!--
+            <div class="tag-container">
+                <h3>Names used during observations</h3>
+
+                <div class="flex-data-container" id="identifier_list">
+                    {% for name in object.identifier_set.all|filter_info_from_header:True %}
+                        {% if name.href != "" %}
+                            <div class="identifier" id="identifier-{{ name.pk }}">
+                            <a href={{ name.href }}  target="_blank"> {{ name.name }} </a>
+                        {% else %}
+                            <div class="identifier" id="identifier-{{ name.pk }}">{{ name.name }}
+                        {% endif %}
+
+                    </div>
+                    {% empty %}
+                        <p> None </p>
+                    {% endfor %}
+                </div>
+            </div>-->
 
             <div class="tag-container">
-
                 <h3>Aliases</h3>
 
                 <div class="flex-data-container" id="identifier_list">
-                    {% for name in object.identifier_set.all %}
+                    {% for name in object.identifier_set.all|filter_info_from_header:False %}
                         {% if name.href != "" %}
                             <div class="identifier" id="identifier-{{ name.pk }}">
                             <a href={{ name.href }}  target="_blank"> {{ name.name }} </a>
@@ -136,9 +171,8 @@
                     {% empty %}
                         <p> None known.</p>
                     {% endfor %}
-                    </div>
-
                 </div>
+            </div>
         </div>
 
         <hr>

@@ -38,6 +38,7 @@ $(document).ready(function () {
             { data: 'file_name' },
             // { data: 'hjd' },
             { data: 'obs_date' },
+            { data: 'main_target' },
             { data: 'ra', render: coordinates_render },
             { data: 'file_type' },
             { data: 'naxis1', render: size_render, searchable: false, orderable: false },

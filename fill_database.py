@@ -136,6 +136,23 @@ if __name__ == "__main__":
                             obj.is_main = True
                             obj.save()
 
+                            #   Set datafile target name to Simbad resolved name
+                            if obj.simbad_resolved:
+                                data_file.main_target = obj.name
+                                data_file.save()
+
+
+                            #   Add header name as an alias
+                            identifers = obj.identifier_set.filter(
+                                name__exact = target
+                                )
+                            if len(identifers) == 0:
+                                obj.identifier_set.create(
+                                    name=target,
+                                    info_from_header=True,
+                                    )
+
+
                         #   Handling of Solar system objects
                         elif target in solar_system:
                             #     Make a new object
@@ -287,8 +304,11 @@ if __name__ == "__main__":
 
                             #   Set alias names
                             if object_simbad_resolved:
-                                #   Add own alias
-                                obj.identifier_set.create(name=target)
+                                #   Add header name as an alias
+                                obj.identifier_set.create(
+                                    name=target,
+                                    info_from_header=True,
+                                    )
 
                                 #   Get aliases from Simbad
                                 aliases = object_data_table['IDS'].split('|')
@@ -307,6 +327,11 @@ if __name__ == "__main__":
                                         name=alias,
                                         href=simbad_href,
                                         )
+
+                                #   Set datafile target name to Simbad resolved
+                                #   name
+                                data_file.main_target = object_name
+                                data_file.save()
 
                         print()
             print('----------------------------------------')

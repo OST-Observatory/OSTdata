@@ -35,11 +35,19 @@ def object_detail(request, object_id, **kwargs):
 
     total_exposure_time = np.sum(np_exptime)
 
+    obs_names = ',\n'.join(set(
+        object.identifier_set.filter(info_from_header=True).values_list(
+            'name',
+            flat=True,
+            )
+        ))
+
     context = {
         'object': object,
         'tags': Tag.objects.all(),
         'script_name': settings.FORCE_SCRIPT_NAME,
         'total_exposure_time': f"{total_exposure_time:.1f}",
+        'obs_names': obs_names,
     }
 
     return render(request, 'objects/objects_detail.html', context)

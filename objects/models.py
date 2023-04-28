@@ -129,6 +129,8 @@ class Identifier(models.Model):
 
     href = models.CharField(max_length=400, blank=True)
 
+    info_from_header = models.BooleanField(default=False)
+
     #   Bookkeeping
     added_on      = models.DateTimeField(auto_now_add=True)
     last_modified = models.DateTimeField(auto_now=True)
