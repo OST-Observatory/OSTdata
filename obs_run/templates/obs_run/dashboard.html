@@ -53,7 +53,7 @@
             {% for event in recent_obj_changes %}
                <div class="dash-changelog-field">
                   <b class="dash-changelog-field-title">
-                     <a href={% url 'obs_runs:run_detail' event.instance.pk %}>{{ event.instance.name }}</a> was
+                     <a href={% url 'objects:object_detail' event.instance.pk %}>{{ event.instance.name }}</a> was
                      {% if event.created %} created{% else %} modified{% endif %}</b><br>
                   by<b class="dash-changelog-field-name">
                   {% if event.user is not None %}{{ event.user }}{% else %}unknown{% endif %}</b>, {{ event.date }}
