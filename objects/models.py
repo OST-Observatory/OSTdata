@@ -6,6 +6,8 @@ from astropy.coordinates.angles import Angle
 
 from obs_run.models import Obs_run, DataFile
 
+from simple_history.models import HistoricalRecords
+
 from tags.models import Tag
 
 from users.models import get_sentinel_user
@@ -74,14 +76,15 @@ class Object(models.Model):
     tags = models.ManyToManyField(Tag, blank=True)
 
     #   Bookkeeping
-    added_on      = models.DateTimeField(auto_now_add=True)
-    last_modified = models.DateTimeField(auto_now=True)
-    added_by      = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.SET(get_sentinel_user),
-        null=True,
-        # related_name='added_run',
-    )
+    history = HistoricalRecords()
+    # added_on      = models.DateTimeField(auto_now_add=True)
+    # last_modified = models.DateTimeField(auto_now=True)
+    # added_by      = models.ForeignKey(
+    #     settings.AUTH_USER_MODEL,
+    #     on_delete=models.SET(get_sentinel_user),
+    #     null=True,
+    #     # related_name='added_run',
+    # )
 
     #   hms and dms representation for ra and dec
     def ra_hms(self):
@@ -132,13 +135,14 @@ class Identifier(models.Model):
     info_from_header = models.BooleanField(default=False)
 
     #   Bookkeeping
-    added_on      = models.DateTimeField(auto_now_add=True)
-    last_modified = models.DateTimeField(auto_now=True)
-    added_by      = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.SET(get_sentinel_user),
-        null=True,
-    )
+    history = HistoricalRecords()
+    # added_on      = models.DateTimeField(auto_now_add=True)
+    # last_modified = models.DateTimeField(auto_now=True)
+    # added_by      = models.ForeignKey(
+    #     settings.AUTH_USER_MODEL,
+    #     on_delete=models.SET(get_sentinel_user),
+    #     null=True,
+    # )
 
     #   String representation of self
     def __str__(self):

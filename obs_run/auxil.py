@@ -3,9 +3,51 @@ from django.contrib import messages
 from django.http import HttpResponseRedirect
 from django.shortcuts import reverse
 
+from datetime import timedelta
+
 from astropy.time import Time
 
 from .models import Obs_run
+
+
+############################################################################
+
+def sort_modified_created(model):
+    '''
+        Prepare index for sorting models according to History entry
+
+        Parameters
+        ----------
+        model               : django.db.models.Model instance
+    '''
+    try:
+        return model.history.latest().history_date
+    except AttributeError:
+        return datetime.fromisoformat("1970-01-01")
+
+
+############################################################################
+
+def wascreated(mod):
+    '''
+        Modifications within the first 5 minutes of an object being created
+        should not make the object count as having been modified
+        => mark models that are modified within the first 5 minutes not as
+           modified
+
+        Parameters
+        ----------
+        model               : django.db.models.Model instance
+    '''
+    earliest_history = mod.history.earliest()
+    latest_history = mod.history.latest()
+
+    time_diff = latest_history.history_date - earliest_history.history_date
+
+    if time_diff <= timedelta(minutes=5):
+        return True
+    else:
+        return False
 
 ############################################################################
 

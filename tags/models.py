@@ -1,5 +1,7 @@
 from django.db import models
 
+from simple_history.models import HistoricalRecords
+
 ############################################################################
 
 class Tag(models.Model):
@@ -22,8 +24,9 @@ class Tag(models.Model):
     color = models.CharField(max_length=7, default='#8B0000')
 
     #   Bookkeeping
-    added_on = models.DateTimeField(auto_now_add=True)
-    last_modified = models.DateTimeField(auto_now=True)
+    history = HistoricalRecords()
+    # added_on = models.DateTimeField(auto_now_add=True)
+    # last_modified = models.DateTimeField(auto_now=True)
 
     class Meta:
         ordering = ['name']

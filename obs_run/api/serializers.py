@@ -241,12 +241,14 @@ class DataFileSerializer(ModelSerializer):
     )
     file_path = SerializerMethodField()
     file_name = SerializerMethodField()
+    obsrun_name = SerializerMethodField()
 
     class Meta:
         model = DataFile
         fields = [
             'pk',
             'obsrun',
+            'obsrun_name',
             'file_path',
             'file_name',
             'file_type',
@@ -254,7 +256,7 @@ class DataFileSerializer(ModelSerializer):
             'exposure_type_display',
             'tags',
             'tag_ids',
-            'added_by',
+            # 'added_by',
             'hjd',
             'obs_date',
             'exptime',
@@ -266,7 +268,8 @@ class DataFileSerializer(ModelSerializer):
             'ra_hms',
             'dec_dms',
         ]
-        read_only_fields = ('pk', 'added_by')
+        # read_only_fields = ('pk', 'added_by')
+        read_only_fields = ('pk',)
 
 
     def get_tags(self, obj):
@@ -282,3 +285,6 @@ class DataFileSerializer(ModelSerializer):
 
     def get_exposure_type_display(self, obj):
         return obj.get_exposure_type_display()
+
+    def get_obsrun_name(self, obj):
+        return obj.obsrun.name

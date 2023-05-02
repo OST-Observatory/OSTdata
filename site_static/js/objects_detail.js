@@ -1,7 +1,6 @@
 
 var run_table = null;
 
-
 $(document).ready(function () {
     let obj_pk = $('#tag_list').attr('obj_id');
 
@@ -25,11 +24,11 @@ $(document).ready(function () {
         orderMulti: false, //Can only order on one column at a time
         order: [1],
         columns: [
-            {  orderable:      false,
-                className:      'select-control',
-                data:           null,
-                render: selection_render,
-                width:          '10',
+            {  orderable:   false,
+                className:  'select-control',
+                data:       null,
+                render:     selection_render,
+                width:      '10',
                 searchable: false,
             },
             { data: 'name', render: name_render },
@@ -43,12 +42,57 @@ $(document).ready(function () {
             },
         ],
         paging: true,
-        pageLength: 50,
+        pageLength: 20,
         lengthMenu: [[10, 20, 50, 100, 1000], [10, 20, 50, 100, 1000]], // Use -1 for all.
         scrollY: $(window).height() - $('header').outerHeight(true) - 196,
         scrollCollapse: true,
         autoWidth: true,
     });
+
+
+    // Table functionality
+    file_table = $('#datafiletable').DataTable({
+        // dom: 'l<"toolbar">frtip',
+        serverSide: true,
+        ajax: {
+            url: script_name+'/api/objects/'+obj_pk+'/datafiles/?format=datatables&keep=pk,naxis2,dec_dms,ra_hms,obsrun',
+            //adding "&keep=id,rank" will force return of id and rank fields
+            data: get_filter_keywords,
+            contentType: "application/json; charset=utf-8",
+            dataType: "json",
+        },
+        searching: false,
+        orderMulti: false, //Can only order on one column at a time
+        order: [2],
+        columns: [
+            {  orderable:   false,
+                className:  'select-control',
+                data:       null,
+                render:     selection_render,
+                width:      '10',
+                searchable: false,
+            },
+            { data: 'file_name', orderable: false },
+            // { data: 'hjd' },
+            { data: 'obs_date' },
+            { data: 'main_target' },
+            { data: 'ra', render: coordinates_render },
+            { data: 'file_type' },
+            { data: 'naxis1', render: size_render, searchable: false, orderable: false },
+            { data: 'exposure_type_display', orderable: false },
+            { data: 'exptime' },
+            { data: 'obsrun_name', render: obsrun_render },
+            { data: 'tags', render: tag_render, searchable: false, orderable: false },
+        ],
+        paging: true,
+        pageLength: 20,
+        lengthMenu: [[10, 20, 50, 100, 1000], [10, 20, 50, 100, 1000]], // Use -1 for all.
+        scrollY: $(window).height() - $('header').outerHeight(true) - 196,
+        scrollCollapse: true,
+        autoWidth: true,
+    });
+
+
 
     //  Load the object tags info
     let object_pk = $('#tag_list').attr('obj_id')
@@ -116,6 +160,40 @@ $(document).ready(function () {
         run_table.rows().every( function (rowIdx, tableLoop, rowLoop) {
             deselect_row(this);
         });
+    });
+
+    //  Toggle the observation run table
+    $('#toggle-runs').click(function () {
+        $('#run_table').slideToggle();
+        $('#run_summary').slideToggle();
+
+        if ($(this).text() == 'visibility') {
+            $(this).text('visibility_off')
+        } else {
+            $(this).text('visibility')
+        }
+
+        //  Redraw table header because it is usually messed up
+        // let width = $("#runtable").width();
+        // $(".dataTable").css("min-width", width+"px");
+        $(".dataTable").DataTable().draw('page');
+    });
+
+    //  Toggle the observation run table
+    $('#toggle-data_files').click(function () {
+        $('#data_file_summary').slideToggle();
+        $('#data_file_table').slideToggle();
+
+        if ($(this).text() == 'visibility') {
+            $(this).text('visibility_off')
+        } else {
+            $(this).text('visibility')
+        }
+
+        //  Redraw table header because it is usually messed up
+        // let width = $("#datafiletable").width();
+        // $(".dataTable").css("min-width", width+"px");
+        $(".dataTable").DataTable().draw('page');
     });
 });
 
@@ -207,6 +285,13 @@ function expo_time_render( data, type, full, meta ) {
     return data.toFixed(2);
 }
 
+function obsrun_render( data, type, full, meta ) {
+    //  Render observation run name
+    let name = data.substring(0,4)+'-'+data.substring(4,6)+'-'+data.substring(6,8)
+    let href = "<a href='/w/runs/"+full['obsrun']+"/'>"+name+"</a>";
+    return href;
+}
+
 function tag_render( data, type, full, meta ) {
     // Render the tags as a list of divs with the correct color.
     let result = ""
@@ -221,6 +306,16 @@ function tag_render( data, type, full, meta ) {
 function status_render( data, type, full, meta ) {
     return '<i class="material-icons status-icon ' + data +  '" title="' +
             full['reduction_status_display'] +'"></i>'
+}
+
+function size_render( data, type, full, meta ) {
+    //  Render image size
+    return data + "x" + full['naxis2'];
+}
+
+function coordinates_render( data, type, full, meta ) {
+    //  Render coordinates
+    return full['ra_hms'] + ' ' + full['dec_dms'];
 }
 
 // ----------------------------------------------------------------------

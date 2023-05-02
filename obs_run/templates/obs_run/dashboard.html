@@ -17,9 +17,7 @@
 
 {% block content %}
 
-<section class='data-section' id="public_runs">
-
-<!-- <h3 class='indent'>Public observation runs</h3> -->
+<!--<section class='data-section' id="public_runs">
 
 <div class="flex-data-container j-center">
 
@@ -27,7 +25,43 @@
 
 </div>
 
+</section>-->
 
-</section>
+<div class="dashboard-wrapper">
+   <div class="dash-upperrow">
+      <i>"This page is work in progress!"</i>
+   </div>
+   <div class="dash-lowerrow">
+      <div class="dash-square dash-lower-right">
+         <h2>Observation runs: latest changes</h2>
+         <div class="dash-changelog-container">
+            {% for event in recent_obs_runs_changes %}
+               <div class="dash-changelog-field">
+                  <b class="dash-changelog-field-title">
+                     <a href={% url 'obs_runs:run_detail' event.instance.pk %}>{{ event.instance.name }}</a> was
+                     {% if event.created %} created{% else %} modified{% endif %}</b><br>
+                  by<b class="dash-changelog-field-name">
+                  {% if event.user is not None %}{{ event.user }}{% else %}unknown{% endif %}</b>, {{ event.date }}
+               </div>
+            {% endfor %}
+         </div>
+      </div>
+
+      <div class="dash-square dash-lower-right">
+         <h2>Objects: latest changes</h2>
+         <div class="dash-changelog-container">
+            {% for event in recent_obj_changes %}
+               <div class="dash-changelog-field">
+                  <b class="dash-changelog-field-title">
+                     <a href={% url 'obs_runs:run_detail' event.instance.pk %}>{{ event.instance.name }}</a> was
+                     {% if event.created %} created{% else %} modified{% endif %}</b><br>
+                  by<b class="dash-changelog-field-name">
+                  {% if event.user is not None %}{{ event.user }}{% else %}unknown{% endif %}</b>, {{ event.date }}
+               </div>
+            {% endfor %}
+         </div>
+      </div>
+   </div>
+</div>
 
 {% endblock %}

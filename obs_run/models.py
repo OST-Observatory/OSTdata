@@ -2,6 +2,8 @@ from django.db import models
 
 from django.conf import settings
 
+from simple_history.models import HistoricalRecords
+
 from collections import OrderedDict
 
 from astropy.io import fits
@@ -67,14 +69,15 @@ class Obs_run(models.Model):
     tags = models.ManyToManyField(Tag, blank=True)
 
     #   Bookkeeping
-    added_on      = models.DateTimeField(auto_now_add=True)
-    last_modified = models.DateTimeField(auto_now=True)
-    added_by      = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.SET(get_sentinel_user),
-        null=True,
-        # related_name='added_run',
-    )
+    history = HistoricalRecords()
+    # added_on      = models.DateTimeField(auto_now_add=True)
+    # last_modified = models.DateTimeField(auto_now=True)
+    # added_by      = models.ForeignKey(
+    #     settings.AUTH_USER_MODEL,
+    #     on_delete=models.SET(get_sentinel_user),
+    #     null=True,
+    #     # related_name='added_run',
+    # )
 
     #   String representation of self
     def __str__(self):
@@ -164,14 +167,15 @@ class DataFile(models.Model):
     tags = models.ManyToManyField(Tag, blank=True)
 
     #   Bookkeeping
-    added_on      = models.DateTimeField(auto_now_add=True)
-    last_modified = models.DateTimeField(auto_now=True)
-    added_by      = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.SET(get_sentinel_user),
-        null=True,
-        # related_name='added_run',
-    )
+    history = HistoricalRecords()
+    # added_on      = models.DateTimeField(auto_now_add=True)
+    # last_modified = models.DateTimeField(auto_now=True)
+    # added_by      = models.ForeignKey(
+    #     settings.AUTH_USER_MODEL,
+    #     on_delete=models.SET(get_sentinel_user),
+    #     null=True,
+    #     # related_name='added_run',
+    # )
 
     #   Get infos
     def set_infos(self):

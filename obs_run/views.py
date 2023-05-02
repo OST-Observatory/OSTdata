@@ -2,6 +2,9 @@ from django.contrib import messages
 from django.http import HttpResponse, HttpResponseRedirect
 from django.shortcuts import render, get_object_or_404, reverse
 from django.conf import settings
+from django.utils.timezone import make_aware
+
+from datetime import datetime, timedelta
 
 import numpy as np
 
@@ -18,7 +21,12 @@ from ostdata.custom_permissions import check_user_can_view_run
 
 from .forms import UploadRunForm
 
-from .auxil import invalid_form, populate_runs
+from .auxil import (
+    invalid_form,
+    populate_runs,
+    sort_modified_created,
+    wascreated,
+    )
 
 from .plotting import (
     plot_observation_conditions,
@@ -35,20 +43,69 @@ def dashboard(request):
 
     #   TODO: Add filter for time, so that only recent objects are shown
 
-    public_runs = Obs_run.objects \
-        .filter(is_public__exact=True).order_by('name')
-    private_runs = None
+    # public_runs = Obs_run.objects \
+    #     .filter(is_public__exact=True).order_by('name')
+    # private_runs = None
+    #
+    # if not request.user.is_anonymous:
+    #     user = request.user
+    #     private_runs = Obs_run.objects \
+    #         .filter(is_public__exact=False) \
+    #         .filter(pk__in=user.get_read_model(Obs_run).values('pk')) \
+    #         .order_by('name')
+    #
+    # context = {'public_runs': public_runs,
+    #            'private_runs': private_runs,
+    #            }
 
-    if not request.user.is_anonymous:
-        user = request.user
-        private_runs = Obs_run.objects \
-            .filter(is_public__exact=False) \
-            .filter(pk__in=user.get_read_model(Obs_run).values('pk')) \
-            .order_by('name')
+    #   Set time frame of 7 days using datetime object
+    #   -> used for filtering recent history entries
+    dtime_naive = datetime.now() - timedelta(days=7)
+    aware_datetime = make_aware(dtime_naive)
 
-    context = {'public_runs': public_runs,
-               'private_runs': private_runs,
-               }
+    #   Statistic on number of objects and observation runs
+    stats = {}
+
+    #   Get all Observation runs and runs added within the last 7 days
+    obs_runs = Obs_run.objects.all()
+    obs_runs_7d = Obs_run.history.filter(history_date__gte=aware_datetime)
+
+    #   Get Objects and Objects added within the last 7 days
+    obj = Object.objects.all()
+    obj_7d = Object.history.filter(history_date__gte=aware_datetime)
+
+    #   Add to statistic
+    stats['nruns'] = obs_runs.count()
+    stats["nrunslw"] = obs_runs_7d.count()
+    stats['nobj'] = obj.count()
+    stats['nobjlw'] = obj_7d.count()
+
+    #   Recent/Last 25 changes to the observation runs and Objects
+    recent_obs_runs_changes = sorted(
+        obs_runs,
+        key=sort_modified_created,
+        reverse=True,
+        )
+    recent_obs_runs_changes = recent_obs_runs_changes[:25]
+
+    recent_obj_changes = sorted(
+        obj,
+        key=sort_modified_created,
+        reverse=True,
+        )
+    recent_obj_changes = recent_obj_changes[:25]
+
+    #   Some magic to avoid problems - probably
+    recent_obs_runs_changes = [{"modeltype": 'Observation run', "date": r.history.latest().history_date, "user": r.history.latest().history_user.username if r.history.latest().history_user is not None else "unknown", "instance": r, "created": wascreated(r)} for r in
+                      recent_obs_runs_changes]
+    recent_obj_changes = [{"modeltype": 'Object', "date": r.history.latest().history_date, "user": r.history.latest().history_user.username if r.history.latest().history_user is not None else "unknown", "instance": r, "created": wascreated(r)} for r in
+                      recent_obj_changes]
+
+    context = {
+        'stats': stats,
+        'recent_obj_changes': recent_obj_changes,
+        'recent_obs_runs_changes': recent_obs_runs_changes,
+        }
 
     return render(request, 'obs_run/dashboard.html', context)
 

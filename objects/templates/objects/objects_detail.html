@@ -6,6 +6,7 @@
 {% include "datatables.html" %}
 <script type="text/javascript" src="{% static 'js/objects_detail.js' %}"></script>
 <link rel="stylesheet" href="//aladin.u-strasbg.fr/AladinLite/api/v2/latest/aladin.min.css"/>
+
 {% endblock %}
 
 {% block headertitle %}
@@ -180,9 +181,15 @@
     </section>
 
     <section class='data-section'>
-    <h3>Observation runs</h3>
-<!--     <section> -->
-        <div class="table_wrapp">
+        <i id="toggle-runs" class="material-icons button show" title="Expand/Hide">visibility_off</i>
+
+        <h3 class='indent'>Observation runs</h3>
+
+        <div id="run_summary" class='data-summary'>
+            Observation runs: {{ object.obsrun.all|length }}
+        </div>
+
+        <div id='run_table' class="table_wrapp not_vissible">
             <table id="runtable">
             <thead>
                 <tr>
@@ -207,6 +214,53 @@
             </table>
         </div>
 
+        <hr>
+    </section>
+
+    <section class='data-section'>
+        <i id="toggle-data_files" class="material-icons button show" title="Expand/Hide">visibility_off</i>
+
+        <h3 class='indent'>Data files</h3>
+        <div id="data_file_summary" class='data-summary'>
+            Data files: {{ object.datafiles.all|length }}
+        </div>
+
+        <div id='data_file_table' class="table_wrapp not_vissible">
+            <table id="datafiletable">
+            <thead>
+            <tr>
+                <th><i id="select-all" class="material-icons button select" title="Select/Deselect All">check_box_outline_blank</i></th>
+                <th>File name</th>
+                <th>Observation date</th>
+                <th>Target</th>
+                <th>Coordinates</th>
+                <th>File type</th>
+                <th>Image size</th>
+                <th>Expo. type</th>
+                <th>Expo. time [s]</th>
+                <th>Obs. run</th>
+                <th>Tags</th>
+            </tr>
+            </thead>
+            <tfoot>
+            <tr>
+                <th></th>
+                <th>File name</th>
+                <th>Observation date</th>
+                <th>Target</th>
+                <th>Coordinates</th>
+                <th>File type</th>
+                <th>Image size</th>
+                <th>Expo. type</th>
+                <th>Expo. time [s]</th>
+                <th>Obs. run</th>
+                <th>Tags</th>
+            </tr>
+            </tfoot>
+            </table>
+        </div>
+
+        <hr>
     </section>
 
     <!-- Divs necessary for editing on page stuff with ajax -->
