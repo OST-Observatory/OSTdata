@@ -90,6 +90,7 @@ if __name__ == "__main__":
                     target = data_file.main_target
                     expo_type = data_file.exposure_type
 
+                    #   Look for associated objects
                     if (
                         target != '' and
                         target != 'Unknown' and
@@ -134,6 +135,12 @@ if __name__ == "__main__":
                             obj.datafiles.add(data_file)
                             obj.obsrun.add(new_run)
                             obj.is_main = True
+
+                            #   Update JD the object was first observed
+                            if (obj.first_hjd == 0. or
+                                obj.first_hjd > data_file.hjd):
+                                    obj.first_hjd = data_file.hjd
+
                             obj.save()
 
                             #   Set datafile target name to Simbad resolved name
@@ -162,6 +169,8 @@ if __name__ == "__main__":
                                 dec=data_file.dec,
                                 object_type='SO',
                                 simbad_resolved=False,
+                                first_hjd=data_file.hjd,
+                                is_main=True,
                             )
                             obj.save()
                             obj.obsrun.add(new_run)
@@ -177,6 +186,7 @@ if __name__ == "__main__":
                                 dec=data_file.dec,
                                 object_type='UK',
                                 simbad_resolved=False,
+                                first_hjd=data_file.hjd,
                             )
                             obj.save()
                             obj.obsrun.add(new_run)
@@ -295,6 +305,8 @@ if __name__ == "__main__":
                                 dec=object_dec,
                                 object_type=object_type,
                                 simbad_resolved=object_simbad_resolved,
+                                first_hjd=data_file.hjd,
+                                is_main=True,
                             )
                             obj.save()
                             obj.obsrun.add(new_run)
@@ -334,5 +346,21 @@ if __name__ == "__main__":
                                 data_file.save()
 
                         print()
+
+            #   Set time of observation run -> mid of observation
+            datafiles = new_run.datafile_set.filter(hjd__gt=2451545)
+            start_jd = datafiles.order_by('hjd')
+            # print(start_jd)
+            if not start_jd:
+                new_run.mid_observation_jd = 0.
+            else:
+                start_jd = start_jd[0].hjd
+                end_jd = datafiles.order_by('hjd').reverse()
+                if not end_jd:
+                    new_run.mid_observation_jd = start_jd
+                else:
+                    end_jd = end_jd[0].hjd
+                    new_run.mid_observation_jd = start_jd + (end_jd-start_jd)/2.
+            new_run.save()
             print('----------------------------------------')
             print()

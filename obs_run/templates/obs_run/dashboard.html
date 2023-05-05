@@ -4,6 +4,7 @@
 
 {% block head %}
 {% include "datatables.html" %}
+{% include "bokeh.html" %}
 {% endblock %}
 
 {% block headertitle %} Dashboard {% endblock %}
@@ -29,10 +30,13 @@
 
 <div class="dashboard-wrapper">
    <div class="dash-upperrow">
-      <i>"This page is work in progress!"</i>
+      <div class="dash-square dash-upper-left">
+         <i>"This page is work in progress!"</i>
+      </div>
    </div>
    <div class="dash-lowerrow">
-      <div class="dash-square dash-lower-right">
+      <div class="dash-square dash-lower-left">
+<!--       <div class="dash-lower-left"> -->
          <h2>Observation runs: latest changes</h2>
          <div class="dash-changelog-container">
             {% for event in recent_obs_runs_changes %}
@@ -47,7 +51,21 @@
          </div>
       </div>
 
+      <div class="dash-square dash-lower-center">
+<!--       <div class="dash-lower-center"> -->
+<!--          <h3>Observation runs</h3> -->
+         <div class='dash-figure-container'>
+            {{ figures.observation_run_time_plot|safe }}
+         </div>
+<!--          <h3>Objects</h3> -->
+         <div class='dash-figure-container'>
+            {{ figures.objects_time_plot|safe }}
+         </div>
+      </div>
+      {{ script|safe }}
+
       <div class="dash-square dash-lower-right">
+<!--       <div class="dash-lower-right"> -->
          <h2>Objects: latest changes</h2>
          <div class="dash-changelog-container">
             {% for event in recent_obj_changes %}

@@ -35,6 +35,9 @@ class Object(models.Model):
     ra = models.FloatField(default=-1)
     dec = models.FloatField(default=-1)
 
+    # JD the object was first observed
+    first_hjd = models.FloatField(default=0.)
+
     #   Is it a main target
     is_main = models.BooleanField(default=True)
 
@@ -85,6 +88,15 @@ class Object(models.Model):
     #     null=True,
     #     # related_name='added_run',
     # )
+
+    # #   Get JD the object was first observed
+    # def first_hjd(self):
+    #     valid_datafiles = self.datafile_set.filter(hjd__gt=2451545) \
+    #                           .order_by('hjd')
+    #     if not valid_datafiles:
+    #         return 0.
+    #     else:
+    #         return valid_datafiles[0].hjd
 
     #   hms and dms representation for ra and dec
     def ra_hms(self):

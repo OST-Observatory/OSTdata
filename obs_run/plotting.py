@@ -8,6 +8,7 @@ from astropy import wcs
 from astropy.time import Time
 import astropy.units as u
 from astropy.table import Table
+from astropy.timeseries import TimeSeries, aggregate_downsample
 from astropy.coordinates import SkyCoord, AltAz, get_moon, EarthLocation
 
 from skyfield.data import hipparcos
@@ -15,7 +16,7 @@ from skyfield.api import load
 
 from bokeh import models as mpl
 from bokeh import plotting as bpl
-from bokeh.models import TabPanel, Tabs
+from bokeh.models import TabPanel, Tabs, ColumnDataSource, VBar
 
 import matplotlib.pyplot as plt
 
@@ -24,6 +25,8 @@ import io
 import base64
 
 from .models import Obs_run, DataFile
+
+from objects.models import Object
 
 ############################################################################
 
@@ -86,7 +89,7 @@ def plot_observation_conditions(obs_run_pk):
     x_data = Time(x_data, format='jd').datetime + delta
 
     #   Prepare list for tabs in the figure
-    tabs = []\
+    tabs = []
 
     for i in range(1,n_data_points):
         #   Initialize figure
@@ -101,7 +104,7 @@ def plot_observation_conditions(obs_run_pk):
         fig.xaxis.formatter = mpl.DatetimeTickFormatter()
         fig.xaxis.formatter.context = mpl.RELATIVE_DATETIME_CONTEXT()
 
-        #   Plot spectrum
+        #   Plot observation data
         fig.line(
           x_data,
           conditions_array[:,i],
@@ -123,6 +126,7 @@ def plot_observation_conditions(obs_run_pk):
     #   Make figure from tabs list
     return Tabs(tabs=tabs)
 
+############################################################################
 
 def plot_visibility(start_hjd, exposure_time, ra, dec):
     """
@@ -258,6 +262,7 @@ def plot_visibility(start_hjd, exposure_time, ra, dec):
 
     return fig
 
+############################################################################
 
 def plot_field_of_view(data_file_pk):
     """
@@ -458,3 +463,154 @@ def plot_field_of_view(data_file_pk):
     # #     )
     #
     # return fig
+
+############################################################################
+
+def time_distribution_model(model):
+    '''
+        Plots the time distribution of the 'model' (yearly binned)
+        Two Plots - First: bar plot; Second: cumulative plot
+
+        Parameters
+        ----------
+        model           : `django.db.models.Model` object
+            Model to be graphically represented
+
+        Returns
+        -------
+        tabs
+            Tabs for the plot
+    '''
+    #   Get JDs of all model objects - clean results of not usable JDs
+    if model == Object:
+        term_hjd = 'first_hjd'
+    elif model == Obs_run:
+        term_hjd = 'mid_observation_jd'
+    else:
+        term_hjd = 'hjd'
+    jds = np.array(model.objects.all().values_list(
+            term_hjd,
+            flat=True
+            )
+        )
+    mask = np.where(jds)
+    jds = np.sort(jds[mask])
+
+    #   Get number of valid model objects - with valid JDs
+    n_valid = len(jds)
+
+    #   Create a Time object for the observation times
+    obs_time = Time(jds, format='jd')
+
+    #   Make time series and use reshape to get a justified array
+    ts = TimeSeries(
+        time=obs_time,
+        data={'nobs': np.ones((n_valid))}
+        )
+
+    #   Binned time series using numpy sum function
+    ts_sum = aggregate_downsample(
+        ts,
+        time_bin_size = 1 * u.yr,
+        aggregate_func=np.sum,
+        ).filled(0.)
+
+    #   Convert JD to datetime object
+    timezone_hour_delta = 1
+    x_data = ts_sum['time_bin_start'].value
+    delta = datetime.timedelta(hours=timezone_hour_delta)
+    x_data = Time(x_data, format='jd').datetime + delta
+
+    #   Prepare list for tabs in the figure
+    tabs = []
+
+
+    ###
+    #   Bar plot
+    #
+    source = ColumnDataSource(dict(x=x_data,top=ts_sum['nobs'].value,))
+
+    glyph = VBar(
+        x="x",
+        top="top",
+        bottom=0,
+        width=20000000000,
+        fill_color="#fcab40",
+        )
+
+    #   Initialize figure
+    fig = bpl.figure(
+        # sizing_mode="inherit",
+        # sizing_mode="scale_both",
+        sizing_mode="scale_width",
+        # width_policy='fit',
+        # width_policy='max',
+        aspect_ratio=3.,
+        # width=600,
+        # height=200,
+        toolbar_location=None,
+        x_axis_type="datetime",
+        )
+
+    fig.add_glyph(source, glyph)
+
+    #   Apply JD to datetime conversion
+    fig.xaxis.formatter = mpl.DatetimeTickFormatter()
+    fig.xaxis.formatter.context = mpl.RELATIVE_DATETIME_CONTEXT()
+
+    #   Set figure labels
+    fig.toolbar.logo = None
+    fig.yaxis.axis_label = 'N observation runs'
+    fig.xaxis.axis_label = 'Time'
+    fig.yaxis.axis_label_text_font_size = '10pt'
+    fig.xaxis.axis_label_text_font_size = '10pt'
+    fig.min_border = 5
+
+    #   Add bar plot to tab list
+    tabs.append(TabPanel(child=fig, title='Bar plot'))
+
+
+    ###
+    #   Cumulative plot
+    #
+
+    #   Initialize figure
+    fig = bpl.figure(
+        # sizing_mode="inherit",
+        # sizing_mode="scale_both",
+        sizing_mode="scale_width",
+        # width_policy='fit',
+        # width_policy='max',
+        aspect_ratio=3.,
+        # width=600,
+        # height=200,
+        toolbar_location=None,
+        x_axis_type="datetime",
+        )
+
+    #   Apply JD to datetime conversion
+    fig.xaxis.formatter = mpl.DatetimeTickFormatter()
+    fig.xaxis.formatter.context = mpl.RELATIVE_DATETIME_CONTEXT()
+
+    #   Plot cumulative number
+    fig.line(
+        x_data,
+        np.cumsum(ts_sum['nobs']),
+        line_width=2,
+        color="#fcab40",
+        )
+
+    #   Set figure labels
+    fig.toolbar.logo = None
+    fig.yaxis.axis_label = 'N observation runs'
+    fig.xaxis.axis_label = 'Time'
+    fig.yaxis.axis_label_text_font_size = '10pt'
+    fig.xaxis.axis_label_text_font_size = '10pt'
+    fig.min_border = 5
+
+    #   Add cumulative plot to tab list
+    tabs.append(TabPanel(child=fig, title='Cumulative plot'))
+
+
+    #   Make figure from tabs list
+    return Tabs(tabs=tabs, sizing_mode="scale_width", aspect_ratio=3.)

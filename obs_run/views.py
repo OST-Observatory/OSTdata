@@ -32,6 +32,7 @@ from .plotting import (
     plot_observation_conditions,
     plot_visibility,
     plot_field_of_view,
+    time_distribution_model,
     )
 
 ############################################################################
@@ -101,10 +102,23 @@ def dashboard(request):
     recent_obj_changes = [{"modeltype": 'Object', "date": r.history.latest().history_date, "user": r.history.latest().history_user.username if r.history.latest().history_user is not None else "unknown", "instance": r, "created": wascreated(r)} for r in
                       recent_obj_changes]
 
+    #   Prepare plots
+    observation_run_time_plot = time_distribution_model(Obs_run)
+    objects_time_plot = time_distribution_model(Object)
+
+    script, figures = components(
+        {
+            'observation_run_time_plot': observation_run_time_plot, 'objects_time_plot': objects_time_plot,
+            },
+        CDN,
+        )
+
     context = {
         'stats': stats,
         'recent_obj_changes': recent_obj_changes,
         'recent_obs_runs_changes': recent_obs_runs_changes,
+        'figures': figures,
+        'script': script,
         }
 
     return render(request, 'obs_run/dashboard.html', context)

@@ -61,6 +61,9 @@ class Obs_run(models.Model):
     photometry = models.BooleanField(default=False)
     spectroscopy = models.BooleanField(default=False)
 
+    #   Julian date of the middle of the observation
+    mid_observation_jd = models.FloatField(default=0)
+
     #   Field to add notes etc.
     note = models.TextField(default='', blank=True)
 
