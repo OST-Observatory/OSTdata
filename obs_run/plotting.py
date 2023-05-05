@@ -479,6 +479,7 @@ def time_distribution_model(model, yaxis_lable):
         yaxis_lable     : `string`
             Lable for the Y axis
 
+
         Returns
         -------
         tabs
@@ -605,7 +606,7 @@ def time_distribution_model(model, yaxis_lable):
 
     #   Set figure labels
     fig.toolbar.logo = None
-    fig.yaxis.axis_label = 'N observation runs'
+    fig.yaxis.axis_label = yaxis_lable
     fig.xaxis.axis_label = 'Time'
     fig.yaxis.axis_label_text_font_size = '10pt'
     fig.xaxis.axis_label_text_font_size = '10pt'
