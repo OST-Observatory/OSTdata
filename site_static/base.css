@@ -315,11 +315,11 @@ div.dash-square {
     text-align: center;
 }*/
 
-/*@media screen and (min-width: 700px) {
+@media screen and (min-width: 1000px) {
    div.dash-lowerrow {
       flex-wrap: nowrap;
    }
-}*/
+}
 
 
 /*div.dash-project-sky-preview-wrapper {
@@ -416,7 +416,7 @@ div.dash-lower-right {
       width: 25%;
    }
    div.dash-lower-center {
-      width: 45%;
+      width: 50%;
    }
    div.dash-lower-right {
       width: 25%;
