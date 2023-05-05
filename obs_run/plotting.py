@@ -466,7 +466,7 @@ def plot_field_of_view(data_file_pk):
 
 ############################################################################
 
-def time_distribution_model(model):
+def time_distribution_model(model, yaxis_lable):
     '''
         Plots the time distribution of the 'model' (yearly binned)
         Two Plots - First: bar plot; Second: cumulative plot
@@ -475,6 +475,9 @@ def time_distribution_model(model):
         ----------
         model           : `django.db.models.Model` object
             Model to be graphically represented
+
+        yaxis_lable     : `string`
+            Lable for the Y axis
 
         Returns
         -------
@@ -560,7 +563,7 @@ def time_distribution_model(model):
 
     #   Set figure labels
     fig.toolbar.logo = None
-    fig.yaxis.axis_label = 'N observation runs'
+    fig.yaxis.axis_label = yaxis_lable
     fig.xaxis.axis_label = 'Time'
     fig.yaxis.axis_label_text_font_size = '10pt'
     fig.xaxis.axis_label_text_font_size = '10pt'

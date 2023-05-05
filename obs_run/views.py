@@ -103,8 +103,14 @@ def dashboard(request):
                       recent_obj_changes]
 
     #   Prepare plots
-    observation_run_time_plot = time_distribution_model(Obs_run)
-    objects_time_plot = time_distribution_model(Object)
+    observation_run_time_plot = time_distribution_model(
+        Obs_run,
+        'N observation runs',
+        )
+    objects_time_plot = time_distribution_model(
+        Object,
+        'N objects',
+        )
 
     script, figures = components(
         {
