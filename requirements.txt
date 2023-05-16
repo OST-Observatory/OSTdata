@@ -35,3 +35,4 @@ opencv-python>=4.7.0.72
 skyfield>=1.46
 matplotlib>=3.7.1
 django-simple-history>=3.3.0
+environ>=1.0

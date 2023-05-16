@@ -79,18 +79,24 @@ class RunListSerializer(ModelSerializer):
         return len(datafiles)
 
     def get_n_fits(self, obj):
-        fits = obj.datafile_set.filter(file_type__exact='FITS')
-        return len(fits)
+        # fits = obj.datafile_set.filter(file_type__exact='FITS')
+        # return len(fits)
+        return obj.datafile_set.filter(file_type__exact='FITS').count()
 
     def get_n_img(self, obj):
-        jpegs = obj.datafile_set.filter(file_type__exact='JPG')
-        cr2s = obj.datafile_set.filter(file_type__exact='CR2')
-        tiffs = obj.datafile_set.filter(file_type__exact='TIFF')
-        return len(jpegs) + len(cr2s) + len(tiffs)
+        # jpegs = obj.datafile_set.filter(file_type__exact='JPG')
+        # cr2s = obj.datafile_set.filter(file_type__exact='CR2')
+        # tiffs = obj.datafile_set.filter(file_type__exact='TIFF')
+        # return len(jpegs) + len(cr2s) + len(tiffs)
+        jpegs = obj.datafile_set.filter(file_type__exact='JPG').count()
+        cr2s = obj.datafile_set.filter(file_type__exact='CR2').count()
+        tiffs = obj.datafile_set.filter(file_type__exact='TIFF').count()
+        return jpegs + cr2s + tiffs
 
     def get_n_ser(self, obj):
-        sers = obj.datafile_set.filter(file_type__exact='SER')
-        return len(sers)
+        # sers = obj.datafile_set.filter(file_type__exact='SER')
+        # return len(sers)
+        return obj.datafile_set.filter(file_type__exact='SER').count()
 
     def get_expo_time(self, obj):
         data_files = obj.datafile_set.all()

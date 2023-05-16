@@ -42,9 +42,9 @@ $(document).ready(function () {
             { data: 'tags', render: tag_render , searchable: false, orderable: false },
         ],
         paging: true,
-        pageLength: 50,
+        pageLength: 20,
         lengthMenu: [[10, 20, 50, 100, 1000], [10, 20, 50, 100, 1000]], // Use -1 for all.
-        scrollY: $(window).height() - $('header').outerHeight(true) - 196,
+        scrollY: $(window).height() - $('header').outerHeight(true) - 196 - 40,
         scrollCollapse: true,
         autoWidth: true,
     });

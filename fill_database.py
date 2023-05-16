@@ -2,7 +2,7 @@ import sys
 import os
 os.environ["DJANGO_SETTINGS_MODULE"] = "ostdata.settings"
 import re
-from pathlib import Path, PurePath
+from pathlib import Path
 
 import numpy as np
 

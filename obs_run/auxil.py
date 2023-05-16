@@ -3,12 +3,35 @@ from django.contrib import messages
 from django.http import HttpResponseRedirect
 from django.shortcuts import reverse
 
+import os
+
 from datetime import timedelta
 
 from astropy.time import Time
 
 from .models import Obs_run
 
+
+def get_size_dir(dirpath):
+    '''
+        Iterate each file present in the folder using os.walk() and then compute
+        and add the size of each scanned file using os.path.getsize().
+
+        Parameters
+        ----------
+        dirpath             : `string
+            Path to the directory
+    '''
+    #   Assign size
+    size = 0
+
+    #   Calculate size
+    for path, dirs, files in os.walk(dirpath):
+        for f in files:
+            fp = os.path.join(path, f)
+            size += os.path.getsize(fp)
+
+    return size
 
 ############################################################################
 

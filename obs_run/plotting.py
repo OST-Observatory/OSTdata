@@ -506,7 +506,7 @@ def time_distribution_model(model, yaxis_lable):
     #   Create a Time object for the observation times
     obs_time = Time(jds, format='jd')
 
-    #   Make time series and use reshape to get a justified array
+    #   Make time series
     ts = TimeSeries(
         time=obs_time,
         data={'nobs': np.ones((n_valid))}

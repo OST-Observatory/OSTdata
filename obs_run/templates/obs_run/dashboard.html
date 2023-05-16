@@ -1,6 +1,7 @@
-{% extends "landing.html" %}
+{% extends "base.html" %}
 
 {% load static %}
+{% load conversion_tags %}
 
 {% block head %}
 {% include "datatables.html" %}
@@ -9,50 +10,150 @@
 
 {% block headertitle %} Dashboard {% endblock %}
 
-<!--{% block navigation %}
-   <a href="/stars/stars"> INDEX </a>
-   <strong>|</strong>
-   <a href="/stars/tags" class="active"> Tags </a>
-{% endblock %}-->
-
-
 {% block content %}
-
-<!--<section class='data-section' id="public_runs">
-
-<div class="flex-data-container j-center">
-
-    <i>"Here will appear a Dashboard with a lot of useful information in the near future!"</i>
-
-</div>
-
-</section>-->
 
 <div class="dashboard-wrapper">
    <div class="dash-upperrow">
+      <div class='dash-square-heading'>
+         <h2>Statistic</h2>
+      </div>
       <div class="dash-square dash-upper-left">
-         <i>"This page is work in progress!"</i>
+         <div class="dash-stats-title-container">
+            <span class="dash-stats-title">Observation runs:</span>
+            <b class="counter">{{ stats.nruns }}</b>
+            {% if stats.nruns_lw != 0 %}
+               <span style="color: #228B22"> + <b>{{ stats.nruns_lw }}</b> last week</span>
+            {% endif %}
+         </div>
+
+         <table >
+            <tbody>
+            <tr>
+            <td>
+               <ul class='dash-stats-list'>
+                  <li>Fully reduced: {{stats.nruns_FR}}</li>
+                  <li>Partly reduced: {{stats.nruns_PR}}</li>
+               </ul>
+            </td>
+            <td>
+               <ul class='dash-stats-list'>
+                  <li>Reduction error: {{stats.nruns_ER}}</li>
+                  <li>Not reduced: {{stats.nruns_NE}}</li>
+               </ul>
+            </td>
+            </tr>
+            </tbody>
+         </table>
+      </div>
+
+      <div class="dash-square dash-upper-center">
+         <div class="dash-stats-title-container">
+            <span class="dash-stats-title">Objects:</span>
+            <b class="counter">{{ stats.nobj }}</b>
+            {% if stats.nobj_lw != 0 %}
+               <span style="color: #228B22"> + <b>{{ stats.nobj_lw }}</b> last week</span>
+            {% endif %}
+         </div>
+
+
+         <table >
+            <tbody>
+            <tr>
+            <td>
+               <ul class='dash-stats-list'>
+                  <li>Galaxies: {{stats.nobj_GA}}</li>
+                  <li>Star cluster: {{stats.nobj_SC}}</li>
+               </ul>
+            </td>
+            <td>
+               <ul class='dash-stats-list'>
+                  <li>Nebula: {{stats.nobj_NE}}</li>
+                  <li>Stars: {{stats.nobj_ST}}</li>
+               </ul>
+            </td>
+            <td>
+               <ul class='dash-stats-list'>
+                  <li>Solar system: {{stats.nobj_SO}}</li>
+                  <li>Other: {{stats.nobj_OT}}</li>
+               </ul>
+            </td>
+<!--            <td>
+               <ul class='dash-stats-list'>
+                  <li>Unknown: {{stats.nobj_UK}}</li>
+                  <li></li>
+               </ul>
+            </td>-->
+            </tr>
+            </tbody>
+         </table>
+      </div>
+
+      <div class="dash-square dash-upper-right">
+         <div class="dash-stats-title-container">
+            <span class="dash-stats-title">Files:</span>
+            <b class="counter">{{ stats.nfiles }}</b>
+            {% if stats.nfiles_lw != 0 %}
+               <span style="color: #228B22"> + <b>{{ stats.nfiles_lw }}</b> last week</span>
+            {% endif %}
+         </div>
+
+         <table>
+            <tbody>
+            <tr>
+            <td>
+               <ul class='dash-stats-list'>
+                  <li>Bias: {{stats.nbias}}</li>
+                  <li>Darks: {{stats.ndarks}}</li>
+               </ul>
+            </td>
+            <td>
+               <ul class='dash-stats-list'>
+                  <li>Flats: {{stats.nflats}}</li>
+                  <li>Science: {{stats.nlights}}</li>
+               </ul>
+            </td>
+            </tr>
+            </tbody>
+         </table>
+
+         <table class='file-type-table'>
+            <tbody>
+            <tr>
+            <td>
+               <ul class='dash-stats-list reduced-padding'>
+                  <li>FITS: {{stats.nfits}}</li>
+                  <li>TIFF: {{stats.ntiff}}</li>
+               </ul>
+            </td>
+            <td>
+               <ul class='dash-stats-list'>
+                  <li>CR2: {{stats.ncr2}}</li>
+                  <li>JPEG: {{stats.njpeg}}</li>
+               </ul>
+            </td>
+            <td>
+               <ul class='dash-stats-list'>
+                  <li>SER: {{stats.nser}}</li>
+                  <li></li>
+               </ul>
+            </td>
+            </tr>
+            </tbody>
+         </table>
+
+         <table >
+            <tbody>
+            <tr>
+            <td>Disk space: {{stats.file_size|roundtwo}}TB</td>
+            </tr>
+            </tbody>
+         </table>
       </div>
    </div>
    <div class="dash-lowerrow">
-      <div class="dash-square dash-lower-left">
-<!--       <div class="dash-lower-left"> -->
-         <h2>Observation runs: latest changes</h2>
-         <div class="dash-changelog-container">
-            {% for event in recent_obs_runs_changes %}
-               <div class="dash-changelog-field">
-                  <b class="dash-changelog-field-title">
-                     <a href={% url 'obs_runs:run_detail' event.instance.pk %}>{{ event.instance.name }}</a> was
-                     {% if event.created %} created{% else %} modified{% endif %}</b><br>
-                  by<b class="dash-changelog-field-name">
-                  {% if event.user is not None %}{{ event.user }}{% else %}unknown{% endif %}</b>, {{ event.date }}
-               </div>
-            {% endfor %}
-         </div>
-      </div>
 
-      <div class="dash-square dash-lower-center">
-<!--       <div class="dash-lower-center"> -->
+      <div class="dash-square dash-lower-left">
+         <h2>Chronicle</h2>
 <!--          <h3>Observation runs</h3> -->
          <div class='dash-figure-container'>
             {{ figures.observation_run_time_plot|safe }}
@@ -65,19 +166,37 @@
       {{ script|safe }}
 
       <div class="dash-square dash-lower-right">
-<!--       <div class="dash-lower-right"> -->
-         <h2>Objects: latest changes</h2>
-         <div class="dash-changelog-container">
-            {% for event in recent_obj_changes %}
-               <div class="dash-changelog-field">
-                  <b class="dash-changelog-field-title">
-                     <a href={% url 'objects:object_detail' event.instance.pk %}>{{ event.instance.name }}</a> was
-                     {% if event.created %} created{% else %} modified{% endif %}</b><br>
-                  by<b class="dash-changelog-field-name">
-                  {% if event.user is not None %}{{ event.user }}{% else %}unknown{% endif %}</b>, {{ event.date }}
-               </div>
-            {% endfor %}
+         <div class='dash-square-heading'>
+            <h2>Recent changes</h2>
          </div>
+         <div class="dash-square changelog-container">
+            <h3>Observation runs</h3>
+            <div class="dash-changelog-inner-container">
+               {% for event in recent_obs_runs_changes %}
+                  <div class="dash-changelog-field">
+                     <b class="dash-changelog-field-title">
+                        <a href={% url 'obs_runs:run_detail' event.instance.pk %}>{{ event.instance.name }}</a> was
+                        {% if event.created %} created{% else %} modified{% endif %}</b><br>
+                     by<b class="dash-changelog-field-name">
+                     {% if event.user is not None %}{{ event.user }}{% else %}unknown{% endif %}</b>, {{ event.date }}
+                  </div>
+               {% endfor %}
+            </div>
+         </div>
+
+         <div class="dash-square changelog-container">
+            <h3>Objects</h3>
+            <div class="dash-changelog-inner-container">
+               {% for event in recent_obj_changes %}
+                  <div class="dash-changelog-field">
+                     <b class="dash-changelog-field-title">
+                        <a href={% url 'objects:object_detail' event.instance.pk %}>{{ event.instance.name }}</a> was
+                        {% if event.created %} created{% else %} modified{% endif %}</b><br>
+                     by<b class="dash-changelog-field-name">
+                     {% if event.user is not None %}{{ event.user }}{% else %}unknown{% endif %}</b>, {{ event.date }}
+                  </div>
+               {% endfor %}
+            </div>
       </div>
    </div>
 </div>

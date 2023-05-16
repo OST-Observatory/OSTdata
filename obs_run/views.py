@@ -6,12 +6,16 @@ from django.utils.timezone import make_aware
 
 from datetime import datetime, timedelta
 
+# from pathlib import Path
+
+import environ
+
 import numpy as np
 
 from bokeh.embed import components
 from bokeh.resources import CDN
 
-from .models import Obs_run
+from .models import Obs_run, DataFile
 
 from objects.models import Object
 
@@ -26,6 +30,7 @@ from .auxil import (
     populate_runs,
     sort_modified_created,
     wascreated,
+    get_size_dir,
     )
 
 from .plotting import (
@@ -75,11 +80,45 @@ def dashboard(request):
     obj = Object.objects.all()
     obj_7d = Object.history.filter(history_date__gte=aware_datetime)
 
-    #   Add to statistic
+    #   Get Data Files and Data Files added within the last 7 days
+    files = DataFile.objects.all()
+    files_7d = DataFile.history.filter(history_date__gte=aware_datetime)
+
+    #   Add to statistic number of observation run, objects, ...
     stats['nruns'] = obs_runs.count()
-    stats["nrunslw"] = obs_runs_7d.count()
+    stats["nruns_PR"] = obs_runs.filter(reduction_status='PR').count()
+    stats["nruns_FR"] = obs_runs.filter(reduction_status='FR').count()
+    stats["nruns_ER"] = obs_runs.filter(reduction_status='ER').count()
+    stats["nruns_NE"] = obs_runs.filter(reduction_status='NE').count()
+    stats['nruns_lw'] = obs_runs_7d.count()
+
     stats['nobj'] = obj.count()
-    stats['nobjlw'] = obj_7d.count()
+    stats['nobj_lw'] = obj_7d.count()
+    stats['nobj_SC'] = obj.filter(object_type='SC').count()
+    stats['nobj_SO'] = obj.filter(object_type='SO').count()
+    stats['nobj_GA'] = obj.filter(object_type='GA').count()
+    stats['nobj_NE'] = obj.filter(object_type='NE').count()
+    stats['nobj_ST'] = obj.filter(object_type='ST').count()
+    stats['nobj_OT'] = obj.filter(object_type='OT').count()
+    stats['nobj_UK'] = obj.filter(object_type='UK').count()
+
+    stats['nfiles'] = files.count()
+    stats['nfiles_lw'] = files_7d.count()
+    stats['nbias'] = files.filter(exposure_type='BI').count()
+    stats['ndarks'] = files.filter(exposure_type='DA').count()
+    stats['nflats'] = files.filter(exposure_type='FL').count()
+    stats['nlights'] = files.filter(exposure_type='LI').count()
+    stats['nfits'] = files.filter(file_type__exact='FITS').count()
+    stats['njpeg'] = files.filter(file_type__exact='JPG').count()
+    stats['ncr2'] = files.filter(file_type__exact='CR2').count()
+    stats['ntiff'] = files.filter(file_type__exact='TIFF').count()
+    stats['nser'] = files.filter(file_type__exact='SER').count()
+
+    # Initialise environment variables
+    env = environ.Env()
+    environ.Env.read_env()
+    data_path = env("DATA_PATH", default='/archive/ftp/')
+    stats['file_size'] = get_size_dir(data_path) * pow(1000, -4)
 
     #   Recent/Last 25 changes to the observation runs and Objects
     recent_obs_runs_changes = sorted(
