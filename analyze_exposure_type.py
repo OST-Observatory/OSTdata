@@ -23,9 +23,25 @@ if __name__ == "__main__":
 
     outfile = open("results.dat", "w")
 
+    skip_file = open("files_to_skip.dat", "r")
+
+    files_to_skip = skip_file.read()
+
+    skip_file.close()
+
+    skip_file = open("files_to_skip.dat", "w")
+
+    skip_file.writelines(files_to_skip)
+
     for (root,dirs,files) in os.walk(dir_path, topdown=True):
         for f in files:
+
             file_path = Path(root, f)
+            # # print(dir(file_path))
+            # print(file_path.name)
+
+            if str(file_path) in files_to_skip:
+                continue
 
             suffix = file_path.suffix
             if suffix in ['.fit', '.fits', '.FIT', '.FITS']:
@@ -44,6 +60,7 @@ if __name__ == "__main__":
                     imagetyp = 'bias'
                 objectname = header.get('OBJECT', 'UK')
                 exptime = header.get('EXPTIME', -1)
+                instrument = header.get('INSTRUME', '-')
 
                 image_data_original = fits.getdata(file_path, 0)
 
@@ -90,7 +107,7 @@ if __name__ == "__main__":
 
                 id_y_mean_mid = int(len(y_mean) * 0.5)
                 y_mid_mean_value = y_mean[id_y_mean_mid]
-                print(y_mid_mean_value)
+                # print(y_mid_mean_value)
 
                 y_sum_min = np.min(y_sum)
                 # y_sum_mean = np.mean(y_sum)
@@ -263,8 +280,9 @@ if __name__ == "__main__":
                 if int(median) == 65535:
                     img_type_estimate = 'over_exposed'
 
-                if (n_non_zero_histo <= 2 and
+                elif (n_non_zero_histo <= 2 and
                     standard < 15 and
+                    not (instrument == 'QHYCCD-Cameras-Capture' and median > 50) and
                     spectra_type is None):
                     # print('exptime', exptime)
                     if exptime <= 0.01:
@@ -291,7 +309,7 @@ if __name__ == "__main__":
                     # standard > 1300):
                 elif (n_non_zero_histo > 60 and
                     spectra_type == 'baches'):
-                    if median > 4000 or flux_in_orders_average > 1700:
+                    if median > 4000 or flux_in_orders_average > 1900:
                         # max_histo_id == 7 and
                         img_type_estimate = 'flat'
                     else:
@@ -400,9 +418,12 @@ if __name__ == "__main__":
                         f'File: {file_path.absolute()}\n\n'
                         )
 
+            skip_file.write(f'{file_path}\n')
+
         print('---------------------------------------------')
         print()
         outfile.write(f'-------------------------------------------------\n')
+
 
 #   Model parameter:
 #       instrument: baches or dados --> spectra_type
@@ -410,3 +431,4 @@ if __name__ == "__main__":
 #       add flag if derived_exposure_type and Header value are consistent
 
     outfile.close()
+    skip_file.close()
