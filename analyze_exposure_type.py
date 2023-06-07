@@ -61,6 +61,13 @@ if __name__ == "__main__":
                 objectname = header.get('OBJECT', 'UK')
                 exptime = header.get('EXPTIME', -1)
                 instrument = header.get('INSTRUME', '-')
+                naxis1 = header.get('NAXIS1', 1)
+                binning = header.get('XBINNING', 1)
+                img_filter = header.get('FILTER', '-')
+
+
+                n_pix_x = naxis1 * binning
+
 
                 image_data_original = fits.getdata(file_path, 0)
 
@@ -68,7 +75,7 @@ if __name__ == "__main__":
                 # print(image_data_original.shape)
                 # print(image_data_original.ndim)
 
-                if image_data_original.ndim > 2:
+                if image_data_original.ndim != 2:
                     continue
 
                 image_data = ndimage.median_filter(image_data_original, size=10)
@@ -107,11 +114,11 @@ if __name__ == "__main__":
 
                 id_y_mean_mid = int(len(y_mean) * 0.5)
                 y_mid_mean_value = y_mean[id_y_mean_mid]
-                # print(y_mid_mean_value)
+                print('y_mid_mean_value =', y_mid_mean_value)
 
                 y_sum_min = np.min(y_sum)
                 # y_sum_mean = np.mean(y_sum)
-                y_sum_mean = np.mean(y_sum-y_sum_min)
+                # y_sum_mean = np.mean(y_sum-y_sum_min)
                 y_sum_median = np.median(y_sum-y_sum_min)
                 y_sum_standard = np.std(y_sum)
                 # print(y_sum_mean)
@@ -126,154 +133,253 @@ if __name__ == "__main__":
                     # signal.find_peaks(y_sum-y_sum_min, height=y_sum_median, width=130, rel_height=0.9)
                     # )
 
+                # x_sum = np.sum(image_data_original, axis=0)
+                # x_sum_min = np.min(x_sum)
+                # x_sum_median = np.median(x_sum-x_sum_min)
+                # x_sum_standard = np.std(x_sum)
+
+
                 spectra_type = None
 
-                dados_spectra = signal.find_peaks(
-                    y_sum-y_sum_min,
-                    height=y_sum_median,
-                    # height=y_sum_mean,
-                    width=(132, 139),
-                    rel_height=0.9,
-                    prominence=30000.,
-                    )
-                print(dados_spectra)
-                if dados_spectra[0].size > 1:
-                    spectra_type = 'dados'
-                    # print(dados_spectra)
-                else:
-                    baches_spectra = signal.find_peaks(
-                    y_sum-y_sum_min,
-                    height=y_sum_median,
-                    # width=(16, 30),
-                    width=(16, 50),
-                    # rel_height=0.9,
-                    )
+                if (instrument != 'SBIG STF-8300'
+                    and n_pix_x < 9000
+                    # and img_filter not in ['', '-']
+                    ):
 
-                    n_order = baches_spectra[0].size
 
-                    if n_order >= 4:
-                        spectra_type = 'baches'
-                        print(baches_spectra)
-                        # print(baches_spectra[-1])
-                        # print(baches_spectra[-1]['right_ips'])
+                    einstein_spectra = signal.find_peaks(
+                        y_sum-y_sum_min,
+                        height=y_sum_median,
+                        # height=y_sum_mean,
+                        width=(1110, 1130),
+                        # rel_height=0.5,
+                        )
+                    print(einstein_spectra)
 
-                        x_sum_order = 0.
-                        n_pixel_in_orders = 0
-                        for i in range(0,n_order):
-                            start_order = int(baches_spectra[-1]['left_ips'][i])
-                            end_order = int(baches_spectra[-1]['right_ips'][i])
-
-                            x_sum_order += np.sum(
-                                image_data_original[start_order:end_order,:]
-                                )
-                            n_pixel_in_orders += (end_order - start_order) \
-                                                 * img_shape[1]
-
-                        flux_in_orders_average = x_sum_order / n_pixel_in_orders
-                        print(flux_in_orders_average, n_pixel_in_orders)
-
-                        # variance, standard = 0., 0.
-                        # for i in range(0,n_order):
-                        #     start_order = int(baches_spectra[-1]['left_ips'][i])
-                        #     end_order = int(baches_spectra[-1]['right_ips'][i])
-                        #
-                        #     x_sum_order = np.sum(
-                        #         image_data_original[start_order:end_order,:],
-                        #         axis=0,
-                        #         )
-                        #     # x_sum_order_index_max = np.argmax(x_sum_order)
-                        #
-                        #     x_sum_order_median_filtered = median_filter(
-                        #         x_sum_order,
-                        #         size=40,
-                        #         )
-                        #     x_sum_order_median_max_filtered = maximum_filter(
-                        #         x_sum_order_median_filtered,
-                        #         size=40,
-                        #         )
-                        #
-                        #     norm_fit = InterpolatedUnivariateSpline(
-                        #         np.arange(len(x_sum_order_median_max_filtered)),
-                        #         x_sum_order_median_max_filtered,
-                        #         k=2,
-                        #         )
-                        #
-                        #     #   Normalize spectrum
-                        #     x_data = np.arange(len(x_sum_order))
-                        #     cont = norm_fit(x_data)
-                        #     x_sum_order_norm = x_sum_order / cont
-                        #
-                        #     mask = np.argwhere(x_sum_order_norm > 1.)
-                        #     x_sum_order_norm[mask] = 1.
-                        #
-                        #     variance += np.var(x_sum_order_norm)
-                        #     standard += np.std(x_sum_order_norm)
-                        #
-                        # print(
-                        #     variance/n_order,
-                        #     standard/n_order,
-                        #     )
-
-                        # start_order = int(baches_spectra[-1]['left_ips'][2])
-                        # end_order = int(baches_spectra[-1]['right_ips'][2])
-                        #
-                        # x_sum_order = np.sum(
-                        #     image_data_original[start_order:end_order,:],
-                        #     axis=0,
-                        #     )
-                        # # x_sum_order_index_max = np.argmax(x_sum_order)
-                        #
-                        # x_sum_order_median_filtered = median_filter(
-                        #     x_sum_order,
-                        #     size=40,
-                        #     )
-                        # x_sum_order_median_max_filtered = maximum_filter(
-                        #     x_sum_order_median_filtered,
-                        #     size=40,
-                        #     )
-                        #
-                        # norm_fit = InterpolatedUnivariateSpline(
-                        #     np.arange(len(x_sum_order_median_max_filtered)),
-                        #     x_sum_order_median_max_filtered,
-                        #     k=2,
-                        #     )
-                        #
-                        # #   Normalize spectrum
-                        # x_data = np.arange(len(x_sum_order))
-                        # cont = norm_fit(x_data)
-                        # x_sum_order_norm = x_sum_order / cont
-                        #
-                        # mask = np.argwhere(x_sum_order_norm > 1.)
-                        # x_sum_order_norm[mask] = 1.
-                        #
-                        # print(
-                        #     np.mean(x_sum_order_norm),
-                        #     np.median(x_sum_order_norm),
-                        #     np.var(x_sum_order_norm),
-                        #     np.std(x_sum_order_norm),
-                        #     )
-                        #
-                        # fig = plt.figure(figsize=(20, 7))
-                        # ax1 = plt.subplot(1, 2, 1)
-                        # ax2 = plt.subplot(1, 2, 2)
-                        #
-                        # ax1.plot(x_data, x_sum_order)
-                        # ax1.plot(x_data, cont)
-                        #
-                        # ax2.plot(x_data, x_sum_order_norm)
-                        #
-                        # plt.show()
-                        # plt.close()
-
-                    # print(baches_spectra)
+                    # print(
+                    #     signal.find_peaks(
+                    #         y_sum,
+                    #         # y_sum-y_sum_min,
+                    #         height=y_sum_standard,
+                    #         # width=(110, 160),
+                    #         # width=110,
+                    #         width=(130, 190),
+                    #         # rel_height=0.9,
+                    #         rel_height=1.0,
+                    #         distance=4.,
+                    #         )
+                    # )
+                    # print(
+                    #     signal.find_peaks(
+                    #         # x_sum-x_sum_min,
+                    #         x_sum,
+                    #         height=x_sum_standard,
+                    #         width=int(naxis1 * 0.5),
+                    #         rel_height=0.9,
+                    #         )
+                    # )
+                    # print('======')
                     # print(
                     #     signal.find_peaks(
                     #         y_sum-y_sum_min,
                     #         height=y_sum_median,
-                    #         width=(12, 50),
-                    #         # rel_height=0.9,
+                    #         # height=y_sum_mean,
+                    #         width=(1110, 1130),
+                    #         # rel_height=0.5,
                     #         )
-                    #     )
+                    # )
+                    if einstein_spectra[0].size >= 1:
+                        spectra_type = 'einstein'
+                        # print(dados_spectra)
+                    else:
+                        dados_spectra = signal.find_peaks(
+                            y_sum-y_sum_min,
+                            height=y_sum_median,
+                            # height=y_sum_mean,
+                            width=(132, 139),
+                            rel_height=0.9,
+                            prominence=30000.,
+                            )
+                        print(dados_spectra)
+
+                        dados_peaks = signal.find_peaks(
+                            y_sum-y_sum_min,
+                            height=y_sum_median,
+                            # height=y_sum_mean,
+                            # width=(110, 160),
+                            # width=110,
+                            width=(10,50),
+                            # width=(130, 190),
+                            # width=(132, 139),
+                            rel_height=0.9,
+                            # rel_height=0.9,
+                            # rel_height=1.0,
+                            )
+                        print(dados_peaks)
+                        spectrum_detected = False
+                        if dados_peaks[0].size > 1:
+                            smalles_peak = np.min(dados_peaks[1]['peak_heights'])
+                            largest_peak = np.max(dados_peaks[1]['peak_heights'])
+                            if largest_peak > 5 * smalles_peak:
+                                spectrum_detected = True
+
+                        if (dados_spectra[0].size > 1 or
+                            (instrument == 'SBIG ST-7' and dados_spectra[0].size) or
+                            (instrument in ['SBIG ST-7', 'SBIG ST-8 3 CCD Camera']
+                            and spectrum_detected)
+                        ):
+                            spectra_type = 'dados'
+                            # print(dados_spectra)
+                        else:
+                            print(
+                                signal.find_peaks(
+                                    y_sum-y_sum_min,
+                                    height=y_sum_median,
+                                    # height=y_sum_mean,
+                                    # width=(110, 160),
+                                    # width=110,
+                                    width=(100, 150),
+                                    # width=(132, 139),
+                                    rel_height=0.9,
+                                    # rel_height=1.0,
+                                    )
+                            )
+
+                            baches_spectra = signal.find_peaks(
+                                y_sum-y_sum_min,
+                                height=y_sum_median,
+                                # width=(16, 30),
+                                width=(16, 50),
+                                # rel_height=0.9,
+                                # prominence=30000.,
+                                prominence=10000.,
+                                )
+
+                            n_order = baches_spectra[0].size
+
+                            if n_order >= 4:
+                                spectra_type = 'baches'
+                                print(baches_spectra)
+                                # print(baches_spectra[-1])
+                                # print(baches_spectra[-1]['right_ips'])
+
+                                x_sum_order = 0.
+                                n_pixel_in_orders = 0
+                                for i in range(0,n_order):
+                                    start_order = int(baches_spectra[-1]['left_ips'][i])
+                                    end_order = int(baches_spectra[-1]['right_ips'][i])
+
+                                    x_sum_order += np.sum(
+                                        image_data_original[start_order:end_order,:]
+                                        )
+                                    n_pixel_in_orders += (end_order - start_order) \
+                                                        * img_shape[1]
+
+                                flux_in_orders_average = x_sum_order / n_pixel_in_orders
+                                print(flux_in_orders_average, n_pixel_in_orders)
+
+                                # variance, standard = 0., 0.
+                                # for i in range(0,n_order):
+                                #     start_order = int(baches_spectra[-1]['left_ips'][i])
+                                #     end_order = int(baches_spectra[-1]['right_ips'][i])
+                                #
+                                #     x_sum_order = np.sum(
+                                #         image_data_original[start_order:end_order,:],
+                                #         axis=0,
+                                #         )
+                                #     # x_sum_order_index_max = np.argmax(x_sum_order)
+                                #
+                                #     x_sum_order_median_filtered = median_filter(
+                                #         x_sum_order,
+                                #         size=40,
+                                #         )
+                                #     x_sum_order_median_max_filtered = maximum_filter(
+                                #         x_sum_order_median_filtered,
+                                #         size=40,
+                                #         )
+                                #
+                                #     norm_fit = InterpolatedUnivariateSpline(
+                                #         np.arange(len(x_sum_order_median_max_filtered)),
+                                #         x_sum_order_median_max_filtered,
+                                #         k=2,
+                                #         )
+                                #
+                                #     #   Normalize spectrum
+                                #     x_data = np.arange(len(x_sum_order))
+                                #     cont = norm_fit(x_data)
+                                #     x_sum_order_norm = x_sum_order / cont
+                                #
+                                #     mask = np.argwhere(x_sum_order_norm > 1.)
+                                #     x_sum_order_norm[mask] = 1.
+                                #
+                                #     variance += np.var(x_sum_order_norm)
+                                #     standard += np.std(x_sum_order_norm)
+                                #
+                                # print(
+                                #     variance/n_order,
+                                #     standard/n_order,
+                                #     )
+
+                                # start_order = int(baches_spectra[-1]['left_ips'][2])
+                                # end_order = int(baches_spectra[-1]['right_ips'][2])
+                                #
+                                # x_sum_order = np.sum(
+                                #     image_data_original[start_order:end_order,:],
+                                #     axis=0,
+                                #     )
+                                # # x_sum_order_index_max = np.argmax(x_sum_order)
+                                #
+                                # x_sum_order_median_filtered = median_filter(
+                                #     x_sum_order,
+                                #     size=40,
+                                #     )
+                                # x_sum_order_median_max_filtered = maximum_filter(
+                                #     x_sum_order_median_filtered,
+                                #     size=40,
+                                #     )
+                                #
+                                # norm_fit = InterpolatedUnivariateSpline(
+                                #     np.arange(len(x_sum_order_median_max_filtered)),
+                                #     x_sum_order_median_max_filtered,
+                                #     k=2,
+                                #     )
+                                #
+                                # #   Normalize spectrum
+                                # x_data = np.arange(len(x_sum_order))
+                                # cont = norm_fit(x_data)
+                                # x_sum_order_norm = x_sum_order / cont
+                                #
+                                # mask = np.argwhere(x_sum_order_norm > 1.)
+                                # x_sum_order_norm[mask] = 1.
+                                #
+                                # print(
+                                #     np.mean(x_sum_order_norm),
+                                #     np.median(x_sum_order_norm),
+                                #     np.var(x_sum_order_norm),
+                                #     np.std(x_sum_order_norm),
+                                #     )
+                                #
+                                # fig = plt.figure(figsize=(20, 7))
+                                # ax1 = plt.subplot(1, 2, 1)
+                                # ax2 = plt.subplot(1, 2, 2)
+                                #
+                                # ax1.plot(x_data, x_sum_order)
+                                # ax1.plot(x_data, cont)
+                                #
+                                # ax2.plot(x_data, x_sum_order_norm)
+                                #
+                                # plt.show()
+                                # plt.close()
+
+                            # print(baches_spectra)
+                            # print(
+                            #     signal.find_peaks(
+                            #         y_sum-y_sum_min,
+                            #         height=y_sum_median,
+                            #         width=(12, 50),
+                            #         # rel_height=0.9,
+                            #         )
+                            #     )
 
                 img_type_estimate = 'UK'
 
@@ -282,7 +388,7 @@ if __name__ == "__main__":
 
                 elif (n_non_zero_histo <= 2 and
                     standard < 15 and
-                    not (instrument == 'QHYCCD-Cameras-Capture' and median > 50) and
+                    # not (instrument == 'QHYCCD-Cameras-Capture' and median > 50) and
                     spectra_type is None):
                     # print('exptime', exptime)
                     if exptime <= 0.01:
@@ -292,7 +398,7 @@ if __name__ == "__main__":
 
                 # if (n_non_zero_histo >= 40 and
                 elif (n_non_zero_histo >= 100 and
-                    standard > 650 and
+                    standard > 600 and
                     standard < 1400):
                     if  spectra_type == 'dados':
                         img_type_estimate = 'wave'
@@ -318,7 +424,10 @@ if __name__ == "__main__":
                 elif (n_non_zero_histo > 60 and
                     spectra_type == 'dados'):
                     # max_histo_id == 7 and
-                    img_type_estimate = 'flat'
+                    if standard < 700:
+                        img_type_estimate = 'flat'
+                    else:
+                        img_type_estimate = 'wave'
 
 
 
@@ -347,13 +456,19 @@ if __name__ == "__main__":
                 #     elif spectra_type == 'dados':
                 #         img_type_estimate = 'light_dados'
 
-                elif spectra_type in ['baches', 'dados']:
+                elif spectra_type == 'dados':
+                    if n_non_zero_histo > 35 and standard > 280:
+                        img_type_estimate = 'wave'
+                    else:
+                        img_type_estimate = 'light'
+
+                elif spectra_type in ['einstein', 'baches']:
                     img_type_estimate = 'light'
 
                 elif (standard > 1000 and
                       # max_histo_id > 200 and
                       spectra_type is None):
-                        if n_non_zero_histo > 100:
+                        if n_non_zero_histo > 100 and y_mid_mean_value < 10000:
                             img_type_estimate = 'light'
                         else:
                             img_type_estimate = 'flat'
