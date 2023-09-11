@@ -15,7 +15,9 @@ from tags.models import Tag
 
 from .analyze_files import set_file_info
 
+
 ############################################################################
+
 
 class Obs_run(models.Model):
     #   Name
@@ -24,7 +26,7 @@ class Obs_run(models.Model):
     #   Rights management
     is_public = models.BooleanField(default=True)
 
-    readonly_users  = models.ManyToManyField(
+    readonly_users = models.ManyToManyField(
         settings.AUTH_USER_MODEL,
         related_name='readonly_run',
         blank=True,
@@ -34,22 +36,22 @@ class Obs_run(models.Model):
         related_name='readwrite_run',
         blank=True,
     )
-    managers        = models.ManyToManyField(
+    managers = models.ManyToManyField(
         settings.AUTH_USER_MODEL,
         related_name='managed_run',
         blank=True,
     )
 
     #   Data reduction status
-    PARTLY_REDUCED   = 'PR'
-    FULLY_REDUCED    = 'FR'
+    PARTLY_REDUCED = 'PR'
+    FULLY_REDUCED = 'FR'
     REDUCTION_FAILED = 'ER'
-    NEW              = 'NE'
+    NEW = 'NE'
     REDUCTION_STATUS_CHOICES = (
-        (PARTLY_REDUCED,   'Partly reduced'),
-        (FULLY_REDUCED,    'Fully reduced'),
+        (PARTLY_REDUCED, 'Partly reduced'),
+        (FULLY_REDUCED, 'Fully reduced'),
         (REDUCTION_FAILED, 'Reduction error'),
-        (NEW,              'New')
+        (NEW, 'New')
     )
     reduction_status = models.CharField(
         max_length=2,
@@ -73,6 +75,7 @@ class Obs_run(models.Model):
 
     #   Bookkeeping
     history = HistoricalRecords()
+
     # added_on      = models.DateTimeField(auto_now_add=True)
     # last_modified = models.DateTimeField(auto_now=True)
     # added_by      = models.ForeignKey(
@@ -144,26 +147,26 @@ class DataFile(models.Model):
     fov_x = models.FloatField(default=-1)
     fov_y = models.FloatField(default=-1)
 
-    #   Target infos
+    #   Target info
     main_target = models.CharField(max_length=50, default='-')
     header_target_name = models.CharField(max_length=50, default='-')
     ra = models.FloatField(default=-1)
     dec = models.FloatField(default=-1)
 
     #   Observing conditions
-    airmass =  models.FloatField(default=-1)
+    airmass = models.FloatField(default=-1)
     #   Ambient temperature in deg C
-    ambient_temperature =  models.FloatField(default=-1)
+    ambient_temperature = models.FloatField(default=-1)
     #   Dewpoint in deg C
-    dewpoint =  models.FloatField(default=-1)
+    dewpoint = models.FloatField(default=-1)
     #   Barometric pressure in hPa
-    pressure =  models.FloatField(default=-1)
+    pressure = models.FloatField(default=-1)
     #   Humidity in %
-    humidity =  models.FloatField(default=-1)
+    humidity = models.FloatField(default=-1)
     #   Wind speed in m/s
-    wind_speed =  models.FloatField(default=-1)
+    wind_speed = models.FloatField(default=-1)
     #   Wind direction in deg
-    wind_direction =  models.FloatField(default=-1)
+    wind_direction = models.FloatField(default=-1)
 
     #   Tags
     # tags = models.ManyToManyField(Tag, related_name='datafile', blank=True)
@@ -171,6 +174,7 @@ class DataFile(models.Model):
 
     #   Bookkeeping
     history = HistoricalRecords()
+
     # added_on      = models.DateTimeField(auto_now_add=True)
     # last_modified = models.DateTimeField(auto_now=True)
     # added_by      = models.ForeignKey(
@@ -180,19 +184,19 @@ class DataFile(models.Model):
     #     # related_name='added_run',
     # )
 
-    #   Get infos
+    #   Get information
     def set_infos(self):
-        '''
-            Get informations to fill the model
-        '''
+        """
+            Get information to fill the model
+        """
         # return get_file_info(self.pk)
         set_file_info(self)
 
     #   Get FITS header
     def get_fits_header(self, hdu=0):
-        '''
+        """
             Get FITS Header
-        '''
+        """
         try:
             header = fits.getheader(self.datafile, hdu)
             h = OrderedDict()
@@ -232,10 +236,9 @@ class DataFile(models.Model):
                 a[0],
                 abs(a[1]),
                 abs(a[2]),
-                )
+            )
         else:
             return '-'
-
 
     #   String representation of self
     def __str__(self):

@@ -1,6 +1,9 @@
-# OSTdata
-
-This project is based on the Astronomical Observation Tracking System (AOTS, https://github.com/vosjo/AOTS), primarily developed by Joris (vosjo).
+# Data archive for the OST observatory 
+In this Django project we are building a website for the data archive of the 
+[OST Observatory](polaris.astro.physik.uni-potsdam.de) of the 
+[University of Potsdam](www.uni-potsdam.de).
+This project is based on the [Astronomical Observation Tracking System
+(AOTS)](https://github.com/vosjo/AOTS), primarily developed by Joris (vosjo).
 
 ## Installing Django and dependencies
 

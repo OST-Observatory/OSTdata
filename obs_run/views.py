@@ -42,6 +42,7 @@ from .plotting import (
 
 ############################################################################
 
+
 def dashboard(request):
     """
         Dashboard view
@@ -170,10 +171,11 @@ def dashboard(request):
 
 ############################################################################
 
+
 def obs_run_list(request):
-    '''
+    """
         View showing a list of all observation runs
-    '''
+    """
 
     upload_form = UploadRunForm()
 
@@ -233,6 +235,7 @@ def obs_run_list(request):
     return render(request, 'obs_run/obs_run_list.html', context)
 
 ############################################################################
+
 
 @check_user_can_view_run
 def obs_run_detail(request, run_id, **kwargs):
@@ -346,7 +349,6 @@ def obs_run_detail(request, run_id, **kwargs):
         #     obj.name,
         #     reverse('objects:object_detail', args=[obj.pk]),
         #     ))
-
 
     #   Sanitize reduction status
     if reduction_status == 'PR':

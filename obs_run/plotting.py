@@ -30,8 +30,9 @@ from objects.models import Object
 
 ############################################################################
 
+
 def plot_observation_conditions(obs_run_pk):
-    '''
+    """
         Plot observing conditions
 
         Parameters
@@ -44,7 +45,7 @@ def plot_observation_conditions(obs_run_pk):
         -------
         tabs
             Tabs for the plot
-    '''
+    """
     #   Get observation run
     obs_run = Obs_run.objects.get(pk=obs_run_pk)
 
@@ -62,8 +63,8 @@ def plot_observation_conditions(obs_run_pk):
     n_data_points = len(observing_conditions[0])
     conditions_array = np.array(observing_conditions)
 
-    #   Prepare Y axis lable
-    y_axis_lable = [
+    #   Prepare Y axis label
+    y_axis_label = [
         '',
         'Ambient temperature',
         'Dewpoint',
@@ -72,7 +73,7 @@ def plot_observation_conditions(obs_run_pk):
         'Wind speed',
         'Wind direction',
         ]
-    y_axis_lable_units = [
+    y_axis_label_units = [
         '',
         u'[\N{DEGREE SIGN} C]',
         u'[\N{DEGREE SIGN} C]',
@@ -114,19 +115,20 @@ def plot_observation_conditions(obs_run_pk):
 
         #   Set figure labels
         fig.toolbar.logo = None
-        fig.yaxis.axis_label = f'{y_axis_lable[i]} {y_axis_lable_units[i]}'
+        fig.yaxis.axis_label = f'{y_axis_label[i]} {y_axis_label_units[i]}'
         fig.xaxis.axis_label = 'Time'
         fig.yaxis.axis_label_text_font_size = '10pt'
         fig.xaxis.axis_label_text_font_size = '10pt'
         fig.min_border = 5
 
         #   Fill tabs list
-        tabs.append(TabPanel(child=fig, title=y_axis_lable[i]))
+        tabs.append(TabPanel(child=fig, title=y_axis_label[i]))
 
     #   Make figure from tabs list
     return Tabs(tabs=tabs)
 
 ############################################################################
+
 
 def plot_visibility(start_hjd, exposure_time, ra, dec):
     """
@@ -264,6 +266,7 @@ def plot_visibility(start_hjd, exposure_time, ra, dec):
 
 ############################################################################
 
+
 def plot_field_of_view(data_file_pk):
     """
         Plot star positions and show field of view
@@ -305,7 +308,6 @@ def plot_field_of_view(data_file_pk):
         # [deg] Coordinate value at reference point
         'CRVAL2': datafile.dec,
     })
-
 
     #   Draw star positions
     with load.open(hipparcos.URL) as f:
@@ -375,7 +377,6 @@ def plot_field_of_view(data_file_pk):
         fontsize=7,
         title_fontsize=7,
         )
-
 
     ax.grid(True, color="k", linestyle="dashed")
 
@@ -466,8 +467,9 @@ def plot_field_of_view(data_file_pk):
 
 ############################################################################
 
-def time_distribution_model(model, yaxis_lable):
-    '''
+
+def time_distribution_model(model, yaxis_label):
+    """
         Plots the time distribution of the 'model' (yearly binned)
         Two Plots - First: bar plot; Second: cumulative plot
 
@@ -476,15 +478,15 @@ def time_distribution_model(model, yaxis_lable):
         model           : `django.db.models.Model` object
             Model to be graphically represented
 
-        yaxis_lable     : `string`
-            Lable for the Y axis
+        yaxis_label     : `string`
+            Label for the Y axis
 
 
         Returns
         -------
         tabs
             Tabs for the plot
-    '''
+    """
     #   Get JDs of all model objects - clean results of not usable JDs
     if model == Object:
         term_hjd = 'first_hjd'
@@ -509,7 +511,7 @@ def time_distribution_model(model, yaxis_lable):
     #   Make time series
     ts = TimeSeries(
         time=obs_time,
-        data={'nobs': np.ones((n_valid))}
+        data={'nobs': np.ones(n_valid)}
         )
 
     #   Binned time series using numpy sum function
@@ -527,7 +529,6 @@ def time_distribution_model(model, yaxis_lable):
 
     #   Prepare list for tabs in the figure
     tabs = []
-
 
     ###
     #   Bar plot
@@ -564,7 +565,7 @@ def time_distribution_model(model, yaxis_lable):
 
     #   Set figure labels
     fig.toolbar.logo = None
-    fig.yaxis.axis_label = yaxis_lable
+    fig.yaxis.axis_label = yaxis_label
     fig.xaxis.axis_label = 'Time'
     fig.yaxis.axis_label_text_font_size = '10pt'
     fig.xaxis.axis_label_text_font_size = '10pt'
@@ -572,7 +573,6 @@ def time_distribution_model(model, yaxis_lable):
 
     #   Add bar plot to tab list
     tabs.append(TabPanel(child=fig, title='Bar plot'))
-
 
     ###
     #   Cumulative plot
@@ -606,7 +606,7 @@ def time_distribution_model(model, yaxis_lable):
 
     #   Set figure labels
     fig.toolbar.logo = None
-    fig.yaxis.axis_label = yaxis_lable
+    fig.yaxis.axis_label = yaxis_label
     fig.xaxis.axis_label = 'Time'
     fig.yaxis.axis_label_text_font_size = '10pt'
     fig.xaxis.axis_label_text_font_size = '10pt'
@@ -614,7 +614,6 @@ def time_distribution_model(model, yaxis_lable):
 
     #   Add cumulative plot to tab list
     tabs.append(TabPanel(child=fig, title='Cumulative plot'))
-
 
     #   Make figure from tabs list
     return Tabs(tabs=tabs, sizing_mode="scale_width", aspect_ratio=3.)

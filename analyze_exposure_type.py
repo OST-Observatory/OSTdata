@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 
 from astropy.io import fits
+from astropy.time import Time
 from astropy.visualization import simple_norm
 
 from scipy.ndimage import median_filter, maximum_filter
@@ -64,7 +65,9 @@ if __name__ == "__main__":
                 naxis1 = header.get('NAXIS1', 1)
                 binning = header.get('XBINNING', 1)
                 img_filter = header.get('FILTER', '-')
-
+                obs_time = header.get('DATE-OBS', '2000-01-01T00:00:00.00')
+                jd = Time(obs_time, format='fits').jd
+                rgb = header.get('BAYERPAT', None)
 
                 n_pix_x = naxis1 * binning
 
@@ -147,14 +150,33 @@ if __name__ == "__main__":
                     ):
 
 
-                    einstein_spectra = signal.find_peaks(
+                    einstein_spectra_broad = signal.find_peaks(
                         y_sum-y_sum_min,
                         height=y_sum_median,
                         # height=y_sum_mean,
                         width=(1110, 1130),
                         # rel_height=0.5,
                         )
-                    print(einstein_spectra)
+                    print('einstein_spectra_broad:')
+                    print(einstein_spectra_broad)
+                    einstein_spectra_narrow = signal.find_peaks(
+                        y_sum-y_sum_min,
+                        height=y_sum_median,
+                        # height=y_sum_mean,
+                        width=(775, 795),
+                        # rel_height=0.5,
+                        )
+                    print('einstein_spectra_narrow:')
+                    print(einstein_spectra_narrow)
+
+                    einstein_spectra_half = signal.find_peaks(
+                        y_sum-y_sum_min,
+                        height=y_sum_median,
+                        width=(370, 385),
+                        )
+                    print('einstein_spectra_half:')
+                    print(einstein_spectra_half)
+
 
                     # print(
                     #     signal.find_peaks(
@@ -188,9 +210,11 @@ if __name__ == "__main__":
                     #         # rel_height=0.5,
                     #         )
                     # )
-                    if einstein_spectra[0].size >= 1:
-                        spectra_type = 'einstein'
-                        # print(dados_spectra)
+                    if (einstein_spectra_broad[0].size >= 1
+                        or einstein_spectra_narrow[0].size >= 1
+                        or einstein_spectra_half[0].size == 2):
+                            spectra_type = 'einstein'
+                            # print(dados_spectra)
                     else:
                         dados_spectra = signal.find_peaks(
                             y_sum-y_sum_min,
@@ -200,6 +224,7 @@ if __name__ == "__main__":
                             rel_height=0.9,
                             prominence=30000.,
                             )
+                        print('dados_spectra:')
                         print(dados_spectra)
 
                         dados_peaks = signal.find_peaks(
@@ -215,9 +240,10 @@ if __name__ == "__main__":
                             # rel_height=0.9,
                             # rel_height=1.0,
                             )
+                        print('dados_peaks:')
                         print(dados_peaks)
                         spectrum_detected = False
-                        if dados_peaks[0].size > 1:
+                        if dados_peaks[0].size > 1 and dados_peaks[0].size < 16:
                             smalles_peak = np.min(dados_peaks[1]['peak_heights'])
                             largest_peak = np.max(dados_peaks[1]['peak_heights'])
                             if largest_peak > 5 * smalles_peak:
@@ -225,25 +251,25 @@ if __name__ == "__main__":
 
                         if (dados_spectra[0].size > 1 or
                             (instrument == 'SBIG ST-7' and dados_spectra[0].size) or
-                            (instrument in ['SBIG ST-7', 'SBIG ST-8 3 CCD Camera']
+                            (instrument in ['SBIG ST-7', 'SBIG ST-8 3 CCD Camera', 'SBIG ST-8']
                             and spectrum_detected)
                         ):
                             spectra_type = 'dados'
                             # print(dados_spectra)
                         else:
-                            print(
-                                signal.find_peaks(
-                                    y_sum-y_sum_min,
-                                    height=y_sum_median,
-                                    # height=y_sum_mean,
-                                    # width=(110, 160),
-                                    # width=110,
-                                    width=(100, 150),
-                                    # width=(132, 139),
-                                    rel_height=0.9,
-                                    # rel_height=1.0,
-                                    )
-                            )
+                            # print(
+                            #     signal.find_peaks(
+                            #         y_sum-y_sum_min,
+                            #         height=y_sum_median,
+                            #         # height=y_sum_mean,
+                            #         # width=(110, 160),
+                            #         # width=110,
+                            #         width=(100, 150),
+                            #         # width=(132, 139),
+                            #         rel_height=0.9,
+                            #         # rel_height=1.0,
+                            #         )
+                            # )
 
                             baches_spectra = signal.find_peaks(
                                 y_sum-y_sum_min,
@@ -257,8 +283,13 @@ if __name__ == "__main__":
 
                             n_order = baches_spectra[0].size
 
-                            if n_order >= 4:
+                            jd_pre_baches = Time(
+                                '2014-12-08T00:00:00.00',
+                                format='fits'
+                                ).jd
+                            if n_order >= 4 and jd > jd_pre_baches:
                                 spectra_type = 'baches'
+                                print('baches_spectra:')
                                 print(baches_spectra)
                                 # print(baches_spectra[-1])
                                 # print(baches_spectra[-1]['right_ips'])
@@ -383,7 +414,7 @@ if __name__ == "__main__":
 
                 img_type_estimate = 'UK'
 
-                if int(median) == 65535:
+                if np.isnan(median) or int(median) == 65535:
                     img_type_estimate = 'over_exposed'
 
                 elif (n_non_zero_histo <= 2 and
@@ -396,102 +427,200 @@ if __name__ == "__main__":
                     else:
                         img_type_estimate = 'dark'
 
-                # if (n_non_zero_histo >= 40 and
-                elif (n_non_zero_histo >= 100 and
-                    standard > 600 and
-                    standard < 1400):
-                    if  spectra_type == 'dados':
-                        img_type_estimate = 'wave'
-                    elif spectra_type == 'baches':
-                        img_type_estimate = 'wave'
-                    # img_type_estimate = 'th_ar'
-
-
-                # if (n_non_zero_histo > 10 and
-                #     n_non_zero_histo < 30 and
-                #     standard > 1300):
-                # elif (n_non_zero_histo > 60 and
-                    # n_non_zero_histo < 180 and
-                    # standard > 1300):
-                elif (n_non_zero_histo > 60 and
-                    spectra_type == 'baches'):
-                    if median > 4000 or flux_in_orders_average > 1900:
-                        # max_histo_id == 7 and
-                        img_type_estimate = 'flat'
-                    else:
-                        img_type_estimate = 'light'
-
-                elif (n_non_zero_histo > 60 and
-                    spectra_type == 'dados'):
-                    # max_histo_id == 7 and
-                    if standard < 700:
-                        img_type_estimate = 'flat'
-                    else:
-                        img_type_estimate = 'wave'
-
-
-
-                # elif (n_non_zero_histo > 10 and
-                #       spectra_type is None):
-                #         # max_histo_id == 7 and
-                #         img_type_estimate = 'flat'
-                #
-                # # if (n_non_zero_histo >= 2 and
-                # #     standard < 300):
-                #     # if max_histo_id >= 7:
-                # elif n_non_zero_histo >= 2:
-                #     # if median > 1000:
-                #     # if spectra_type == 'baches' and n_non_zero_histo <= 15:
-                #     if spectra_type == 'baches':
-                #         img_type_estimate = 'light_baches'
-                #     # elif spectra_type == 'dados' and n_non_zero_histo <= 15:
-                #     elif spectra_type == 'dados':
-                #         img_type_estimate = 'light_dados'
-                #     else:
-                #         img_type_estimate = 'light_img'
-
-                # elif n_non_zero_histo >= 2:
-                #     if spectra_type == 'baches':
-                #         img_type_estimate = 'light_baches'
-                #     elif spectra_type == 'dados':
-                #         img_type_estimate = 'light_dados'
-
                 elif spectra_type == 'dados':
-                    if n_non_zero_histo > 35 and standard > 280:
+                    if instrument == 'SBIG ST-7':
+                        if n_non_zero_histo >= 350:
+                            if standard > 11000:
+                                img_type_estimate = 'flat'
+                            else:
+                                img_type_estimate = 'light'
+                        elif n_non_zero_histo >= 90:
+                            img_type_estimate = 'light'
+                        else:
+                            if standard > 670:
+                                img_type_estimate = 'light'
+                            else:
+                                img_type_estimate = 'wave'
+
+                    else:
+                        if n_non_zero_histo >= 300:
+                            if standard > 10000:
+                                img_type_estimate = 'flat'
+                            else:
+                                img_type_estimate = 'light'
+                        elif (n_non_zero_histo >= 100 and
+                            standard > 600 and
+                            # standard < 1400):
+                            standard < 1900):
+                                img_type_estimate = 'wave'
+
+                        elif n_non_zero_histo > 60:
+                            if standard < 220:
+                                img_type_estimate = 'light'
+                            elif standard < 700:
+                                img_type_estimate = 'flat'
+                            else:
+                                img_type_estimate = 'wave'
+
+                        elif n_non_zero_histo > 40 and standard > 6000:
+                            img_type_estimate = 'flat'
+
+                        elif n_non_zero_histo > 35 and standard > 280:
+                            img_type_estimate = 'wave'
+
+                        else:
+                            img_type_estimate = 'light'
+
+                elif spectra_type == 'baches':
+                    if (n_non_zero_histo >= 100 and
+                        standard > 300 and
+                        # standard > 600 and
+                        standard < 1400):
                         img_type_estimate = 'wave'
+
+                    # elif n_non_zero_histo > 60:
+                    elif n_non_zero_histo > 40:
+                        if median > 4000 or flux_in_orders_average > 1900:
+                            # max_histo_id == 7 and
+                            img_type_estimate = 'flat'
+                        else:
+                            img_type_estimate = 'light'
+
+                    elif n_non_zero_histo >= 25:
+                        if standard >  550:
+                            # max_histo_id == 7 and
+                            img_type_estimate = 'flat'
+                        else:
+                            img_type_estimate = 'light'
+
                     else:
                         img_type_estimate = 'light'
 
-                elif spectra_type in ['einstein', 'baches']:
+                elif spectra_type == 'einstein':
                     img_type_estimate = 'light'
 
-                elif (standard > 1000 and
-                      # max_histo_id > 200 and
-                      spectra_type is None):
+                else:
+                    if rgb is not None:
+                         img_type_estimate = 'rgb'
+
+                    if standard > 1000:
                         if n_non_zero_histo > 100 and y_mid_mean_value < 10000:
                             img_type_estimate = 'light'
                         else:
                             img_type_estimate = 'flat'
 
-                elif (standard <= 200 and
-                      max_histo_id < 100 and
-                      spectra_type is None):
-                        img_type_estimate = 'light'
+                    elif (standard <= 200 and max_histo_id < 100):
+                            img_type_estimate = 'light'
 
-                elif (standard > 300 and
-                      max_histo_id < 100 and
-                      max_histo_id > 20 and
-                      spectra_type is None):
+                    elif (standard > 300 and
+                        max_histo_id < 100 and
+                        max_histo_id > 20):
+                            img_type_estimate = 'flat'
+
+                    elif (standard > 200 and
+                        standard < 500 and
+                        n_non_zero_histo > 100):
+                            img_type_estimate = 'light'
+
+                    elif y_mid_mean_value > 10000:
                         img_type_estimate = 'flat'
 
-                elif (standard > 200 and
-                      standard < 500 and
-                      n_non_zero_histo > 100 and
-                      spectra_type is None):
-                        img_type_estimate = 'light'
+                # # if (n_non_zero_histo >= 40 and
+                # elif (n_non_zero_histo >= 100 and
+                #     standard > 600 and
+                #     standard < 1400):
+                #     if  spectra_type == 'dados':
+                #         img_type_estimate = 'wave'
+                #     elif spectra_type == 'baches':
+                #         img_type_estimate = 'wave'
+                #     # img_type_estimate = 'th_ar'
 
-                elif (y_mid_mean_value > 10000 and spectra_type is None):
-                    img_type_estimate = 'flat'
+
+                # # if (n_non_zero_histo > 10 and
+                # #     n_non_zero_histo < 30 and
+                # #     standard > 1300):
+                # # elif (n_non_zero_histo > 60 and
+                #     # n_non_zero_histo < 180 and
+                #     # standard > 1300):
+                # elif (n_non_zero_histo > 60 and
+                #     spectra_type == 'baches'):
+                #     if median > 4000 or flux_in_orders_average > 1900:
+                #         # max_histo_id == 7 and
+                #         img_type_estimate = 'flat'
+                #     else:
+                #         img_type_estimate = 'light'
+                #
+                # elif (n_non_zero_histo > 60 and
+                #     spectra_type == 'dados'):
+                #     # max_histo_id == 7 and
+                #     if standard < 700:
+                #         img_type_estimate = 'flat'
+                #     else:
+                #         img_type_estimate = 'wave'
+
+
+
+                # # elif (n_non_zero_histo > 10 and
+                # #       spectra_type is None):
+                # #         # max_histo_id == 7 and
+                # #         img_type_estimate = 'flat'
+                # #
+                # # # if (n_non_zero_histo >= 2 and
+                # # #     standard < 300):
+                # #     # if max_histo_id >= 7:
+                # # elif n_non_zero_histo >= 2:
+                # #     # if median > 1000:
+                # #     # if spectra_type == 'baches' and n_non_zero_histo <= 15:
+                # #     if spectra_type == 'baches':
+                # #         img_type_estimate = 'light_baches'
+                # #     # elif spectra_type == 'dados' and n_non_zero_histo <= 15:
+                # #     elif spectra_type == 'dados':
+                # #         img_type_estimate = 'light_dados'
+                # #     else:
+                # #         img_type_estimate = 'light_img'
+                #
+                # # elif n_non_zero_histo >= 2:
+                # #     if spectra_type == 'baches':
+                # #         img_type_estimate = 'light_baches'
+                # #     elif spectra_type == 'dados':
+                # #         img_type_estimate = 'light_dados'
+
+                # elif spectra_type == 'dados':
+                #     if n_non_zero_histo > 35 and standard > 280:
+                #         img_type_estimate = 'wave'
+                #     else:
+                #         img_type_estimate = 'light'
+
+                # elif spectra_type in ['einstein', 'baches']:
+                #     img_type_estimate = 'light'
+                #
+                # elif (standard > 1000 and
+                #       # max_histo_id > 200 and
+                #       spectra_type is None):
+                #         if n_non_zero_histo > 100 and y_mid_mean_value < 10000:
+                #             img_type_estimate = 'light'
+                #         else:
+                #             img_type_estimate = 'flat'
+                #
+                # elif (standard <= 200 and
+                #       max_histo_id < 100 and
+                #       spectra_type is None):
+                #         img_type_estimate = 'light'
+                #
+                # elif (standard > 300 and
+                #       max_histo_id < 100 and
+                #       max_histo_id > 20 and
+                #       spectra_type is None):
+                #         img_type_estimate = 'flat'
+                #
+                # elif (standard > 200 and
+                #       standard < 500 and
+                #       n_non_zero_histo > 100 and
+                #       spectra_type is None):
+                #         img_type_estimate = 'light'
+                #
+                # elif (y_mid_mean_value > 10000 and spectra_type is None):
+                #     img_type_estimate = 'flat'
 
 
                 print('Object name: ', objectname)

@@ -12,6 +12,7 @@ from tags.models import Tag
 
 from users.models import get_sentinel_user
 
+
 class Object(models.Model):
     #   An object can be associated with multiple observation runs.
     obsrun = models.ManyToManyField(
@@ -132,6 +133,7 @@ class Object(models.Model):
             self.ra,
             self.dec,
         )
+
 
 class Identifier(models.Model):
     """
