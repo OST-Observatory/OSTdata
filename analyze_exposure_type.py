@@ -34,6 +34,8 @@ if __name__ == "__main__":
 
     skip_file.writelines(files_to_skip)
 
+    jd_start_stf8300 = Time('2015-02-01T00:00:00.00', format='fits').jd
+
     for (root, dirs, files) in os.walk(dir_path, topdown=True):
         for f in files:
 
@@ -143,7 +145,8 @@ if __name__ == "__main__":
                 spectra_type = None
 
                 if (instrument != 'SBIG STF-8300'
-                        and n_pix_x < 9000):
+                        and n_pix_x < 9000
+                        and not (instrument in ['SBIG ST-8 3 CCD Camera', 'SBIG ST-8'] and jd < jd_start_stf8300)):
 
                     einstein_spectra_broad = signal.find_peaks(
                         y_sum - y_sum_min,
