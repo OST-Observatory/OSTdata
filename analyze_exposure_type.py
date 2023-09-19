@@ -7,8 +7,8 @@ from astropy.io import fits
 from astropy.time import Time
 from astropy.visualization import simple_norm
 
-from scipy.ndimage import median_filter, maximum_filter
-from scipy.interpolate import InterpolatedUnivariateSpline
+# from scipy.ndimage import median_filter, maximum_filter
+# from scipy.interpolate import InterpolatedUnivariateSpline
 
 import matplotlib.pyplot as plt
 
@@ -34,7 +34,7 @@ if __name__ == "__main__":
 
     skip_file.writelines(files_to_skip)
 
-    for (root,dirs,files) in os.walk(dir_path, topdown=True):
+    for (root, dirs, files) in os.walk(dir_path, topdown=True):
         for f in files:
 
             file_path = Path(root, f)
@@ -70,7 +70,6 @@ if __name__ == "__main__":
                 rgb = header.get('BAYERPAT', None)
 
                 n_pix_x = naxis1 * binning
-
 
                 image_data_original = fits.getdata(file_path, 0)
 
@@ -122,7 +121,7 @@ if __name__ == "__main__":
                 y_sum_min = np.min(y_sum)
                 # y_sum_mean = np.mean(y_sum)
                 # y_sum_mean = np.mean(y_sum-y_sum_min)
-                y_sum_median = np.median(y_sum-y_sum_min)
+                y_sum_median = np.median(y_sum - y_sum_min)
                 y_sum_standard = np.std(y_sum)
                 # print(y_sum_mean)
                 # print(y_sum_median)
@@ -133,50 +132,45 @@ if __name__ == "__main__":
                 #     # signal.find_peaks(y_sum-y_sum_min, height=y_sum_mean, width=15)
                 #     # signal.find_peaks(y_sum-y_sum_min, height=y_sum_median, width=15)
                 #     # signal.find_peaks(y_sum, height=y_sum_min, width=15, rel_height=0.9)
-                    # signal.find_peaks(y_sum-y_sum_min, height=y_sum_median, width=130, rel_height=0.9)
-                    # )
+                # signal.find_peaks(y_sum-y_sum_min, height=y_sum_median, width=130, rel_height=0.9)
+                # )
 
                 # x_sum = np.sum(image_data_original, axis=0)
                 # x_sum_min = np.min(x_sum)
                 # x_sum_median = np.median(x_sum-x_sum_min)
                 # x_sum_standard = np.std(x_sum)
 
-
                 spectra_type = None
 
                 if (instrument != 'SBIG STF-8300'
-                    and n_pix_x < 9000
-                    # and img_filter not in ['', '-']
-                    ):
-
+                        and n_pix_x < 9000):
 
                     einstein_spectra_broad = signal.find_peaks(
-                        y_sum-y_sum_min,
+                        y_sum - y_sum_min,
                         height=y_sum_median,
                         # height=y_sum_mean,
                         width=(1110, 1130),
                         # rel_height=0.5,
-                        )
+                    )
                     print('einstein_spectra_broad:')
                     print(einstein_spectra_broad)
                     einstein_spectra_narrow = signal.find_peaks(
-                        y_sum-y_sum_min,
+                        y_sum - y_sum_min,
                         height=y_sum_median,
                         # height=y_sum_mean,
                         width=(775, 795),
                         # rel_height=0.5,
-                        )
+                    )
                     print('einstein_spectra_narrow:')
                     print(einstein_spectra_narrow)
 
                     einstein_spectra_half = signal.find_peaks(
-                        y_sum-y_sum_min,
+                        y_sum - y_sum_min,
                         height=y_sum_median,
                         width=(370, 385),
-                        )
+                    )
                     print('einstein_spectra_half:')
                     print(einstein_spectra_half)
-
 
                     # print(
                     #     signal.find_peaks(
@@ -211,49 +205,48 @@ if __name__ == "__main__":
                     #         )
                     # )
                     if (einstein_spectra_broad[0].size >= 1
-                        or einstein_spectra_narrow[0].size >= 1
-                        or einstein_spectra_half[0].size == 2):
-                            spectra_type = 'einstein'
-                            # print(dados_spectra)
+                            or einstein_spectra_narrow[0].size >= 1
+                            or einstein_spectra_half[0].size == 2):
+                        spectra_type = 'einstein'
+                        # print(dados_spectra)
                     else:
                         dados_spectra = signal.find_peaks(
-                            y_sum-y_sum_min,
+                            y_sum - y_sum_min,
                             height=y_sum_median,
                             # height=y_sum_mean,
                             width=(132, 139),
                             rel_height=0.9,
                             prominence=30000.,
-                            )
+                        )
                         print('dados_spectra:')
                         print(dados_spectra)
 
                         dados_peaks = signal.find_peaks(
-                            y_sum-y_sum_min,
+                            y_sum - y_sum_min,
                             height=y_sum_median,
                             # height=y_sum_mean,
                             # width=(110, 160),
                             # width=110,
-                            width=(10,50),
+                            width=(10, 50),
                             # width=(130, 190),
                             # width=(132, 139),
                             rel_height=0.9,
                             # rel_height=0.9,
                             # rel_height=1.0,
-                            )
+                        )
                         print('dados_peaks:')
                         print(dados_peaks)
                         spectrum_detected = False
-                        if dados_peaks[0].size > 1 and dados_peaks[0].size < 16:
-                            smalles_peak = np.min(dados_peaks[1]['peak_heights'])
+                        if 1 < dados_peaks[0].size < 16:
+                            smallest_peak = np.min(dados_peaks[1]['peak_heights'])
                             largest_peak = np.max(dados_peaks[1]['peak_heights'])
-                            if largest_peak > 5 * smalles_peak:
+                            if largest_peak > 5 * smallest_peak:
                                 spectrum_detected = True
 
                         if (dados_spectra[0].size > 1 or
-                            (instrument == 'SBIG ST-7' and dados_spectra[0].size) or
-                            (instrument in ['SBIG ST-7', 'SBIG ST-8 3 CCD Camera', 'SBIG ST-8']
-                            and spectrum_detected)
-                        ):
+                                (instrument == 'SBIG ST-7' and dados_spectra[0].size) or
+                                (instrument in ['SBIG ST-7', 'SBIG ST-8 3 CCD Camera', 'SBIG ST-8']
+                                 and spectrum_detected)):
                             spectra_type = 'dados'
                             # print(dados_spectra)
                         else:
@@ -272,21 +265,21 @@ if __name__ == "__main__":
                             # )
 
                             baches_spectra = signal.find_peaks(
-                                y_sum-y_sum_min,
+                                y_sum - y_sum_min,
                                 height=y_sum_median,
                                 # width=(16, 30),
                                 width=(16, 50),
                                 # rel_height=0.9,
                                 # prominence=30000.,
                                 prominence=10000.,
-                                )
+                            )
 
                             n_order = baches_spectra[0].size
 
                             jd_pre_baches = Time(
                                 '2014-12-08T00:00:00.00',
                                 format='fits'
-                                ).jd
+                            ).jd
                             if n_order >= 4 and jd > jd_pre_baches:
                                 spectra_type = 'baches'
                                 print('baches_spectra:')
@@ -296,15 +289,15 @@ if __name__ == "__main__":
 
                                 x_sum_order = 0.
                                 n_pixel_in_orders = 0
-                                for i in range(0,n_order):
+                                for i in range(0, n_order):
                                     start_order = int(baches_spectra[-1]['left_ips'][i])
                                     end_order = int(baches_spectra[-1]['right_ips'][i])
 
                                     x_sum_order += np.sum(
-                                        image_data_original[start_order:end_order,:]
-                                        )
+                                        image_data_original[start_order:end_order, :]
+                                    )
                                     n_pixel_in_orders += (end_order - start_order) \
-                                                        * img_shape[1]
+                                        * img_shape[1]
 
                                 flux_in_orders_average = x_sum_order / n_pixel_in_orders
                                 print(flux_in_orders_average, n_pixel_in_orders)
@@ -418,9 +411,9 @@ if __name__ == "__main__":
                     img_type_estimate = 'over_exposed'
 
                 elif (n_non_zero_histo <= 2 and
-                    standard < 15 and
-                    # not (instrument == 'QHYCCD-Cameras-Capture' and median > 50) and
-                    spectra_type is None):
+                      standard < 15 and
+                      # not (instrument == 'QHYCCD-Cameras-Capture' and median > 50) and
+                      spectra_type is None):
                     # print('exptime', exptime)
                     if exptime <= 0.01:
                         img_type_estimate = 'bias'
@@ -449,15 +442,13 @@ if __name__ == "__main__":
                             else:
                                 img_type_estimate = 'light'
                         elif (n_non_zero_histo >= 100 and
-                            standard > 600 and
-                            # standard < 1400):
-                            standard < 1900):
-                                img_type_estimate = 'wave'
+                              600 < standard < 1900):
+                            img_type_estimate = 'wave'
 
                         elif n_non_zero_histo > 60:
                             if standard < 220:
                                 img_type_estimate = 'light'
-                            elif standard < 700:
+                            elif 700 < standard > 6000:
                                 img_type_estimate = 'flat'
                             else:
                                 img_type_estimate = 'wave'
@@ -473,9 +464,7 @@ if __name__ == "__main__":
 
                 elif spectra_type == 'baches':
                     if (n_non_zero_histo >= 100 and
-                        standard > 300 and
-                        # standard > 600 and
-                        standard < 1400):
+                            300 < standard < 1400):
                         img_type_estimate = 'wave'
 
                     # elif n_non_zero_histo > 60:
@@ -487,7 +476,7 @@ if __name__ == "__main__":
                             img_type_estimate = 'light'
 
                     elif n_non_zero_histo >= 25:
-                        if standard >  550:
+                        if standard > 550:
                             # max_histo_id == 7 and
                             img_type_estimate = 'flat'
                         else:
@@ -501,7 +490,7 @@ if __name__ == "__main__":
 
                 else:
                     if rgb is not None:
-                         img_type_estimate = 'rgb'
+                        img_type_estimate = 'rgb'
 
                     if standard > 1000:
                         if n_non_zero_histo > 100 and y_mid_mean_value < 10000:
@@ -509,18 +498,16 @@ if __name__ == "__main__":
                         else:
                             img_type_estimate = 'flat'
 
-                    elif (standard <= 200 and max_histo_id < 100):
-                            img_type_estimate = 'light'
+                    elif standard <= 200 and max_histo_id < 100:
+                        img_type_estimate = 'light'
 
                     elif (standard > 300 and
-                        max_histo_id < 100 and
-                        max_histo_id > 20):
-                            img_type_estimate = 'flat'
+                          100 > max_histo_id > 20):
+                        img_type_estimate = 'flat'
 
-                    elif (standard > 200 and
-                        standard < 500 and
-                        n_non_zero_histo > 100):
-                            img_type_estimate = 'light'
+                    elif (200 < standard < 500 and
+                          n_non_zero_histo > 100):
+                        img_type_estimate = 'light'
 
                     elif y_mid_mean_value > 10000:
                         img_type_estimate = 'flat'
@@ -534,7 +521,6 @@ if __name__ == "__main__":
                 #     elif spectra_type == 'baches':
                 #         img_type_estimate = 'wave'
                 #     # img_type_estimate = 'th_ar'
-
 
                 # # if (n_non_zero_histo > 10 and
                 # #     n_non_zero_histo < 30 and
@@ -557,8 +543,6 @@ if __name__ == "__main__":
                 #         img_type_estimate = 'flat'
                 #     else:
                 #         img_type_estimate = 'wave'
-
-
 
                 # # elif (n_non_zero_histo > 10 and
                 # #       spectra_type is None):
@@ -622,45 +606,47 @@ if __name__ == "__main__":
                 # elif (y_mid_mean_value > 10000 and spectra_type is None):
                 #     img_type_estimate = 'flat'
 
-
                 print('Object name: ', objectname)
                 print(
-                  'Image type: ',
-                  imagetyp,
-                  '\tEstimated: ',
-                  img_type_estimate,
-                  '\tInstrument: ',
-                  spectra_type,
-                  )
+                    'Image type: ',
+                    imagetyp,
+                    '\tEstimated: ',
+                    img_type_estimate,
+                    '\tSpectra type: ',
+                    spectra_type,
+                    '\tInstrument: ',
+                    instrument,
+                )
                 # print(histogram)
                 print(
-                  'Histo max position: ',
-                  max_histo_id,
-                  '\tNumber of non zero bins: ',
-                  n_non_zero_histo,
-                  # np.nonzero(histogram),
-                  # len(histogram),
-                  )
+                    'Histo max position: ',
+                    max_histo_id,
+                    '\tNumber of non zero bins: ',
+                    n_non_zero_histo,
+                    # np.nonzero(histogram),
+                    # len(histogram),
+                )
                 print(
-                  'Median = ',
-                  median,
-                  '\tMean = ',
-                  mean,
-                  '\tVariance = ',
-                  variance,
-                  '\tStandard deviation = ',
-                  standard,
-                  )
+                    'Median = ',
+                    median,
+                    '\tMean = ',
+                    mean,
+                    '\tVariance = ',
+                    variance,
+                    '\tStandard deviation = ',
+                    standard,
+                )
                 print()
 
                 if ((img_type_estimate != imagetyp or imagetyp == 'light') and
-                    not (img_type_estimate == 'light' and imagetyp == 'wave')):
+                        not (img_type_estimate == 'light' and imagetyp == 'wave')):
                     outfile.write(
-                        f'Image type: {imagetyp}\tEstimated: {img_type_estimate}\tInstrument: {spectra_type}\n'
-                        )
+                        f'Image type: {imagetyp}\tEstimated: {img_type_estimate}\tSpectra type: {spectra_type}'
+                        f'\tInstrument: {instrument}\n'
+                    )
                     outfile.write(
                         f'File: {file_path.absolute()}\n\n'
-                        )
+                    )
 
             skip_file.write(f'{file_path}\n')
 
@@ -668,11 +654,10 @@ if __name__ == "__main__":
         print()
         outfile.write(f'-------------------------------------------------\n')
 
-
-#   Model parameter:
-#       instrument: baches or dados --> spectra_type
-#       derived_exposure_type = bias, dark, wave, flat, light, over_exposed
-#       add flag if derived_exposure_type and Header value are consistent
+    #   Model parameter:
+    #       instrument: baches or dados --> spectra_type
+    #       derived_exposure_type = bias, dark, wave, flat, light, over_exposed
+    #       add flag if derived_exposure_type and Header value are consistent
 
     outfile.close()
     skip_file.close()
