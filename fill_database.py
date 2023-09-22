@@ -6,13 +6,13 @@ import django
 
 import os
 
+os.environ["DJANGO_SETTINGS_MODULE"] = "ostdata.settings"
+django.setup()
+
 from objects.models import Object
 from obs_run.models import ObservationRun, DataFile
 
 from utilities import add_new_observation_run
-
-os.environ["DJANGO_SETTINGS_MODULE"] = "ostdata.settings"
-django.setup()
 
 if __name__ == "__main__":
     #   Delete all Observation runs and DataFile entries in the database
