@@ -88,7 +88,7 @@ def add_new_observation_run(data_path, print_to_terminal=False):
                     continue
 
                 data_file = DataFile(
-                    obsrun=new_run,
+                    observation_run=new_run,
                     datafile=file_path.absolute(),
                     file_type=file_type,
                 )
@@ -176,7 +176,7 @@ def add_new_observation_run(data_path, print_to_terminal=False):
                             is_main=True,
                         )
                         obj.save()
-                        obj.obsrun.add(new_run)
+                        obj.observation_run.add(new_run)
                         obj.datafiles.add(data_file)
                         obj.save()
 
@@ -192,7 +192,7 @@ def add_new_observation_run(data_path, print_to_terminal=False):
                             first_hjd=data_file.hjd,
                         )
                         obj.save()
-                        obj.obsrun.add(new_run)
+                        obj.observation_run.add(new_run)
                         obj.datafiles.add(data_file)
                         obj.save()
                     else:
@@ -309,7 +309,7 @@ def add_new_observation_run(data_path, print_to_terminal=False):
                             is_main=True,
                         )
                         obj.save()
-                        obj.obsrun.add(new_run)
+                        obj.observation_run.add(new_run)
                         obj.datafiles.add(data_file)
                         obj.save()
 
