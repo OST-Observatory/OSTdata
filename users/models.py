@@ -29,7 +29,7 @@ class User(AbstractUser):
 
    # def get_read_runs(self):
    #    if self.is_superuser:
-   #       return run_models.Obs_run.objects.all()
+   #       return run_models.ObservationRun.objects.all()
    #    else:
    #       return self.readonly_users.all().union(self.readwrite_users.all())
 

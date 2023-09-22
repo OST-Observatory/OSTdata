@@ -14,7 +14,7 @@ $(document).ready(function () {
         // dom: 'l<"toolbar">frtip',
         serverSide: true,
         ajax: {
-            url: script_name+'/api/objects/'+obj_pk+'/obsruns/?format=datatables&keep=reduction_status_display,n_img,n_ser,start_time,end_time',
+            url: script_name+'/api/objects/'+obj_pk+'/observation_runs/?format=datatables&keep=reduction_status_display,n_img,n_ser,start_time,end_time',
             //adding "&keep=id,rank" will force return of id and rank fields
             data: get_filter_keywords,
             contentType: "application/json; charset=utf-8",
@@ -55,7 +55,7 @@ $(document).ready(function () {
         // dom: 'l<"toolbar">frtip',
         serverSide: true,
         ajax: {
-            url: script_name+'/api/objects/'+obj_pk+'/datafiles/?format=datatables&keep=pk,naxis2,dec_dms,ra_hms,obsrun',
+            url: script_name+'/api/objects/'+obj_pk+'/datafiles/?format=datatables&keep=pk,naxis2,dec_dms,ra_hms,observation_run',
             //adding "&keep=id,rank" will force return of id and rank fields
             data: get_filter_keywords,
             contentType: "application/json; charset=utf-8",
@@ -81,7 +81,7 @@ $(document).ready(function () {
             { data: 'naxis1', render: size_render, searchable: false, orderable: false },
             { data: 'exposure_type_display', orderable: false },
             { data: 'exptime' },
-            { data: 'obsrun_name', render: obsrun_render },
+            { data: 'observation_run_name', render: observation_run_render },
             { data: 'tags', render: tag_render, searchable: false, orderable: false },
         ],
         paging: true,
@@ -204,7 +204,7 @@ function get_filter_keywords( d ) {
     // let selected_tags = $("#tag_filter_options input:checked").map( function () { return parseInt(this.value); }).get();
 
     d = $.extend( {}, d, {
-        // "obsrun": $('#tag_list').attr('run_id'),
+        // "observation_run": $('#tag_list').attr('run_id'),
         // "name": $('#filter_name').val(),
         // "tags": selected_tags[0],
     } );
@@ -285,10 +285,10 @@ function expo_time_render( data, type, full, meta ) {
     return data.toFixed(2);
 }
 
-function obsrun_render( data, type, full, meta ) {
+function observation_run_render( data, type, full, meta ) {
     //  Render observation run name
     let name = data.substring(0,4)+'-'+data.substring(4,6)+'-'+data.substring(6,8)
-    let href = "<a href='/w/runs/"+full['obsrun']+"/'>"+name+"</a>";
+    let href = "<a href='/w/runs/"+full['observation_run']+"/'>"+name+"</a>";
     return href;
 }
 

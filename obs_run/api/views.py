@@ -4,7 +4,7 @@ from rest_framework.response import Response
 
 from django_filters.rest_framework import DjangoFilterBackend
 
-from obs_run.models import Obs_run, DataFile
+from obs_run.models import ObservationRun, DataFile
 
 from .serializers import RunSerializer, RunListSerializer, DataFileSerializer
 
@@ -20,7 +20,7 @@ class RunViewSet(viewsets.ModelViewSet):
         Returns a list of all stars/objects in the database
     """
 
-    queryset = Obs_run.objects.all()
+    queryset = ObservationRun.objects.all()
     serializer_class = RunSerializer
 
     filter_backends = (DjangoFilterBackend,)
@@ -42,8 +42,8 @@ def getRunDataFile(request, run_pk):
     '''
 
     #   Get Observation run and DataFiles
-    obsrun = Obs_run.objects.get(pk=run_pk)
-    datafiles = obsrun.datafile_set.all()
+    observation_run = ObservationRun.objects.get(pk=run_pk)
+    datafiles = observation_run.datafile_set.all()
 
     pagination_class = None
 

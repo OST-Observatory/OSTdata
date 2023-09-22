@@ -212,7 +212,7 @@ function get_filter_keywords( d ) {
     // let selected_tags = $("#tag_filter_options input:checked").map( function () { return parseInt(this.value); }).get();
 
     d = $.extend( {}, d, {
-        "obsrun": $('#tag_list').attr('run_id'),
+        "observation_run": $('#tag_list').attr('run_id'),
         // "name": $('#filter_name').val(),
         // "tags": selected_tags[0],
     } );

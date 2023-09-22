@@ -9,24 +9,24 @@ from datetime import timedelta
 
 from astropy.time import Time
 
-from .models import Obs_run
+from .models import ObservationRun
 
 
-def get_size_dir(dirpath):
-    '''
+def get_size_dir(directory_path):
+    """
         Iterate each file present in the folder using os.walk() and then compute
         and add the size of each scanned file using os.path.getsize().
 
         Parameters
         ----------
-        dirpath             : `string
+        directory_path             : `string
             Path to the directory
-    '''
+    """
     #   Assign size
     size = 0
 
     #   Calculate size
-    for path, dirs, files in os.walk(dirpath):
+    for path, dirs, files in os.walk(directory_path):
         for f in files:
             fp = os.path.join(path, f)
             size += os.path.getsize(fp)
@@ -35,14 +35,15 @@ def get_size_dir(dirpath):
 
 ############################################################################
 
+
 def sort_modified_created(model):
-    '''
+    """
         Prepare index for sorting models according to History entry
 
         Parameters
         ----------
         model               : django.db.models.Model instance
-    '''
+    """
     try:
         return model.history.latest().history_date
     except AttributeError:
@@ -51,8 +52,9 @@ def sort_modified_created(model):
 
 ############################################################################
 
-def wascreated(mod):
-    '''
+
+def wascreated(model):
+    """
         Modifications within the first 5 minutes of an object being created
         should not make the object count as having been modified
         => mark models that are modified within the first 5 minutes not as
@@ -61,9 +63,9 @@ def wascreated(mod):
         Parameters
         ----------
         model               : django.db.models.Model instance
-    '''
-    earliest_history = mod.history.earliest()
-    latest_history = mod.history.latest()
+    """
+    earliest_history = model.history.earliest()
+    latest_history = model.history.latest()
 
     time_diff = latest_history.history_date - earliest_history.history_date
 
@@ -73,6 +75,7 @@ def wascreated(mod):
         return False
 
 ############################################################################
+
 
 def invalid_form(request, redirect):
     """
@@ -93,18 +96,19 @@ def invalid_form(request, redirect):
 
 ############################################################################
 
+
 def populate_runs(run_data):
     """
         Analyse provided dictionary and populate the corresponding
-        `Obs_run` object
+        `ObservationRun` object
 
         Parameters
         ----------
         run_data          : `dictionary`
-            Information to be added to the `Obs_run` object
+            Information to be added to the `ObservationRun` object
     """
     #   Check for duplicates
-    duplicates = Obs_run.objects.filter(name=run_data["main_id"])
+    duplicates = ObservationRun.objects.filter(name=run_data["main_id"])
 
     if len(duplicates) != 1:
         return False, "Observation run exists already: {}".format(run_data["main_id"])

@@ -1,7 +1,7 @@
 
 from django.shortcuts import get_object_or_404
 
-from obs_run.models import Obs_run
+from obs_run.models import ObservationRun
 
 def user_login_required_for_edit(function):
    '''
@@ -11,7 +11,7 @@ def user_login_required_for_edit(function):
 
    def wrap(request, *args, **kwargs):
 
-      run = get_object_or_404(Obs_run, slug=kwargs.get('name', None))
+      run = get_object_or_404(ObservationRun, slug=kwargs.get('name', None))
 
       if run in request.user.readonly_runs.objects.all():
          raise PermissionDenied

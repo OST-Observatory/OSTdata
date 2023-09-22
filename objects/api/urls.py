@@ -12,9 +12,9 @@ router.register('', ObjectViewSet)
 urlpatterns = [
     path('', include(router.urls) ),
     path(
-        '<int:object_pk>/obsruns/',
+        '<int:object_pk>/observation_runs/',
         getObjectRunViewSet.as_view({'get': 'list'}),
-        name='object_obsruns',
+        name='object_observation_runs',
     ),
     path(
         '<int:object_pk>/datafiles/',

@@ -104,13 +104,13 @@ class ObjectFilter(filters.FilterSet):
     def filter_obs_run(self, queryset, name, value):
         year, month, day = value.split('-')
 
-        return queryset.filter(obsrun__name__icontains=year+month+day)
+        return queryset.filter(observation_run__name__icontains=year+month+day)
 
     class Meta:
         model = Object
         fields = ['name']
         # fields = ['pk']
-        # fields = ['obsrun']
+        # fields = ['observation_run']
 
 
     @property

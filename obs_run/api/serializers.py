@@ -1,4 +1,3 @@
-
 from django.urls import reverse
 
 from rest_framework.serializers import (
@@ -10,17 +9,18 @@ from rest_framework.serializers import (
 
 from pathlib import Path
 
-from obs_run.models import Obs_run, DataFile
+from obs_run.models import ObservationRun, DataFile
 from tags.models import Tag
 from tags.api.serializers import TagSerializer
 from objects.api.simple_serializers import ObjectSimpleSerializer
+
 
 # ===============================================================
 #   OBSERVATION RUNS
 # ===============================================================
 
-class RunListSerializer(ModelSerializer):
 
+class RunListSerializer(ModelSerializer):
     tags = SerializerMethodField()
     href = SerializerMethodField()
     reduction_status_display = SerializerMethodField()
@@ -30,17 +30,17 @@ class RunListSerializer(ModelSerializer):
         read_only=False,
         source='tags',
     )
-    n_datafiles =  SerializerMethodField()
-    n_fits =  SerializerMethodField()
-    n_img =  SerializerMethodField()
-    n_ser =  SerializerMethodField()
+    n_datafiles = SerializerMethodField()
+    n_fits = SerializerMethodField()
+    n_img = SerializerMethodField()
+    n_ser = SerializerMethodField()
     expo_time = SerializerMethodField()
     start_time = SerializerMethodField()
     end_time = SerializerMethodField()
     objects = SerializerMethodField()
 
     class Meta:
-        model = Obs_run
+        model = ObservationRun
         fields = [
             'pk',
             'name',
@@ -62,7 +62,7 @@ class RunListSerializer(ModelSerializer):
         ]
         read_only_fields = ('pk',)
 
-        datatables_always_serialize = ('href','pk')
+        datatables_always_serialize = ('href', 'pk')
 
     def get_tags(self, obj):
         tags = TagSerializer(obj.tags, many=True).data
@@ -121,21 +121,21 @@ class RunListSerializer(ModelSerializer):
         #   Filter JD to avoid files with the default date (2000:01:01 00:00:00)
         data_files = obj.datafile_set.filter(
             hjd__gt=2451545
-            ).order_by('hjd').reverse()
+        ).order_by('hjd').reverse()
         if len(data_files) > 0:
             return data_files[0].obs_date
         else:
             return '2000-01-01 00:00:00'
 
-
     def get_objects(self, obj):
         objects = ObjectSimpleSerializer(obj.object_set.all(), many=True).data
         return objects
 
+
 ################################################################################
 
-class RunSerializer(ModelSerializer):
 
+class RunSerializer(ModelSerializer):
     tags = SerializerMethodField()
     tag_ids = PrimaryKeyRelatedField(
         many=True,
@@ -145,15 +145,15 @@ class RunSerializer(ModelSerializer):
     )
     href = SerializerMethodField()
     reduction_status_display = SerializerMethodField()
-    n_fits =  SerializerMethodField()
-    n_img =  SerializerMethodField()
-    n_ser =  SerializerMethodField()
+    n_fits = SerializerMethodField()
+    n_img = SerializerMethodField()
+    n_ser = SerializerMethodField()
     expo_time = SerializerMethodField()
 
     owner = ReadOnlyField(source='added_by.username')
 
     class Meta:
-        model = Obs_run
+        model = ObservationRun
         fields = [
             'pk',
             'name',
@@ -170,7 +170,6 @@ class RunSerializer(ModelSerializer):
             'expo_time',
         ]
         read_only_fields = ('pk', 'tags', 'reduction_status_display')
-
 
     def get_href(self, obj):
         return reverse('obs_runs:run_detail', args=[obj.pk])
@@ -208,27 +207,29 @@ class RunSerializer(ModelSerializer):
 
         return total_expo_time
 
+
 ################################################################################
 
+
 class SimpleRunSerializer(ModelSerializer):
-   """
+    """
    Basic serializer only returning the most basic information
-   available for the Obs_run object
+   available for the ObservationRun object
    """
 
-   href = SerializerMethodField()
+    href = SerializerMethodField()
 
-   class Meta:
-      model = Obs_run
-      fields = [
+    class Meta:
+        model = ObservationRun
+        fields = [
             'pk',
             'name',
             'href',
-      ]
-      read_only_fields = ('pk',)
+        ]
+        read_only_fields = ('pk',)
 
-   def get_href(self, obj):
-      return reverse('runs:run_detail', args=[obj.pk])
+    def get_href(self, obj):
+        return reverse('runs:run_detail', args=[obj.pk])
 
 
 # ===============================================================
@@ -236,7 +237,6 @@ class SimpleRunSerializer(ModelSerializer):
 # ===============================================================
 
 class DataFileSerializer(ModelSerializer):
-
     tags = SerializerMethodField()
     exposure_type_display = SerializerMethodField()
     tag_ids = PrimaryKeyRelatedField(
@@ -247,14 +247,14 @@ class DataFileSerializer(ModelSerializer):
     )
     file_path = SerializerMethodField()
     file_name = SerializerMethodField()
-    obsrun_name = SerializerMethodField()
+    observation_run_name = SerializerMethodField()
 
     class Meta:
         model = DataFile
         fields = [
             'pk',
-            'obsrun',
-            'obsrun_name',
+            'observation_run',
+            'observation_run_name',
             'file_path',
             'file_name',
             'file_type',
@@ -273,10 +273,11 @@ class DataFileSerializer(ModelSerializer):
             'dec',
             'ra_hms',
             'dec_dms',
+            'status_parameters',
+            'spectrograph',
         ]
         # read_only_fields = ('pk', 'added_by')
         read_only_fields = ('pk',)
-
 
     def get_tags(self, obj):
         tags = TagSerializer(obj.tags, many=True).data
@@ -292,5 +293,5 @@ class DataFileSerializer(ModelSerializer):
     def get_exposure_type_display(self, obj):
         return obj.get_exposure_type_display()
 
-    def get_obsrun_name(self, obj):
-        return obj.obsrun.name
+    def get_observation_run_name(self, obj):
+        return obj.observation_run.name

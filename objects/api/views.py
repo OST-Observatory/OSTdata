@@ -35,7 +35,7 @@ class getObjectRunViewSet(viewsets.ModelViewSet):
     serializer_class = RunListSerializer
 
     def list(self, request, object_pk):
-        queryset = Object.objects.get(pk=object_pk).obsrun.all()
+        queryset = Object.objects.get(pk=object_pk).observation_run.all()
         serializer = RunListSerializer(queryset, many=True)
         return Response(serializer.data)
 

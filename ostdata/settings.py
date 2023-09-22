@@ -110,8 +110,6 @@ LOGIN_REDIRECT_URL = '/'
 # Logout redirection
 LOGOUT_REDIRECT_URL = '/'
 
-
-
 WSGI_APPLICATION = 'ostdata.wsgi.application'
 
 #   User model
@@ -166,7 +164,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # MEDIA_ROOT = 'media'
 # MEDIA_URL = '/media/'
 
-# Load specific settings for developement of production
+# Load specific settings for development of production
 if env("DEVICE") in platform.node():
    from .settings_production import (
         DEBUG,

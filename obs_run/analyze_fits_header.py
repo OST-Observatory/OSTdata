@@ -82,7 +82,7 @@ def extract_fits_header_info(header):
     # data['binning'] = header.get'XBINNING', -1)
 
     #   Observing conditions
-    data['airmass'] = header.get('AIRMASS', -1)
+    data['air_mass'] = header.get('AIRMASS', -1)
     data['ambient_temperature'] = header.get('AOCAMBT', -1)
     data['dewpoint'] = header.get('AOCDEW', -1)
     data['pressure'] = header.get('AOCBAROM', -1)
@@ -119,7 +119,7 @@ def analyze_fits(datafile):
     datafile.naxis2 = header_data.get('naxis2', 0.)
     datafile.instrument = header_data.get('instrument', 'Unknown')
     datafile.telescope = header_data.get('telescope', 'Unknown')
-    datafile.airmass = header_data.get('airmass', -1)
+    datafile.air_mass = header_data.get('air_mass', -1)
     datafile.ambient_temperature = header_data.get('ambient_temperature', -1)
     datafile.dewpoint = header_data.get('dewpoint', -1)
     datafile.pressure = header_data.get('pressure', -1)

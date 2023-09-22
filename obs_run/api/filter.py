@@ -2,7 +2,7 @@
 from django_filters import rest_framework as filters
 from django.db.models import Count
 
-from obs_run.models import Obs_run, DataFile
+from obs_run.models import ObservationRun, DataFile
 from tags.models import Tag
 
 from ostdata.custom_permissions import (
@@ -29,7 +29,7 @@ class RunFilter(filters.FilterSet):
     #   Status filter
     status = filters.MultipleChoiceFilter(
         field_name="reduction_status",
-        choices=Obs_run.REDUCTION_STATUS_CHOICES,
+        choices=ObservationRun.REDUCTION_STATUS_CHOICES,
         )
 
     #   Tag filter
@@ -118,7 +118,7 @@ class RunFilter(filters.FilterSet):
     #         filter(expo_time__lte=value)
 
     class Meta:
-        model = Obs_run
+        model = ObservationRun
         fields = ['name']
 
     @property
@@ -128,7 +128,7 @@ class RunFilter(filters.FilterSet):
         parent = get_allowed_model_to_view_for_user(
             parent,
             self.request.user,
-            Obs_run,
+            ObservationRun,
             )
 
         #   Get the column order from the GET dictionary
@@ -174,7 +174,7 @@ class DataFileFilter(filters.FilterSet):
 
     class Meta:
         model = DataFile
-        fields = ['obsrun']
+        fields = ['observation_run']
 
     @property
     def qs(self):
@@ -191,4 +191,4 @@ class DataFileFilter(filters.FilterSet):
 
             return parent.order_by(order_name)
         else:
-            return parent.order_by('obsrun')
+            return parent.order_by('observation_run')

@@ -3,7 +3,7 @@ from django.shortcuts import redirect
 from django.contrib import messages
 from rest_framework import permissions
 
-from obs_run.models import Obs_run
+from obs_run.models import ObservationRun
 
 
 class IsAllowedOnRun(permissions.BasePermission):
@@ -55,7 +55,7 @@ def get_allowed_run_objects_to_view_for_user(qs, user):
     """
 
     #   Check if the observation run is public
-    public = qs.filter(obsrun__is_public__exact=True)
+    public = qs.filter(observation_run__is_public__exact=True)
 
     #   Check if user is logged in ...
     if user.is_anonymous:
@@ -64,7 +64,7 @@ def get_allowed_run_objects_to_view_for_user(qs, user):
     else:
         #   Check if user is allowed to view the observation run ...
         restricted = qs.filter(
-            obsrun__pk__in=user.get_read_model(Obs_run).values('pk')
+            observation_run__pk__in=user.get_read_model(ObservationRun).values('pk')
             )
         if len(restricted) > 0:
             #   ... if this is the case return the specific queryset ...
@@ -142,7 +142,7 @@ def check_user_can_view_run(function):
     def wrapper(request, *args, **kwargs):
         user = request.user
         try:
-            run = Obs_run.objects.get(pk=kwargs['run_id'])
+            run = ObservationRun.objects.get(pk=kwargs['run_id'])
         except Exception:
             messages.error(request, "That page requires login to view")
             return redirect('login')
@@ -154,7 +154,7 @@ def check_user_can_view_run(function):
         else:
             messages.error(
                 request,
-                "Obs_run: {} requires login to see".format(run),
+                "ObservationRun: {} requires login to see".format(run),
             )
             return redirect('login')
 

@@ -38,7 +38,7 @@ $(document).ready(function () {
             { data: 'object_type_display' },
             { data: 'is_main', render: main_target_render },
             // { data: 'gmag' },
-            { data: 'obsrun', render: obsrun_render },
+            { data: 'observation_run', render: observation_run_render },
             { data: 'tags', render: tag_render , searchable: false, orderable: false },
         ],
         paging: true,
@@ -167,7 +167,7 @@ function name_render( data, type, full, meta ) {
     return href;
 }
 
-function obsrun_render( data, type, full, meta ) {
+function observation_run_render( data, type, full, meta ) {
     // Render the observation runs as a list with the corresponding date
     let results = [];
     for (i = 0; i < data.length; i++) {

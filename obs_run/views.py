@@ -15,7 +15,7 @@ import numpy as np
 from bokeh.embed import components
 from bokeh.resources import CDN
 
-from .models import Obs_run, DataFile
+from .models import ObservationRun, DataFile
 
 from objects.models import Object
 
@@ -50,15 +50,15 @@ def dashboard(request):
 
     #   TODO: Add filter for time, so that only recent objects are shown
 
-    # public_runs = Obs_run.objects \
+    # public_runs = ObservationRun.objects \
     #     .filter(is_public__exact=True).order_by('name')
     # private_runs = None
     #
     # if not request.user.is_anonymous:
     #     user = request.user
-    #     private_runs = Obs_run.objects \
+    #     private_runs = ObservationRun.objects \
     #         .filter(is_public__exact=False) \
-    #         .filter(pk__in=user.get_read_model(Obs_run).values('pk')) \
+    #         .filter(pk__in=user.get_read_model(ObservationRun).values('pk')) \
     #         .order_by('name')
     #
     # context = {'public_runs': public_runs,
@@ -74,8 +74,8 @@ def dashboard(request):
     stats = {}
 
     #   Get all Observation runs and runs added within the last 7 days
-    obs_runs = Obs_run.objects.all()
-    obs_runs_7d = Obs_run.history.filter(history_date__gte=aware_datetime)
+    obs_runs = ObservationRun.objects.all()
+    obs_runs_7d = ObservationRun.history.filter(history_date__gte=aware_datetime)
 
     #   Get Objects and Objects added within the last 7 days
     obj = Object.objects.all()
@@ -116,6 +116,7 @@ def dashboard(request):
     stats['nser'] = files.filter(file_type__exact='SER').count()
 
     # Initialise environment variables
+    #   TODO: Replace with default environment file
     env = environ.Env()
     environ.Env.read_env()
     data_path = env("DATA_PATH", default='/archive/ftp/')
@@ -144,7 +145,7 @@ def dashboard(request):
 
     #   Prepare plots
     observation_run_time_plot = time_distribution_model(
-        Obs_run,
+        ObservationRun,
         'N observation runs',
         )
     objects_time_plot = time_distribution_model(
@@ -189,8 +190,8 @@ def obs_run_list(request):
             #   Sanitize uploaded data
             run_data = upload_form.cleaned_data
 
-            #   Initialize `Obs_run` model
-            run = Obs_run(
+            #   Initialize `ObservationRun` model
+            run = ObservationRun(
                 name=run_data["main_id"],
                 is_public=run_data["is_public"],
             )
@@ -243,7 +244,7 @@ def obs_run_detail(request, run_id, **kwargs):
         Detailed view for an observation run
     """
     #   Get observation run
-    obs_run = get_object_or_404(Obs_run, pk=run_id)
+    obs_run = get_object_or_404(ObservationRun, pk=run_id)
 
     #   Prepare reduction status
     reduction_status = obs_run.reduction_status
@@ -268,12 +269,12 @@ def obs_run_detail(request, run_id, **kwargs):
     main_objects_detail = []
 
     #   Get all objects
-    objects_main = Object.objects.filter(is_main=True).filter(obsrun=obs_run)
+    objects_main = Object.objects.filter(is_main=True).filter(observation_run=obs_run)
     for obj in objects_main:
         #   Get Datafiles associated with these objects (restrict to current
-        #   Obs_run and to science data [exposure_type='LI'])
+        #   ObservationRun and to science data [exposure_type='LI'])
         data_files = obj.datafiles.all() \
-            .filter(obsrun=obs_run) \
+            .filter(observation_run=obs_run) \
             .filter(exposure_type='LI')
 
         #   Get instruments & telescopes + sanitize the output with set and join
@@ -291,21 +292,21 @@ def obs_run_detail(request, run_id, **kwargs):
             )))
 
         #   Get exposure times, airmass and JD
-        exptime_airmass_jd = data_files.values_list(
+        exptime_air_mass_jd = data_files.values_list(
             'exptime',
-            'airmass',
+            'air_mass',
             'hjd',
             )
         #   Convert to numpy array to facilitate processing
-        np_exptime_airmass_jd = np.array(exptime_airmass_jd, dtype=float)
-        #   Get minimal and maximum airmass
-        min_airmass = min(np_exptime_airmass_jd[:,1])
-        max_airmass = max(np_exptime_airmass_jd[:,1])
+        np_exptime_air_mass_jd = np.array(exptime_air_mass_jd, dtype=float)
+        #   Get minimal and maximum air_mass
+        min_air_mass = min(np_exptime_air_mass_jd[:,1])
+        max_air_mass = max(np_exptime_air_mass_jd[:,1])
         #   Get exposure time sum
-        total_exposure_time = np.sum(np_exptime_airmass_jd[:,0])
+        total_exposure_time = np.sum(np_exptime_air_mass_jd[:,0])
         #   Get minimal and maximum JD
-        min_jd = min(np_exptime_airmass_jd[:,2])
-        # max_jd = max(np_exptime_airmass_jd[:,2])
+        min_jd = min(np_exptime_air_mass_jd[:,2])
+        # max_jd = max(np_exptime_air_mass_jd[:,2])
 
         #   Prepare visibility plot
         visibility_plot = plot_visibility(
@@ -335,8 +336,8 @@ def obs_run_detail(request, run_id, **kwargs):
             instruments,
             telescopes,
             f"{total_exposure_time:.1f}",
-            f"{min_airmass:.2f}",
-            f"{max_airmass:.2f}",
+            f"{min_air_mass:.2f}",
+            f"{max_air_mass:.2f}",
             vis_script,
             vis_figure,
             # fov_script,

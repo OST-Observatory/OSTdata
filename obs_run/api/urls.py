@@ -15,6 +15,6 @@ urlpatterns = [
     path(
         'runs/<int:run_pk>/datafiles/',
         getRunDataFile,
-        name='obsrun_datafiles',
+        name='observation_run_datafiles',
     ),
 ]

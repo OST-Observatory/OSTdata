@@ -9,7 +9,7 @@ from collections import OrderedDict
 from astropy.io import fits
 from astropy.coordinates.angles import Angle
 
-from users.models import get_sentinel_user
+# from users.models import get_sentinel_user
 
 from tags.models import Tag
 
@@ -19,7 +19,7 @@ from .analyze_files import set_file_info
 ############################################################################
 
 
-class Obs_run(models.Model):
+class ObservationRun(models.Model):
     #   Name
     name = models.CharField(max_length=200)
 
@@ -96,8 +96,8 @@ class DataFile(models.Model):
     """
     #   DataFile belongs to an observation run and is deleted when the
     #   observation run is deleted.
-    obsrun = models.ForeignKey(
-        Obs_run,
+    observation_run = models.ForeignKey(
+        ObservationRun,
         on_delete=models.CASCADE,
         blank=True,
         null=True,
@@ -128,6 +128,20 @@ class DataFile(models.Model):
         default=UNKNOWN,
     )
 
+    #   Spectroscopy?
+    spectroscopy = models.BooleanField(default=False)
+    spectrograph_possibilities = (
+        ('D', 'DADOS'),
+        ('B', 'BACHES'),
+        ('E', 'EINSTEIN_TOWER'),
+        ('N', 'NONE'),
+    )
+    spectrograph = models.CharField(
+        max_length=1,
+        choices=spectrograph_possibilities,
+        default='N',
+    )
+
     #   Telescope and instrument
     instrument = models.CharField(max_length=50, default='')
     telescope = models.CharField(max_length=50, default='')
@@ -154,7 +168,7 @@ class DataFile(models.Model):
     dec = models.FloatField(default=-1)
 
     #   Observing conditions
-    airmass = models.FloatField(default=-1)
+    air_mass = models.FloatField(default=-1)
     #   Ambient temperature in deg C
     ambient_temperature = models.FloatField(default=-1)
     #   Dewpoint in deg C
@@ -175,17 +189,20 @@ class DataFile(models.Model):
     #   Bookkeeping
     history = HistoricalRecords()
 
-    # added_on      = models.DateTimeField(auto_now_add=True)
-    # last_modified = models.DateTimeField(auto_now=True)
-    # added_by      = models.ForeignKey(
-    #     settings.AUTH_USER_MODEL,
-    #     on_delete=models.SET(get_sentinel_user),
-    #     null=True,
-    #     # related_name='added_run',
-    # )
+    #   Status
+    parameter_status_possibilities = (
+        ('FIT', 'FITS'),
+        ('CLA', 'CLASSIC_IMAGE_ANALYSIS'),
+        ('AIA', 'AI_IMAGE_ANALYSIS'),
+    )
+    status_parameters = models.CharField(
+        max_length=3,
+        choices=parameter_status_possibilities,
+        default='FIT',
+    )
 
     #   Get information
-    def set_infos(self):
+    def set_info(self):
         """
             Get information to fill the model
         """
@@ -205,8 +222,7 @@ class DataFile(models.Model):
                 if (k != 'comment' and
                         k != 'history' and
                         k != '' and
-                        type(v) is not fits.card.Undefined
-                ):
+                        type(v) is not fits.card.Undefined):
                     h[k] = v
         except Exception as e:
             print(e)

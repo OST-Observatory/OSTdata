@@ -4,7 +4,7 @@ from django.conf import settings
 
 from astropy.coordinates.angles import Angle
 
-from obs_run.models import Obs_run, DataFile
+from obs_run.models import ObservationRun, DataFile
 
 from simple_history.models import HistoricalRecords
 
@@ -15,8 +15,8 @@ from users.models import get_sentinel_user
 
 class Object(models.Model):
     #   An object can be associated with multiple observation runs.
-    obsrun = models.ManyToManyField(
-        Obs_run,
+    observation_run = models.ManyToManyField(
+        ObservationRun,
         blank=True,
     )
 

@@ -24,7 +24,7 @@ import io
 
 import base64
 
-from .models import Obs_run, DataFile
+from .models import ObservationRun, DataFile
 
 from objects.models import Object
 
@@ -47,7 +47,7 @@ def plot_observation_conditions(obs_run_pk):
             Tabs for the plot
     """
     #   Get observation run
-    obs_run = Obs_run.objects.get(pk=obs_run_pk)
+    obs_run = ObservationRun.objects.get(pk=obs_run_pk)
 
     #   Get observing conditions
     observing_conditions = obs_run.datafile_set.all().filter(hjd__gt = -1) \
@@ -490,7 +490,7 @@ def time_distribution_model(model, yaxis_label):
     #   Get JDs of all model objects - clean results of not usable JDs
     if model == Object:
         term_hjd = 'first_hjd'
-    elif model == Obs_run:
+    elif model == ObservationRun:
         term_hjd = 'mid_observation_jd'
     else:
         term_hjd = 'hjd'

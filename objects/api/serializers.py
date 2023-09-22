@@ -17,7 +17,7 @@ from obs_run.api.serializers import RunSerializer
 
 class ObjectListSerializer(ModelSerializer):
 
-    obsrun = SerializerMethodField()
+    observation_run = SerializerMethodField()
     tags = SerializerMethodField()
     href = SerializerMethodField()
     object_type_display = SerializerMethodField()
@@ -32,7 +32,7 @@ class ObjectListSerializer(ModelSerializer):
         model = Object
         fields = [
             'pk',
-            'obsrun',
+            'observation_run',
             'name',
             'ra',
             'dec',
@@ -48,9 +48,9 @@ class ObjectListSerializer(ModelSerializer):
         read_only_fields = ('pk',)
 
 
-    def get_obsrun(self, obj):
-        obsruns = RunSerializer(obj.obsrun, many=True).data
-        return obsruns
+    def get_observation_run(self, obj):
+        observation_runs = RunSerializer(obj.observation_run, many=True).data
+        return observation_runs
 
     def get_tags(self, obj):
         tags = TagSerializer(obj.tags, many=True).data

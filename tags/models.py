@@ -4,6 +4,7 @@ from simple_history.models import HistoricalRecords
 
 ############################################################################
 
+
 class Tag(models.Model):
     """
     A tag that can be added to an object to facilitate grouping
