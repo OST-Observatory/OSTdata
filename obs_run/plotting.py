@@ -354,17 +354,21 @@ def plot_field_of_view(data_file_pk):
         stars_loc_y[mask],
         s=mag2size(stars["magnitude"]),
         color="k",
-        )
+    )
 
     box = ax.get_position()
     ax.set_position([box.x0, box.y0, box.width * 0.8, box.height])
 
-    # find the legend item magnitudes
+    #   Find the legend item magnitudes
+    #   TODO: Check these "labels". They do not work anymore.
     labels = np.arange(np.ceil(mag_min), np.floor(mag_max))
+    # print(mag_min, mag_max)
+    # print(labels)
 
     kw = dict(
         prop="sizes",
-        num=labels,
+        # num=labels,
+        num='auto',
         color="k",
         fmt="{x:.0f}",
         func=size2mag,

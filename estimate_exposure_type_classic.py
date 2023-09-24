@@ -44,3 +44,5 @@ if __name__ == "__main__":
 
             data_file.status_parameters = 'CLA'
 
+            data_file.save()
+

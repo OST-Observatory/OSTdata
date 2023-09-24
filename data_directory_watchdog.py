@@ -54,7 +54,7 @@ class Watcher:
         self.directory_to_watch = directory
 
     def run(self):
-        event_handler = Handler()
+        event_handler = Handler(self.directory_to_watch)
         self.observer.schedule(event_handler, self.directory_to_watch, recursive=True)
         self.observer.start()
         try:
@@ -69,13 +69,17 @@ class Watcher:
 
 class Handler(FileSystemEventHandler):
 
-    @staticmethod
-    def on_created(event):
+    def __init__(self, directory_to_watch):
+        super().__init__()
+        self.directory_to_watch = directory_to_watch
+
+    # @staticmethod
+    def on_created(self, event):
         if event.is_directory:
             print(f"Directory created - {event.src_path}")
             p = mp.Process(
                 target=add_new_observation_run_wrapper,
-                args=(event.src_path),
+                args=(str(event.src_path)),
             )
             p.start()
             # add_new_observation_run_wrapper(event.src_path)
@@ -91,10 +95,13 @@ class Handler(FileSystemEventHandler):
         else:
             print(f"File deleted - {event.src_path}")
 
-    @staticmethod
-    def on_moved(event):
+    # @staticmethod
+    def on_moved(self, event):
+        # print(dir(self))
         if event.is_directory:
             print(f"Directory moved - {event.src_path} -> {event.dest_path}")
+            source_path = event.src_path.split(self.directory_to_watch)[1]
+            print(source_path)
             # print(dir(event))
         else:
             print(f"File moved - {event.src_path}")
