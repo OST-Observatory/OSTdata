@@ -70,21 +70,23 @@ def add_new_data_file_wrapper(file_path, directory_to_monitor):
 
     source_path = str(file_path).split(directory_to_monitor)[1].split('/')[0]
 
-    try:
-        observation_run = ObservationRun.objects.get(name=source_path)
+    suffix = file_path.suffix
+    if suffix not in ['.filepart', '.bck']:
+        try:
+            observation_run = ObservationRun.objects.get(name=source_path)
 
-        #   Analyse directory and add adds associated data
-        add_new_data_file(
-            file_path,
-            observation_run,
-            # print_to_terminal=True,
-        )
+            #   Analyse directory and add adds associated data
+            add_new_data_file(
+                file_path,
+                observation_run,
+                # print_to_terminal=True,
+            )
 
-        #   Update statistic on observation run
-        observation_run_statistic_update(observation_run)
+            #   Update statistic on observation run
+            observation_run_statistic_update(observation_run)
 
-    except:
-        print(f"Evaluation of {file_path} failed.")
+        except:
+            print(f"Evaluation of {file_path} failed.")
 
 
 def observation_run_statistic_update(observation_run):
