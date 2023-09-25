@@ -28,6 +28,7 @@ from .models import ObservationRun, DataFile
 
 from objects.models import Object
 
+
 ############################################################################
 
 
@@ -50,16 +51,16 @@ def plot_observation_conditions(obs_run_pk):
     obs_run = ObservationRun.objects.get(pk=obs_run_pk)
 
     #   Get observing conditions
-    observing_conditions = obs_run.datafile_set.all().filter(hjd__gt = -1) \
+    observing_conditions = obs_run.datafile_set.all().filter(hjd__gt=-1) \
         .order_by('hjd').values_list(
-            'hjd',
-            'ambient_temperature',
-            'dewpoint',
-            'pressure',
-            'humidity',
-            'wind_speed',
-            'wind_direction',
-        )
+        'hjd',
+        'ambient_temperature',
+        'dewpoint',
+        'pressure',
+        'humidity',
+        'wind_speed',
+        'wind_direction',
+    )
     n_data_points = len(observing_conditions[0])
     conditions_array = np.array(observing_conditions)
 
@@ -72,7 +73,7 @@ def plot_observation_conditions(obs_run_pk):
         'Humidity',
         'Wind speed',
         'Wind direction',
-        ]
+    ]
     y_axis_label_units = [
         '',
         u'[\N{DEGREE SIGN} C]',
@@ -81,25 +82,25 @@ def plot_observation_conditions(obs_run_pk):
         '[%]',
         '[m/s]',
         u'[\N{DEGREE SIGN}]',
-        ]
+    ]
 
     #   Convert JD to datetime object
     timezone_hour_delta = 1
-    x_data = conditions_array[:,0]
+    x_data = conditions_array[:, 0]
     delta = datetime.timedelta(hours=timezone_hour_delta)
     x_data = Time(x_data, format='jd').datetime + delta
 
     #   Prepare list for tabs in the figure
     tabs = []
 
-    for i in range(1,n_data_points):
+    for i in range(1, n_data_points):
         #   Initialize figure
         fig = bpl.figure(
             width=520,
             height=240,
             toolbar_location=None,
             x_axis_type="datetime",
-            )
+        )
 
         #   Apply JD to datetime conversion
         fig.xaxis.formatter = mpl.DatetimeTickFormatter()
@@ -107,11 +108,11 @@ def plot_observation_conditions(obs_run_pk):
 
         #   Plot observation data
         fig.line(
-          x_data,
-          conditions_array[:,i],
-          line_width=1,
-          color="blue",
-          )
+            x_data,
+            conditions_array[:, i],
+            line_width=1,
+            color="blue",
+        )
 
         #   Set figure labels
         fig.toolbar.logo = None
@@ -126,6 +127,7 @@ def plot_observation_conditions(obs_run_pk):
 
     #   Make figure from tabs list
     return Tabs(tabs=tabs)
+
 
 ############################################################################
 
@@ -151,12 +153,12 @@ def plot_visibility(start_hjd, exposure_time, ra, dec):
     """
     #   Prepare figure
     fig = bpl.figure(
-      width=400,
-      height=240,
-      toolbar_location=None,
-      y_range=(0, 90),
-      x_axis_type="datetime",
-      )
+        width=400,
+        height=240,
+        toolbar_location=None,
+        y_range=(0, 90),
+        x_axis_type="datetime",
+    )
 
     fig.toolbar.logo = None
     fig.title.align = 'center'
@@ -172,14 +174,14 @@ def plot_visibility(start_hjd, exposure_time, ra, dec):
             lat=52.409184,
             lon=12.973185,
             height=39.,
-            )
+        )
 
         #   Define the location by means of astroplan
         ost = Observer(
-          location=ost_location,
-          name="OST",
-          timezone="Europe/Berlin"
-          )
+            location=ost_location,
+            name="OST",
+            timezone="Europe/Berlin"
+        )
 
         # time = Time(start_hjd + (end_hjd - start_hjd)/2., format='jd')
         time = Time(start_hjd + exposure_time / 2. / 86400., format='jd')
@@ -212,20 +214,20 @@ def plot_visibility(start_hjd, exposure_time, ra, dec):
         times = times.to_datetime()
 
         fig.line(
-          times,
-          obj_altaz.alt,
-          color='blue',
-          line_width=2,
-          legend_label='Object',
-          )
+            times,
+            obj_altaz.alt,
+            color='blue',
+            line_width=2,
+            legend_label='Object',
+        )
         fig.line(
-          times,
-          moon_altaz.alt,
-          color='orange',
-          line_dash='dashed',
-          line_width=2,
-          legend_label='Moon',
-          )
+            times,
+            moon_altaz.alt,
+            color='orange',
+            line_dash='dashed',
+            line_width=2,
+            legend_label='Moon',
+        )
 
         #   Convert JD to datetime object
         # timezone_hour_delta = 1
@@ -236,11 +238,11 @@ def plot_visibility(start_hjd, exposure_time, ra, dec):
         # obsend = Time(end_hjd, format='jd').datetime
         obsend = Time(start_hjd + exposure_time / 86400., format='jd').datetime
         obs = mpl.BoxAnnotation(
-          left=obsstart,
-          right=obsend,
-          fill_alpha=0.5,
-          fill_color='red',
-          )
+            left=obsstart,
+            right=obsend,
+            fill_alpha=0.5,
+            fill_color='red',
+        )
         fig.add_layout(obs)
 
     except Exception as e:
@@ -248,21 +250,22 @@ def plot_visibility(start_hjd, exposure_time, ra, dec):
         print(e)
 
         label = mpl.Label(
-          x=75,
-          y=40,
-          x_units='screen',
-          text='Could not calculate visibility',
-          render_mode='css',
-          border_line_color='red',
-          border_line_alpha=1.0,
-          text_color='red',
-          background_fill_color='white',
-          background_fill_alpha=1.0,
-          )
+            x=75,
+            y=40,
+            x_units='screen',
+            text='Could not calculate visibility',
+            render_mode='css',
+            border_line_color='red',
+            border_line_alpha=1.0,
+            text_color='red',
+            background_fill_color='white',
+            background_fill_alpha=1.0,
+        )
 
         fig.add_layout(label)
 
     return fig
+
 
 ############################################################################
 
@@ -316,37 +319,43 @@ def plot_field_of_view(data_file_pk):
     stars = Table.from_pandas(stars)
 
     stars_loc_x, stars_loc_y = w.world_to_pixel(SkyCoord(
-      ra=stars["ra_degrees"] * u.deg,
-      dec=stars["dec_degrees"] * u.deg
-      ))
+        ra=stars["ra_degrees"] * u.deg,
+        dec=stars["dec_degrees"] * u.deg
+    ))
 
     #   Limiting stellar magnitude
-    THRES_MAG = 18.5
+    magnitude_threshold = 18.5
 
     #   Restrict stars to field of view and magnitude threshold
     mask = (stars_loc_x > -NAXIS1) & (stars_loc_x < NAXIS1) & \
            (stars_loc_y > -NAXIS2) & (stars_loc_y < NAXIS2) & \
-           (stars["magnitude"] < THRES_MAG)
+           (stars["magnitude"] < magnitude_threshold)
     stars = stars[mask]
 
     mag_min = stars["magnitude"].min()
     mag_max = stars["magnitude"].max()
 
-    STAR_MINSIZE = 1
-    STAR_MAXSIZE = 160
+    star_size_min = 1
+    star_size_max = 160
 
     def mag2size(mag):
-        stars_sizes  = (np.exp(-mag) - np.exp(-mag_max)) * (STAR_MAXSIZE - STAR_MINSIZE) / np.exp(-mag_min) + STAR_MINSIZE
+        stars_sizes = ((np.exp(-mag) - np.exp(-mag_max)) *
+                       (star_size_max - star_size_min) / np.exp(-mag_min) +
+                       star_size_min)
         return stars_sizes
 
     def size2mag(size):
         # need to define the inverse function of mag2size
-        mag = -np.log((size - STAR_MINSIZE) * np.exp(-mag_min) / (STAR_MAXSIZE - STAR_MINSIZE) + np.exp(-mag_max))
+        mag = -np.log(
+            (size - star_size_min) * np.exp(-mag_min) /
+            (star_size_max - star_size_min) +
+            np.exp(-mag_max)
+        )
         return mag
 
     # fig = plt.figure(figsize=(6.5,3.5))
     # fig = plt.figure(figsize=(5,2.7))
-    fig = plt.figure(figsize=(5,2.8))
+    fig = plt.figure(figsize=(5, 2.8))
     ax = fig.add_subplot(projection=w)
 
     scatter = ax.scatter(
@@ -372,7 +381,7 @@ def plot_field_of_view(data_file_pk):
         color="k",
         fmt="{x:.0f}",
         func=size2mag,
-        )
+    )
     legend = ax.legend(
         *scatter.legend_elements(**kw),
         loc='center left',
@@ -380,7 +389,7 @@ def plot_field_of_view(data_file_pk):
         title="Magnitude",
         fontsize=7,
         title_fontsize=7,
-        )
+    )
 
     ax.grid(True, color="k", linestyle="dashed")
 
@@ -394,7 +403,7 @@ def plot_field_of_view(data_file_pk):
         bottom=True,
         top=True,
         labelsize=7,
-        )
+    )
     ax.tick_params(
         axis='y',
         labelleft=True,
@@ -403,18 +412,18 @@ def plot_field_of_view(data_file_pk):
         right=True,
         # fontsize=0.5,
         labelsize=7,
-        )
+    )
 
     # plt.xticks(fontsize = 1)
 
     ax.set_xlabel(
         "RA (J2000)",
         fontsize=7,
-        )
+    )
     ax.set_ylabel(
         "Dec (J2000)",
         fontsize=7,
-        )
+    )
 
     ax.set_aspect("equal")
     # ax.axvspan(*ax.get_xlim(), zorder=-100, color="white") # generate a white background for the plot
@@ -469,6 +478,7 @@ def plot_field_of_view(data_file_pk):
     #
     # return fig
 
+
 ############################################################################
 
 
@@ -499,10 +509,10 @@ def time_distribution_model(model, yaxis_label):
     else:
         term_hjd = 'hjd'
     jds = np.array(model.objects.all().values_list(
-            term_hjd,
-            flat=True
-            )
-        )
+        term_hjd,
+        flat=True
+    )
+    )
     mask = np.where(jds)
     jds = np.sort(jds[mask])
 
@@ -516,14 +526,14 @@ def time_distribution_model(model, yaxis_label):
     ts = TimeSeries(
         time=obs_time,
         data={'nobs': np.ones(n_valid)}
-        )
+    )
 
     #   Binned time series using numpy sum function
     ts_sum = aggregate_downsample(
         ts,
-        time_bin_size = 1 * u.yr,
+        time_bin_size=1 * u.yr,
         aggregate_func=np.sum,
-        ).filled(0.)
+    ).filled(0.)
 
     #   Convert JD to datetime object
     timezone_hour_delta = 1
@@ -537,7 +547,7 @@ def time_distribution_model(model, yaxis_label):
     ###
     #   Bar plot
     #
-    source = ColumnDataSource(dict(x=x_data,top=ts_sum['nobs'].value,))
+    source = ColumnDataSource(dict(x=x_data, top=ts_sum['nobs'].value, ))
 
     glyph = VBar(
         x="x",
@@ -545,7 +555,7 @@ def time_distribution_model(model, yaxis_label):
         bottom=0,
         width=20000000000,
         fill_color="#fcab40",
-        )
+    )
 
     #   Initialize figure
     fig = bpl.figure(
@@ -559,7 +569,7 @@ def time_distribution_model(model, yaxis_label):
         # height=200,
         toolbar_location=None,
         x_axis_type="datetime",
-        )
+    )
 
     fig.add_glyph(source, glyph)
 
@@ -594,7 +604,7 @@ def time_distribution_model(model, yaxis_label):
         # height=200,
         toolbar_location=None,
         x_axis_type="datetime",
-        )
+    )
 
     #   Apply JD to datetime conversion
     fig.xaxis.formatter = mpl.DatetimeTickFormatter()
@@ -606,7 +616,7 @@ def time_distribution_model(model, yaxis_label):
         np.cumsum(ts_sum['nobs']),
         line_width=2,
         color="#fcab40",
-        )
+    )
 
     #   Set figure labels
     fig.toolbar.logo = None

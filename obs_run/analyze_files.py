@@ -4,9 +4,10 @@ from .analyze_image_and_video_header import analyze_image, analyze_ser
 
 ############################################################################
 
+
 def set_file_info(datafile):
-    '''
-        Extract informations from the data file and add those to the DataFile
+    """
+        Extract information from the data file and add those to the DataFile
         model
 
         Parameters
@@ -16,7 +17,7 @@ def set_file_info(datafile):
 
         # pk             : integer`
         #     ID of the DataFile model
-    '''
+    """
     #   File type
     file_type = datafile.file_type
 

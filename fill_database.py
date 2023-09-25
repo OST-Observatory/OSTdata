@@ -30,5 +30,9 @@ if __name__ == "__main__":
     data_path = Path(data_path)
 
     #   Load data and setup models
-    for run in data_path.iterdir():
-        add_new_observation_run(run, print_to_terminal=True)
+    for path_to_run in data_path.iterdir():
+        add_new_observation_run(
+            path_to_run,
+            print_to_terminal=True,
+            add_data_files=True,
+        )

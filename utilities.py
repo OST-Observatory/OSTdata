@@ -26,9 +26,11 @@ from objects.models import Object
 from obs_run.models import ObservationRun, DataFile
 
 
-def add_new_observation_run(data_path, print_to_terminal=False):
+def add_new_observation_run(data_path, print_to_terminal=False,
+                            add_data_files=False):
     """
     Adds new observation run and all associated objects and datasets
+    if requested
 
     Parameters
     ----------
@@ -39,7 +41,138 @@ def add_new_observation_run(data_path, print_to_terminal=False):
         If True information will be printed to the terminal.
         Default is ``False``.
 
+    add_data_files      : `boolean`, optional
+        If True also data files and objects will be added to the database.
+        Default is ``False``.
     """
+    #   Regular expression definitions for allowed directory name
+    rex1 = re.compile("^[0-9]{8}$")
+    rex2 = re.compile("^[0-9]{4}.[0-9]{2}.[0-9]{2}$")
+
+    #   Get name of observation run
+    basename = data_path.name
+    if rex1.match(basename) or rex2.match(basename):
+        #   Create new run
+        new_observation_run = ObservationRun(
+            name=basename,
+            reduction_status='NE',
+        )
+        new_observation_run.save()
+        if print_to_terminal:
+            print('Run: ', basename)
+
+        #   Process data files
+        if add_data_files:
+            for (root, dirs, files) in os.walk(data_path, topdown=True):
+                for f in files:
+                    file_path = Path(root, f)
+                    successful = add_new_data_file(
+                        file_path,
+                        new_observation_run,
+                        print_to_terminal=print_to_terminal
+                    )
+                    if not successful:
+                        continue
+
+            #   Set time of observation run -> mid of observation
+            datafiles = new_observation_run.datafile_set.filter(
+                hjd__gt=2451545
+            )
+            start_jd = datafiles.order_by('hjd')
+            # print(start_jd)
+            if not start_jd:
+                new_observation_run.mid_observation_jd = 0.
+            else:
+                start_jd = start_jd[0].hjd
+                end_jd = datafiles.order_by('hjd').reverse()
+                if not end_jd:
+                    new_observation_run.mid_observation_jd = start_jd
+                else:
+                    end_jd = end_jd[0].hjd
+                    new_observation_run.mid_observation_jd = start_jd + (end_jd - start_jd) / 2.
+            new_observation_run.save()
+            if print_to_terminal:
+                print('----------------------------------------')
+                print()
+
+
+def add_new_data_file(path_to_file, observation_run, print_to_terminal=False):
+    """
+    Adds new dataset and associated objects
+
+    Parameters
+    ----------
+    path_to_file                : `pathlib.Path`
+        Path to the data file
+
+    observation_run             : `obs_run.models.ObservationRun`
+        Observation run to which the data file belongs
+
+    print_to_terminal           : `boolean`, optional
+        If True information will be printed to the terminal.
+        Default is ``False``.
+
+    Returns
+    -------
+                                : `boolean`
+        Returns True if data files and objects were added successfully.
+    """
+    if print_to_terminal:
+        print('File: ', path_to_file.absolute())
+
+    suffix = path_to_file.suffix
+    if suffix in ['.fit', '.fits', '.FIT', '.FITS']:
+        file_type = 'FITS'
+    elif suffix in ['.CR2', '.cr2']:
+        file_type = 'CR2'
+    elif suffix in ['.JPG', '.jpg', '.jpeg', '.JPEG']:
+        file_type = 'JPG'
+    elif suffix in ['.tiff', '.tif', '.TIF', '.TIFF']:
+        file_type = 'TIFF'
+    elif suffix in ['.ser', '.SER']:
+        file_type = 'SER'
+    else:
+        return False
+
+    data_file = DataFile(
+        observation_run=observation_run,
+        datafile=path_to_file.absolute(),
+        file_type=file_type,
+    )
+    data_file.save()
+
+    #   Evaluate data file
+    evaluate_data_file(
+        data_file,
+        observation_run,
+        print_to_terminal=print_to_terminal,
+    )
+
+    return True
+
+
+def evaluate_data_file(data_file, observation_run, print_to_terminal=False):
+    """
+    Evaluate data file and add associated objects
+
+    Parameters
+    ----------
+    data_file           : `obs_run.models.DataFile`
+        DataFile object
+
+    observation_run             : `obs_run.models.ObservationRun`
+        Observation run to which the data file belongs
+
+    print_to_terminal           : `boolean`, optional
+        If True information will be printed to the terminal.
+        Default is ``False``.
+    """
+    #   Set data file information from file header data
+    data_file.set_info()
+
+    target = data_file.main_target
+    expo_type = data_file.exposure_type
+
     #   Define special targets
     special_targets = [
         'Autosave Image', 'calib', 'mosaic', 'ThAr',
@@ -50,320 +183,253 @@ def add_new_observation_run(data_path, print_to_terminal=False):
         'saturn', 'Uranus', 'uranus', 'Neptun', 'neptun', 'Pluto', 'pluto',
     ]
 
-    #   Regular expression definitions for allowed directory name
-    rex1 = re.compile("^[0-9]{8}$")
-    rex2 = re.compile("^[0-9]{4}.[0-9]{2}.[0-9]{2}$")
+    #   Look for associated objects
+    if (
+            target != '' and
+            target != 'Unknown' and
+            expo_type == 'LI' and
+            'flat' not in target and
+            'dark' not in target and
+            data_file.ra != 0. and
+            data_file.dec != 0.
+    ):
 
-    #   Get name of observation run
-    basename = data_path.name
-    if rex1.match(basename) or rex2.match(basename):
-        #   Create new run
-        new_run = ObservationRun(
-            name=basename,
-            reduction_status='NE',
-        )
-        new_run.save()
-        if print_to_terminal:
-            print('Run: ', basename)
+        #   Tolerance in degree
+        # t = 0.1
+        t = 0.5
+        if ('20210224' in str(data_file.datafile) or
+                '20220106' in str(data_file.datafile)):
+            t = 1.0
 
-        #   List data files
-        for (root, dirs, files) in os.walk(data_path, topdown=True):
-            for f in files:
-                file_path = Path(root, f)
-                if print_to_terminal:
-                    print('File: ', file_path.absolute())
-
-                suffix = file_path.suffix
-                if suffix in ['.fit', '.fits', '.FIT', '.FITS']:
-                    file_type = 'FITS'
-                elif suffix in ['.CR2', '.cr2']:
-                    file_type = 'CR2'
-                elif suffix in ['.JPG', '.jpg', '.jpeg', '.JPEG']:
-                    file_type = 'JPG'
-                elif suffix in ['.tiff', '.tif', '.TIF', '.TIFF']:
-                    file_type = 'TIFF'
-                elif suffix in ['.ser', '.SER']:
-                    file_type = 'SER'
-                else:
-                    continue
-
-                data_file = DataFile(
-                    observation_run=new_run,
-                    datafile=file_path.absolute(),
-                    file_type=file_type,
-                )
-                data_file.save()
-                data_file.set_info()
-
-                target = data_file.main_target
-                expo_type = data_file.exposure_type
-
-                #   Look for associated objects
-                if (
-                        target != '' and
-                        target != 'Unknown' and
-                        expo_type == 'LI' and
-                        'flat' not in target and
-                        'dark' not in target and
-                        data_file.ra != 0. and
-                        data_file.dec != 0.
-                ):
-
-                    #   Tolerance in degree
-                    # t = 0.1
-                    t = 0.5
-                    if ('20210224' in data_file.datafile._str or
-                            '20220106' in data_file.datafile._str):
-                        t = 1.0
-
-                    if target in special_targets or target in solar_system:
-                        objs = Object.objects \
-                            .filter(name__icontains=target)
-                    else:
-                        objs = Object.objects \
-                            .filter(ra__range=(data_file.ra - t, data_file.ra + t)) \
-                            .filter(dec__range=(data_file.dec - t, data_file.dec + t))
-                        # .filter(name__icontains=target) \
-                    if len(objs) > 0:
-                        if print_to_terminal:
-                            print('Object already known...')
-                        #   If there is one or more objects returned,
-                        #   select the closest object
-                        obj = objs.annotate(
-                            distance=ExpressionWrapper(
-                                ((F('ra') - data_file.ra) ** 2 +
-                                 (F('dec') - data_file.dec) ** 2
-                                 ) ** (1. / 2.),
-                                output_field=DecimalField()
-                            )
-                        ).order_by('distance')[0]
-                        obj.datafiles.add(data_file)
-                        obj.observation_run.add(new_run)
-                        obj.is_main = True
-
-                        #   Update JD the object was first observed
-                        if (obj.first_hjd == 0. or
-                                obj.first_hjd > data_file.hjd):
-                            obj.first_hjd = data_file.hjd
-
-                        obj.save()
-
-                        #   Set datafile target name to Simbad resolved name
-                        if obj.simbad_resolved:
-                            data_file.main_target = obj.name
-                            data_file.save()
-
-                        #   Add header name as an alias
-                        identifiers = obj.identifier_set.filter(
-                            name__exact=target
-                        )
-                        if len(identifiers) == 0:
-                            obj.identifier_set.create(
-                                name=target,
-                                info_from_header=True,
-                            )
-
-                    #   Handling of Solar system objects
-                    elif target in solar_system:
-                        #     Make a new object
-                        obj = Object(
-                            name=target,
-                            ra=data_file.ra,
-                            dec=data_file.dec,
-                            object_type='SO',
-                            simbad_resolved=False,
-                            first_hjd=data_file.hjd,
-                            is_main=True,
-                        )
-                        obj.save()
-                        obj.observation_run.add(new_run)
-                        obj.datafiles.add(data_file)
-                        obj.save()
-
-                    #   Handling of special targets
-                    elif target in special_targets:
-                        #     Make a new object
-                        obj = Object(
-                            name=target,
-                            ra=data_file.ra,
-                            dec=data_file.dec,
-                            object_type='UK',
-                            simbad_resolved=False,
-                            first_hjd=data_file.hjd,
-                        )
-                        obj.save()
-                        obj.observation_run.add(new_run)
-                        obj.datafiles.add(data_file)
-                        obj.save()
-                    else:
-                        if print_to_terminal:
-                            print('New object')
-                        #   Set Defaults
-                        object_ra = data_file.ra
-                        object_dec = data_file.dec
-                        object_type = 'UK'
-                        object_simbad_resolved = False
-                        object_name = target
-
-                        #   Query Simbad for object name
-                        custom_simbad = Simbad()
-                        custom_simbad.add_votable_fields(
-                            'otypes',
-                            'ids',
-                        )
-                        simbad_tbl = custom_simbad.query_object(target)
-
-                        #   Get Simbad coordinates
-                        if simbad_tbl is not None and len(simbad_tbl) > 0:
-                            simbad_ra = Angle(
-                                simbad_tbl[0]['RA'],
-                                unit='hour',
-                            ).degree
-                            simbad_dec = Angle(
-                                simbad_tbl[0]['DEC'],
-                                unit='degree',
-                            ).degree
-
-                            # #   Tolerance in degree
-                            # tol = 0.5
-                            # tol = 1.
-
-                            if (simbad_ra + t > data_file.ra > simbad_ra - t and
-                                    simbad_dec + t > data_file.dec > simbad_dec - t):
-                                object_ra = simbad_ra
-                                object_dec = simbad_dec
-                                object_simbad_resolved = True
-                                object_data_table = simbad_tbl[0]
-
-                        #   Search Simbad based on coordinates
-                        if not object_simbad_resolved:
-                            simbad_region_query = Simbad()
-                            simbad_region_query.add_votable_fields(
-                                'otypes',
-                                'ids',
-                                'distance_result',
-                                # 'uvby',
-                                'flux(V)',
-                            )
-                            result_table = simbad_region_query.query_region(
-                                SkyCoord(
-                                    data_file.ra * u.deg,
-                                    data_file.dec * u.deg,
-                                    frame='icrs',
-                                ),
-                                radius='0d5m0s',
-                            )
-
-                            if (result_table is not None and
-                                    len(result_table) > 0):
-
-                                #   Get the brightest object if magnitudes
-                                #   are available otherwise use the object
-                                #   with the smallest distance to the
-                                #   coordinates
-                                if np.all(result_table['FLUX_V'].mask):
-                                    index = 0
-                                else:
-                                    index = np.argmin(
-                                        result_table['FLUX_V'].data
-                                    )
-                                simbad_ra = Angle(
-                                    result_table[index]['RA'],
-                                    unit='hour',
-                                ).degree
-                                simbad_dec = Angle(
-                                    result_table[index]['DEC'],
-                                    unit='degree',
-                                ).degree
-                                object_ra = simbad_ra
-                                object_dec = simbad_dec
-                                object_simbad_resolved = True
-                                object_data_table = result_table[index]
-
-                        #   Set object type based on Simbad
-                        if object_simbad_resolved:
-                            object_types = object_data_table['OTYPES']
-
-                            #   Decode information in object string to
-                            #   get a rough object estimate
-                            if 'ISM' in object_types or 'PN' in object_types:
-                                object_type = 'NE'
-                            elif 'Cl*' in object_types or 'As*' in object_types:
-                                object_type = 'SC'
-                            elif 'G' in object_types:
-                                object_type = 'GA'
-                            elif '*' in object_types:
-                                object_type = 'ST'
-
-                            #   Set default name
-                            object_name = object_data_table['MAIN_ID']
-
-                        #     Make a new object
-                        obj = Object(
-                            name=object_name,
-                            ra=object_ra,
-                            dec=object_dec,
-                            object_type=object_type,
-                            simbad_resolved=object_simbad_resolved,
-                            first_hjd=data_file.hjd,
-                            is_main=True,
-                        )
-                        obj.save()
-                        obj.observation_run.add(new_run)
-                        obj.datafiles.add(data_file)
-                        obj.save()
-
-                        #   Set alias names
-                        if object_simbad_resolved:
-                            #   Add header name as an alias
-                            obj.identifier_set.create(
-                                name=target,
-                                info_from_header=True,
-                            )
-
-                            #   Get aliases from Simbad
-                            aliases = object_data_table['IDS'].split('|')
-                            # print(aliases)
-
-                            #   Create Simbad link
-                            sanitized_name = object_name.replace(" ", "") \
-                                .replace('+', "%2B")
-                            simbad_href = f"https://simbad.u-strasbg.fr/" \
-                                          f"simbad/sim-id?Ident=" \
-                                          f"{sanitized_name}"
-
-                            #   Set identifier objects
-                            for alias in aliases:
-                                obj.identifier_set.create(
-                                    name=alias,
-                                    href=simbad_href,
-                                )
-
-                            #   Set datafile target name to Simbad resolved
-                            #   name
-                            data_file.main_target = object_name
-                            data_file.save()
-
-                    if print_to_terminal:
-                        print()
-
-        #   Set time of observation run -> mid of observation
-        datafiles = new_run.datafile_set.filter(hjd__gt=2451545)
-        start_jd = datafiles.order_by('hjd')
-        # print(start_jd)
-        if not start_jd:
-            new_run.mid_observation_jd = 0.
+        if target in special_targets or target in solar_system:
+            objs = Object.objects \
+                .filter(name__icontains=target)
         else:
-            start_jd = start_jd[0].hjd
-            end_jd = datafiles.order_by('hjd').reverse()
-            if not end_jd:
-                new_run.mid_observation_jd = start_jd
-            else:
-                end_jd = end_jd[0].hjd
-                new_run.mid_observation_jd = start_jd + (end_jd - start_jd) / 2.
-        new_run.save()
+            objs = Object.objects \
+                .filter(ra__range=(data_file.ra - t, data_file.ra + t)) \
+                .filter(dec__range=(data_file.dec - t, data_file.dec + t))
+            # .filter(name__icontains=target) \
+        if len(objs) > 0:
+            if print_to_terminal:
+                print('Object already known...')
+            #   If there is one or more objects returned,
+            #   select the closest object
+            obj = objs.annotate(
+                distance=ExpressionWrapper(
+                    ((F('ra') - data_file.ra) ** 2 +
+                     (F('dec') - data_file.dec) ** 2
+                     ) ** (1. / 2.),
+                    output_field=DecimalField()
+                )
+            ).order_by('distance')[0]
+            obj.datafiles.add(data_file)
+            obj.observation_run.add(observation_run)
+            obj.is_main = True
+
+            #   Update JD the object was first observed
+            if (obj.first_hjd == 0. or
+                    obj.first_hjd > data_file.hjd):
+                obj.first_hjd = data_file.hjd
+
+            obj.save()
+
+            #   Set datafile target name to Simbad resolved name
+            if obj.simbad_resolved:
+                data_file.main_target = obj.name
+                data_file.save()
+
+            #   Add header name as an alias
+            identifiers = obj.identifier_set.filter(
+                name__exact=target
+            )
+            if len(identifiers) == 0:
+                obj.identifier_set.create(
+                    name=target,
+                    info_from_header=True,
+                )
+
+        #   Handling of Solar system objects
+        elif target in solar_system:
+            #     Make a new object
+            obj = Object(
+                name=target,
+                ra=data_file.ra,
+                dec=data_file.dec,
+                object_type='SO',
+                simbad_resolved=False,
+                first_hjd=data_file.hjd,
+                is_main=True,
+            )
+            obj.save()
+            obj.observation_run.add(observation_run)
+            obj.datafiles.add(data_file)
+            obj.save()
+
+        #   Handling of special targets
+        elif target in special_targets:
+            #     Make a new object
+            obj = Object(
+                name=target,
+                ra=data_file.ra,
+                dec=data_file.dec,
+                object_type='UK',
+                simbad_resolved=False,
+                first_hjd=data_file.hjd,
+            )
+            obj.save()
+            obj.observation_run.add(observation_run)
+            obj.datafiles.add(data_file)
+            obj.save()
+        else:
+            if print_to_terminal:
+                print('New object')
+            #   Set Defaults
+            object_ra = data_file.ra
+            object_dec = data_file.dec
+            object_type = 'UK'
+            object_simbad_resolved = False
+            object_name = target
+
+            #   Query Simbad for object name
+            custom_simbad = Simbad()
+            custom_simbad.add_votable_fields(
+                'otypes',
+                'ids',
+            )
+            simbad_tbl = custom_simbad.query_object(target)
+
+            #   Get Simbad coordinates
+            if simbad_tbl is not None and len(simbad_tbl) > 0:
+                simbad_ra = Angle(
+                    simbad_tbl[0]['RA'],
+                    unit='hour',
+                ).degree
+                simbad_dec = Angle(
+                    simbad_tbl[0]['DEC'],
+                    unit='degree',
+                ).degree
+
+                # #   Tolerance in degree
+                # tol = 0.5
+                # tol = 1.
+
+                if (simbad_ra + t > data_file.ra > simbad_ra - t and
+                        simbad_dec + t > data_file.dec > simbad_dec - t):
+                    object_ra = simbad_ra
+                    object_dec = simbad_dec
+                    object_simbad_resolved = True
+                    object_data_table = simbad_tbl[0]
+
+            #   Search Simbad based on coordinates
+            if not object_simbad_resolved:
+                simbad_region_query = Simbad()
+                simbad_region_query.add_votable_fields(
+                    'otypes',
+                    'ids',
+                    'distance_result',
+                    # 'uvby',
+                    'flux(V)',
+                )
+                result_table = simbad_region_query.query_region(
+                    SkyCoord(
+                        data_file.ra * u.deg,
+                        data_file.dec * u.deg,
+                        frame='icrs',
+                    ),
+                    radius='0d5m0s',
+                )
+
+                if (result_table is not None and
+                        len(result_table) > 0):
+
+                    #   Get the brightest object if magnitudes
+                    #   are available otherwise use the object
+                    #   with the smallest distance to the
+                    #   coordinates
+                    if np.all(result_table['FLUX_V'].mask):
+                        index = 0
+                    else:
+                        index = np.argmin(
+                            result_table['FLUX_V'].data
+                        )
+                    simbad_ra = Angle(
+                        result_table[index]['RA'],
+                        unit='hour',
+                    ).degree
+                    simbad_dec = Angle(
+                        result_table[index]['DEC'],
+                        unit='degree',
+                    ).degree
+                    object_ra = simbad_ra
+                    object_dec = simbad_dec
+                    object_simbad_resolved = True
+                    object_data_table = result_table[index]
+
+            #   Set object type based on Simbad
+            if object_simbad_resolved:
+                object_types = object_data_table['OTYPES']
+
+                #   Decode information in object string to
+                #   get a rough object estimate
+                if 'ISM' in object_types or 'PN' in object_types:
+                    object_type = 'NE'
+                elif 'Cl*' in object_types or 'As*' in object_types:
+                    object_type = 'SC'
+                elif 'G' in object_types:
+                    object_type = 'GA'
+                elif '*' in object_types:
+                    object_type = 'ST'
+
+                #   Set default name
+                object_name = object_data_table['MAIN_ID']
+
+            #     Make a new object
+            obj = Object(
+                name=object_name,
+                ra=object_ra,
+                dec=object_dec,
+                object_type=object_type,
+                simbad_resolved=object_simbad_resolved,
+                first_hjd=data_file.hjd,
+                is_main=True,
+            )
+            obj.save()
+            obj.observation_run.add(observation_run)
+            obj.datafiles.add(data_file)
+            obj.save()
+
+            #   Set alias names
+            if object_simbad_resolved:
+                #   Add header name as an alias
+                obj.identifier_set.create(
+                    name=target,
+                    info_from_header=True,
+                )
+
+                #   Get aliases from Simbad
+                aliases = object_data_table['IDS'].split('|')
+                # print(aliases)
+
+                #   Create Simbad link
+                sanitized_name = object_name.replace(" ", "") \
+                    .replace('+', "%2B")
+                simbad_href = f"https://simbad.u-strasbg.fr/" \
+                              f"simbad/sim-id?Ident=" \
+                              f"{sanitized_name}"
+
+                #   Set identifier objects
+                for alias in aliases:
+                    obj.identifier_set.create(
+                        name=alias,
+                        href=simbad_href,
+                    )
+
+                #   Set datafile target name to Simbad resolved
+                #   name
+                data_file.main_target = object_name
+                data_file.save()
+
         if print_to_terminal:
-            print('----------------------------------------')
             print()
 
 

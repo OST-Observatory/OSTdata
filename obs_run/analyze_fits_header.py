@@ -3,17 +3,19 @@ import numpy as np
 from astropy.time import Time
 from astropy.coordinates.angles import Angle
 
+
 ############################################################################
 
+
 def extract_fits_header_info(header):
-    '''
+    """
         Read fits header info
 
         Parameters
         ----------
         header          : `astropy.io.fits.header` object
             FITS Header
-    '''
+    """
     #   Initialize data array
     data = {}
 
@@ -43,7 +45,7 @@ def extract_fits_header_info(header):
         date = header.get('DATE-OBS', '2000-00-00')
         data['obs_date'] = date.replace('T', ' ')
     else:
-        data['obs_date'] =  Time(
+        data['obs_date'] = Time(
             header.get('hjd', 2400000),
             format='jd'
         ).iso
@@ -92,17 +94,19 @@ def extract_fits_header_info(header):
 
     return data
 
+
 ############################################################################
 
+
 def analyze_fits(datafile):
-    '''
-        Extract HEADER informations from the FITS files
+    """
+        Extract HEADER information from the FITS files
 
         Parameters
         ----------
         datafile        : `obs_run.models.DataFile` object
             DataFile instance
-    '''
+    """
     #   Get Header
     header = datafile.get_fits_header()
 
@@ -137,8 +141,8 @@ def analyze_fits(datafile):
 
         #   Calculate field of view
         double_focal_len = 2 * datafile.focal_length
-        fov_x = 2 * np.arctan( d / double_focal_len )
-        fov_y = 2 * np.arctan( h / double_focal_len )
+        fov_x = 2 * np.arctan(d / double_focal_len)
+        fov_y = 2 * np.arctan(h / double_focal_len)
 
         #   Convert to degree
         two_pi = 2. * np.pi
@@ -147,19 +151,19 @@ def analyze_fits(datafile):
 
     #   Image type definitions
     img_types = {
-        'Bias Frame':'BI',
-        'Bias':'BI',
-        'BIAS':'BI',
-        'Dark Frame':'DA',
-        'Dark':'DA',
-        'DARK':'DA',
-        'Flat Field':'FL',
-        'Flat':'FL',
-        'FLAT':'FL',
-        'Light Frame':'LI',
-        'Light':'LI',
-        'LIGHT':'LI',
-        }
+        'Bias Frame': 'BI',
+        'Bias': 'BI',
+        'BIAS': 'BI',
+        'Dark Frame': 'DA',
+        'Dark': 'DA',
+        'DARK': 'DA',
+        'Flat Field': 'FL',
+        'Flat': 'FL',
+        'FLAT': 'FL',
+        'Light Frame': 'LI',
+        'Light': 'LI',
+        'LIGHT': 'LI',
+    }
 
     #   Sanitize image type
     img_type = header_data.get('imagetyp', 'UK')
@@ -174,5 +178,8 @@ def analyze_fits(datafile):
     if datafile.exposure_type in ['UK', 'LI']:
         datafile.main_target = header_data.get('objectname', '-')
         datafile.header_target_name = header_data.get('objectname', '-')
+    else:
+        datafile.main_target = '-'
+        datafile.header_target_name = '-'
 
     datafile.save()
