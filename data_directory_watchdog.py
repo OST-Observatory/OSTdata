@@ -204,43 +204,47 @@ class Handler(FileSystemEventHandler):
             except:
                 print('Directory move cannot be applied...')
         else:
-            print(f"File moved - {event.src_path} -> {event.dest_path}")
+            suffix = Path(event.src_path).suffix
+            if suffix not in ['.filepart', '.bck']:
+                print(f"File moved - {event.src_path} -> {event.dest_path}")
 
-            #   Find and update data file
-            try:
-                data_file = DataFile.objects.get(datafile=event.src_path)
-                data_file.datafile = event.dest_path
-                data_file.save()
-            except:
-                print('File move cannot be applied...')
+                #   Find and update data file
+                try:
+                    data_file = DataFile.objects.get(datafile=event.src_path)
+                    data_file.datafile = event.dest_path
+                    data_file.save()
+                except:
+                    print('File move cannot be applied...')
 
     def on_modified(self, event):
         if not event.is_directory:
-            print(f"File modified - {event.src_path}")
+            suffix = Path(event.src_path).suffix
+            if suffix not in ['.filepart', '.bck']:
+                print(f"File modified - {event.src_path}")
 
-            try:
-                #   Find data file object
-                data_file = DataFile.objects.get(datafile=event.src_path)
+                try:
+                    #   Find data file object
+                    data_file = DataFile.objects.get(datafile=event.src_path)
 
-                #   Delete old object relations
-                objects = data_file.object_set.all()
-                for object_ in objects:
-                    object_.datafiles.remove(data_file)
+                    #   Delete old object relations
+                    objects = data_file.object_set.all()
+                    for object_ in objects:
+                        object_.datafiles.remove(data_file)
 
-                #   Find observation run
-                source_path = event.src_path.split(self.directory_to_monitor)[1].split('/')[0]
-                print('source_path', source_path)
-                observation_run = ObservationRun.objects.get(name=source_path)
+                    #   Find observation run
+                    source_path = event.src_path.split(self.directory_to_monitor)[1].split('/')[0]
+                    print('source_path', source_path)
+                    observation_run = ObservationRun.objects.get(name=source_path)
 
-                #   Evaluate change data file
-                evaluate_data_file(data_file, observation_run)
+                    #   Evaluate change data file
+                    evaluate_data_file(data_file, observation_run)
 
-                #   Update observation run statistic
-                observation_run_statistic_update(observation_run)
+                    #   Update observation run statistic
+                    observation_run_statistic_update(observation_run)
 
-            except Exception as e:
-                print('File modification cannot be applied...')
-                print(e)
+                except Exception as e:
+                    print('File modification cannot be applied...')
+                    print(e)
 
 
 if __name__ == '__main__':
