@@ -66,12 +66,12 @@ def add_new_data_file_wrapper(file_path, directory_to_monitor):
     """
     #   Wait 20 seconds to ensure that the data upload is complete.
     time.sleep(20)
-    print(f"Evaluating {file_path}...")
 
     source_path = str(file_path).split(directory_to_monitor)[1].split('/')[0]
 
     suffix = file_path.suffix
     if suffix not in ['.filepart', '.bck']:
+        print(f"Evaluating {file_path}...")
         try:
             observation_run = ObservationRun.objects.get(name=source_path)
 
@@ -85,8 +85,9 @@ def add_new_data_file_wrapper(file_path, directory_to_monitor):
             #   Update statistic on observation run
             observation_run_statistic_update(observation_run)
 
-        except:
+        except Exception as e:
             print(f"Evaluation of {file_path} failed.")
+            print(e)
 
 
 def observation_run_statistic_update(observation_run):
