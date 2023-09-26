@@ -69,25 +69,25 @@ def add_new_data_file_wrapper(file_path, directory_to_monitor):
 
     source_path = str(file_path).split(directory_to_monitor)[1].split('/')[0]
 
-    suffix = file_path.suffix
-    if suffix not in ['.filepart', '.bck']:
-        print(f"Evaluating {file_path}...")
-        try:
-            observation_run = ObservationRun.objects.get(name=source_path)
+    # suffix = file_path.suffix
+    # if suffix not in ['.filepart', '.bck', '.swp']:
+    print(f"Evaluating {file_path}...")
+    try:
+        observation_run = ObservationRun.objects.get(name=source_path)
 
-            #   Analyse directory and add adds associated data
-            add_new_data_file(
-                file_path,
-                observation_run,
-                # print_to_terminal=True,
-            )
+        #   Analyse directory and add adds associated data
+        add_new_data_file(
+            file_path,
+            observation_run,
+            # print_to_terminal=True,
+        )
 
-            #   Update statistic on observation run
-            observation_run_statistic_update(observation_run)
+        #   Update statistic on observation run
+        observation_run_statistic_update(observation_run)
 
-        except Exception as e:
-            print(f"Evaluation of {file_path} failed.")
-            print(e)
+    except Exception as e:
+        print(f"Evaluation of {file_path} failed.")
+        print(e)
 
 
 def observation_run_statistic_update(observation_run):
@@ -132,14 +132,21 @@ class Watcher:
             recursive=True,
         )
         self.observer.start()
-        try:
-            while True:
-                time.sleep(5)
-        except:
-            self.observer.stop()
-            print("Error")
+        # try:
+        #     while True:
+        #         time.sleep(5)
+        # except:
+        #     self.observer.stop()
+        #     print("Error")
 
-        self.observer.join()
+        # self.observer.join()
+
+        try:
+            while self.observer.is_alive():
+                self.observer.join(1)
+        finally:
+            self.observer.stop()
+            self.observer.join()
 
 
 class Handler(FileSystemEventHandler):
@@ -153,23 +160,31 @@ class Handler(FileSystemEventHandler):
             print(f"Directory created - {event.src_path}")
 
             #   Add new observation run
-            p = mp.Process(
-                target=add_new_observation_run_wrapper,
-                args=(Path(event.src_path),),
-            )
-            p.start()
+            add_new_observation_run_wrapper(Path(event.src_path))
+            # p = mp.Process(
+            #     target=add_new_observation_run_wrapper,
+            #     args=(Path(event.src_path),),
+            # )
+            # p.start()
 
         else:
-            print(f"File created - {event.src_path}")
+            suffix = Path(event.src_path).suffix
+            if suffix not in ['.filepart', '.bck', '.swp']:
+                print(f"File created - {event.src_path}")
 
-            #   Add new data file instance
-            p = mp.Process(
-                target=add_new_data_file_wrapper,
-                args=(Path(event.src_path), self.directory_to_monitor,),
-            )
-            p.start()
+                #   Add new data file instance
+                add_new_data_file_wrapper(
+                    Path(event.src_path),
+                    self.directory_to_monitor,
+                )
+                # p = mp.Process(
+                #     target=add_new_data_file_wrapper,
+                #     args=(Path(event.src_path), self.directory_to_monitor,),
+                # )
+                # p.start()
 
     def on_deleted(self, event):
+        # print('IN DELETE')
         if event.is_directory:
             print(f"Directory deleted - {event.src_path}")
 
@@ -180,7 +195,7 @@ class Handler(FileSystemEventHandler):
 
         else:
             suffix = Path(event.src_path).suffix
-            if suffix not in ['.filepart', '.bck']:
+            if suffix not in ['.filepart', '.bck', '.swp']:
                 print(f"File deleted - {event.src_path}")
 
                 #   Delete data file object
@@ -205,7 +220,7 @@ class Handler(FileSystemEventHandler):
                 print('Directory move cannot be applied...')
         else:
             suffix = Path(event.src_path).suffix
-            if suffix not in ['.filepart', '.bck']:
+            if suffix not in ['.filepart', '.bck', '.swp']:
                 print(f"File moved - {event.src_path} -> {event.dest_path}")
 
                 #   Find and update data file
@@ -216,35 +231,35 @@ class Handler(FileSystemEventHandler):
                 except:
                     print('File move cannot be applied...')
 
-    def on_modified(self, event):
-        if not event.is_directory:
-            suffix = Path(event.src_path).suffix
-            if suffix not in ['.filepart', '.bck']:
-                print(f"File modified - {event.src_path}")
+    # def on_modified(self, event):
+    #     if not event.is_directory:
+    #         suffix = Path(event.src_path).suffix
+    #         if suffix not in ['.filepart', '.bck', '.swp']:
+    #             print(f"File modified - {event.src_path}")
 
-                try:
-                    #   Find data file object
-                    data_file = DataFile.objects.get(datafile=event.src_path)
+    #             try:
+    #                 #   Find data file object
+    #                 data_file = DataFile.objects.get(datafile=event.src_path)
 
-                    #   Delete old object relations
-                    objects = data_file.object_set.all()
-                    for object_ in objects:
-                        object_.datafiles.remove(data_file)
+    #                 #   Delete old object relations
+    #                 objects = data_file.object_set.all()
+    #                 for object_ in objects:
+    #                     object_.datafiles.remove(data_file)
 
-                    #   Find observation run
-                    source_path = event.src_path.split(self.directory_to_monitor)[1].split('/')[0]
-                    print('source_path', source_path)
-                    observation_run = ObservationRun.objects.get(name=source_path)
+    #                 #   Find observation run
+    #                 source_path = event.src_path.split(self.directory_to_monitor)[1].split('/')[0]
+    #                 print('source_path', source_path)
+    #                 observation_run = ObservationRun.objects.get(name=source_path)
 
-                    #   Evaluate change data file
-                    evaluate_data_file(data_file, observation_run)
+    #                 #   Evaluate change data file
+    #                 evaluate_data_file(data_file, observation_run)
 
-                    #   Update observation run statistic
-                    observation_run_statistic_update(observation_run)
+    #                 #   Update observation run statistic
+    #                 observation_run_statistic_update(observation_run)
 
-                except Exception as e:
-                    print('File modification cannot be applied...')
-                    print(e)
+    #             except Exception as e:
+    #                 print('File modification cannot be applied...')
+    #                 print(e)
 
 
 if __name__ == '__main__':
