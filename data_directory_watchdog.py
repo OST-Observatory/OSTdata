@@ -179,11 +179,13 @@ class Handler(FileSystemEventHandler):
             observation_run.delete()
 
         else:
-            print(f"File deleted - {event.src_path}")
+            suffix = Path(event.src_path).suffix
+            if suffix not in ['.filepart', '.bck']:
+                print(f"File deleted - {event.src_path}")
 
-            #   Delete data file object
-            data_file = DataFile.objects.get(datafile=event.src_path)
-            data_file.delete()
+                #   Delete data file object
+                data_file = DataFile.objects.get(datafile=event.src_path)
+                data_file.delete()
 
     def on_moved(self, event):
         if event.is_directory:
