@@ -9,7 +9,7 @@ from astropy.time import Time
 import astropy.units as u
 from astropy.table import Table
 from astropy.timeseries import TimeSeries, aggregate_downsample
-from astropy.coordinates import SkyCoord, AltAz, get_moon, EarthLocation
+from astropy.coordinates import SkyCoord, AltAz, get_body, EarthLocation
 
 from skyfield.data import hipparcos
 from skyfield.api import load
@@ -208,7 +208,7 @@ def plot_visibility(start_hjd, exposure_time, ra, dec):
 
         obj_altaz = obj.transform_to(frame_obj)
 
-        moon = get_moon(times)
+        moon = get_body('moon', times)
         moon_altaz = moon.transform_to(frame_obj)
 
         times = times.to_datetime()
