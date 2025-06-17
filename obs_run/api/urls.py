@@ -2,7 +2,12 @@ from django.urls import include, path
 
 from rest_framework import routers
 
-from .views import RunViewSet, DataFileViewSet, getRunDataFile
+from .views import (
+    RunViewSet,
+    DataFileViewSet,
+    getRunDataFile,
+    getDashboardStats
+)
 
 app_name = 'runs-api'
 
@@ -17,4 +22,5 @@ urlpatterns = [
         getRunDataFile,
         name='observation_run_datafiles',
     ),
+    path('dashboard/stats/', getDashboardStats, name='dashboard_stats'),
 ]

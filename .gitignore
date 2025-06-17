@@ -24,3 +24,13 @@ ostdata/.env
 .idea/
 db.sqlite3.save
 !media/docs/Bulk_system_example.csv
+*.txt
+*.dat
+read_cr2.py
+read_ser.py
+ok_but_wrong/
+test_data*
+favicon_old.ico
+generate_skychart/
+*.env
+

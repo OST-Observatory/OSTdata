@@ -45,10 +45,12 @@ INSTALLED_APPS = [
     'rest_framework',
     'rest_framework_datatables',
     'django_filters',
-    'simple_history'
+    'simple_history',
+    'corsheaders',
 ]
 
 MIDDLEWARE = [
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -82,11 +84,14 @@ TEMPLATES = [
 # https://github.com/izimobil/django-rest-framework-datatables
 
 REST_FRAMEWORK = {
-    'DEFAULT_PERMISSION_CLASSES': (
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework.authentication.TokenAuthentication',
+        'rest_framework.authentication.SessionAuthentication',
+    ],
+    'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticatedOrReadOnly',
         'ostdata.custom_permissions.IsAllowedOnRun',
-    ),
-
+    ],
     'DEFAULT_RENDERER_CLASSES': (
         'rest_framework.renderers.JSONRenderer',
         'rest_framework.renderers.BrowsableAPIRenderer',
@@ -177,3 +182,11 @@ if env("DEVICE") in platform.node():
         )
 else:
    from .settings_development import DEBUG, ALLOWED_HOSTS, DATABASES, LOGGING
+
+# CORS Einstellungen
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:5173",  # Vite dev server
+    "http://127.0.0.1:5173",
+]
+
+CORS_ALLOW_CREDENTIALS = True

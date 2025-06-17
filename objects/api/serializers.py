@@ -4,6 +4,7 @@ from rest_framework.serializers import (
     ModelSerializer,
     SerializerMethodField,
     PrimaryKeyRelatedField,
+    IntegerField,
 )
 
 from objects.models import Object
@@ -21,6 +22,7 @@ class ObjectListSerializer(ModelSerializer):
     tags = SerializerMethodField()
     href = SerializerMethodField()
     object_type_display = SerializerMethodField()
+    last_modified = SerializerMethodField()
     tag_ids = PrimaryKeyRelatedField(
         many=True,
         queryset=Tag.objects.all(),
@@ -43,6 +45,7 @@ class ObjectListSerializer(ModelSerializer):
             'ra_hms',
             'dec_dms',
             'object_type_display',
+            'last_modified',
             # 'simbad_resolved',
         ]
         read_only_fields = ('pk',)
@@ -61,3 +64,8 @@ class ObjectListSerializer(ModelSerializer):
 
     def get_object_type_display(self, obj):
         return obj.get_object_type_display()
+
+    def get_last_modified(self, obj):
+        history = obj.history.order_by('-history_date').first()
+        return history.history_date if history else None
+
