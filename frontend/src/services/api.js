@@ -1,6 +1,8 @@
 import { useAuthStore } from '@/store/auth'
+import router from '@/router'
+import { useNotifyStore } from '@/store/notify'
 
-const API_BASE_URL = '/api'
+const API_BASE_URL = import.meta.env?.VITE_API_BASE || '/api'
 
 async function fetchWithAuth(url, options = {}) {
   const authStore = useAuthStore()
@@ -17,13 +19,22 @@ async function fetchWithAuth(url, options = {}) {
   let fullUrl = `${API_BASE_URL}${url}`
   if (options.params) {
     const searchParams = new URLSearchParams()
+    const hasLimitProvided = Object.prototype.hasOwnProperty.call(options.params, 'limit')
     Object.entries(options.params).forEach(([key, value]) => {
       if (value !== undefined && value !== null) {
-        // Convert page_size to limit for Django REST Framework
-        if (key === 'page_size') {
-          searchParams.append('limit', value)
+        // Preserve original key; if value is an array, append each entry
+        if (Array.isArray(value)) {
+          value.forEach((v) => {
+            if (v !== undefined && v !== null && v !== '') {
+              searchParams.append(key, v)
+            }
+          })
         } else {
           searchParams.append(key, value)
+        }
+        // Add compatibility alias when page_size is provided (support both PageNumber and LimitOffset pagination)
+        if (key === 'page_size' && !hasLimitProvided) {
+          searchParams.append('limit', value)
         }
       }
     })
@@ -38,6 +49,32 @@ async function fetchWithAuth(url, options = {}) {
     headers
   })
 
+  // Global 401 handling: clear auth and redirect to login
+  if (response.status === 401) {
+    try {
+      await authStore.logout()
+    } catch (e) {
+      // ignore
+    }
+    try {
+      const path = window?.location?.pathname || '/'
+      const search = window?.location?.search || ''
+      const hash = window?.location?.hash || ''
+      const next = `${path}${search}${hash}`
+      if (router.currentRoute.value.path !== '/login') {
+        router.push({ path: '/login', query: { next } })
+      }
+    } catch (e) {
+      // Router not available (unlikely); hard redirect
+      if (typeof window !== 'undefined') {
+        window.location.href = '/login'
+      }
+    }
+    const error = new Error('Unauthorized')
+    error.status = 401
+    throw error
+  }
+
   if (!response.ok) {
     const error = new Error(`API error: ${response.status}`)
     error.status = response.status
@@ -47,6 +84,11 @@ async function fetchWithAuth(url, options = {}) {
     } catch (e) {
       // Handle non-JSON response silently
     }
+    try {
+      const notify = useNotifyStore()
+      const msg = error?.data?.detail || error?.data?.error || `API error ${response.status}`
+      notify.error(msg)
+    } catch {}
     throw error
   }
 
@@ -65,6 +107,83 @@ export const api = {
   getObservationRun: (id) => fetchWithAuth(`/runs/runs/${id}/`),
   getObservationRuns: (params) => fetchWithAuth('/runs/runs/', { params }),
   getAllObservationRuns: () => fetchWithAuth('/runs/runs/?limit=1000'),  // Get all runs for filtering
+  updateObservationRun: (id, data) => fetchWithAuth(`/runs/runs/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }),
+  getRunDataFiles: (runId) => fetchWithAuth(`/runs/runs/${runId}/datafiles/`),
+  getRunDataFilesPaged: (runId, params = {}) => {
+    const queryParams = {
+      observation_run: runId,
+      page: params.page || 1,
+      limit: params.limit || 10,
+    }
+    if (params.file_type) queryParams.file_type = params.file_type
+    if (params.binning) queryParams.binning = params.binning
+    if (params.instrument) queryParams.instrument = params.instrument
+    if (params.main_target) queryParams.main_target = params.main_target
+    if (params.exptime_min != null) queryParams.exptime_min = params.exptime_min
+    if (params.exptime_max != null) queryParams.exptime_max = params.exptime_max
+    if (params.exposure_type && Array.isArray(params.exposure_type) && params.exposure_type.length) {
+      // MultipleChoiceFilter: repeated query params
+      params.exposure_type.forEach(v => {
+        if (v != null && v !== '') {
+          if (!queryParams.exposure_type) queryParams.exposure_type = []
+          queryParams.exposure_type.push(v)
+        }
+      })
+    }
+    if (params.spectroscopy != null) queryParams.spectroscopy = params.spectroscopy
+    if (params.file_name) queryParams.file_name = params.file_name
+    if (params.pixel_count_min != null) queryParams.pixel_count_min = params.pixel_count_min
+    if (params.pixel_count_max != null) queryParams.pixel_count_max = params.pixel_count_max
+    return fetchWithAuth('/runs/datafiles/', { params: queryParams })
+  },
+  getDataFileThumbnailUrl: (pk, w = 512) => {
+    const base = API_BASE_URL
+    const url = `${base}/runs/datafiles/${pk}/thumbnail/?w=${encodeURIComponent(w)}`
+    return url
+  },
+  getDataFileDownloadUrl: (pk) => {
+    const base = API_BASE_URL
+    return `${base}/runs/datafiles/${pk}/download/`
+  },
+  getRunDataFilesZipUrl: (runId, ids = [], filters) => {
+    const base = API_BASE_URL
+    const params = new URLSearchParams()
+    if (ids && ids.length) params.set('ids', ids.join(','))
+    // carry over current filters if present (subset used by backend)
+    const carry = ['file_type','instrument','main_target','exptime_min','exptime_max','file_name','pixel_count_min','pixel_count_max','exposure_type','spectroscopy']
+    if (filters && typeof filters === 'object') {
+      carry.forEach(k => {
+        const v = filters[k]
+        if (v == null || v === '') return
+        if (Array.isArray(v)) {
+          v.forEach(x => params.append(k, x))
+        } else {
+          params.set(k, v)
+        }
+      })
+    }
+    const qs = params.toString()
+    return `${base}/runs/runs/${runId}/download/${qs ? `?${qs}` : ''}`
+  },
+  getDataFilesZipUrl: (ids = [], filters) => {
+    const base = API_BASE_URL
+    const params = new URLSearchParams()
+    if (ids && ids.length) params.set('ids', ids.join(','))
+    const carry = ['file_type','instrument','main_target','exptime_min','exptime_max','file_name','pixel_count_min','pixel_count_max','exposure_type','spectroscopy']
+    if (filters && typeof filters === 'object') {
+      carry.forEach(k => {
+        const v = filters[k]
+        if (v == null || v === '') return
+        if (Array.isArray(v)) {
+          v.forEach(x => params.append(k, x))
+        } else {
+          params.set(k, v)
+        }
+      })
+    }
+    const qs = params.toString()
+    return `${base}/runs/datafiles/download/${qs ? `?${qs}` : ''}`
+  },
 
   // Objects
   getObjects: (params) => {
@@ -110,16 +229,24 @@ export const api = {
     if (params.ra !== undefined) queryParams.ra = params.ra
     if (params.dec !== undefined) queryParams.dec = params.dec
     if (params.radius !== undefined) queryParams.radius = params.radius
+    // Add observation type filters if present
+    if (params.photometry !== undefined && params.photometry !== null) queryParams.photometry = params.photometry
+    if (params.spectroscopy !== undefined && params.spectroscopy !== null) queryParams.spectroscopy = params.spectroscopy
+    // Add lights count filters if present
+    if (params.n_light_min !== undefined && params.n_light_min !== null && params.n_light_min !== '') queryParams.n_light_min = params.n_light_min
+    if (params.n_light_max !== undefined && params.n_light_max !== null && params.n_light_max !== '') queryParams.n_light_max = params.n_light_max
     return fetchWithAuth('/objects/vuetify', { params: queryParams })
   },
   getObject: (id) => fetchWithAuth(`/objects/${id}/`),
+  getObjectObservationRuns: (id) => fetchWithAuth(`/objects/${id}/observation_runs/`),
+  getObjectDataFiles: (id) => fetchWithAuth(`/objects/${id}/datafiles/`),
   getRecentObjects: () => fetchWithAuth('/objects/?limit=10&ordering=-created_at'),
   createObject: (data) => fetchWithAuth('/objects/', {
     method: 'POST',
     body: JSON.stringify(data)
   }),
   updateObject: (id, data) => fetchWithAuth(`/objects/${id}/`, {
-    method: 'PUT',
+    method: 'PATCH',
     body: JSON.stringify(data)
   }),
   deleteObject: (id) => fetchWithAuth(`/objects/${id}/`, {
@@ -127,6 +254,9 @@ export const api = {
   }),
 
   // Tags
-  getTags: () => fetchWithAuth('/tags/'),
-  getTag: (id) => fetchWithAuth(`/tags/${id}/`)
+  getTags: (params = {}) => fetchWithAuth('/tags/', { params }),
+  getTag: (id) => fetchWithAuth(`/tags/${id}/`),
+  createTag: (data) => fetchWithAuth('/tags/', { method: 'POST', body: JSON.stringify(data) }),
+  updateTag: (id, data) => fetchWithAuth(`/tags/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deleteTag: (id) => fetchWithAuth(`/tags/${id}/`, { method: 'DELETE' })
 } 

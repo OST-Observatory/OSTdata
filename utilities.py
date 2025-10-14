@@ -17,7 +17,7 @@ from scipy import ndimage, signal
 import matplotlib.pyplot as plt
 
 import django
-from django.db.models import F, ExpressionWrapper, DecimalField
+from django.db.models import F, ExpressionWrapper, DecimalField, FloatField
 
 os.environ["DJANGO_SETTINGS_MODULE"] = "ostdata.settings"
 django.setup()
@@ -169,9 +169,13 @@ def evaluate_data_file(data_file, observation_run, print_to_terminal=False):
     """
     #   Set data file information from file header data
     data_file.set_info()
+    data_file.save()
+    print('data_file.exposure_type:')
+    print(data_file.exposure_type)
 
-    target = data_file.main_target
+    target = (data_file.main_target or '').strip()
     expo_type = data_file.exposure_type
+    target_lower = target.lower()
 
     #   Define special targets
     special_targets = [
@@ -185,15 +189,18 @@ def evaluate_data_file(data_file, observation_run, print_to_terminal=False):
 
     #   Look for associated objects
     if (
-            target != '' and
-            target != 'Unknown' and
+            target_lower != '' and
+            target_lower != 'unknown' and
             expo_type == 'LI' and
-            'flat' not in target and
-            'dark' not in target and
+            'flat' not in target_lower and
+            'dark' not in target_lower and
+            data_file.ra != -1 and
+            data_file.ra is not None and
             data_file.ra != 0. and
+            data_file.dec != -1 and
+            data_file.dec is not None and
             data_file.dec != 0.
     ):
-
         #   Tolerance in degree
         # t = 0.1
         t = 0.5
@@ -202,26 +209,39 @@ def evaluate_data_file(data_file, observation_run, print_to_terminal=False):
             t = 1.0
 
         if target in special_targets or target in solar_system:
-            objs = Object.objects \
-                .filter(name__icontains=target)
+            objs = Object.objects.filter(name__icontains=target)
         else:
-            objs = Object.objects \
+            # First, filter by a bounding box to reduce candidates
+            bbox = Object.objects \
                 .filter(ra__range=(data_file.ra - t, data_file.ra + t)) \
                 .filter(dec__range=(data_file.dec - t, data_file.dec + t))
-            # .filter(name__icontains=target) \
-        if len(objs) > 0:
+            # Annotate squared angular distance (no sqrt needed for ordering)
+            dist_sq = ExpressionWrapper(
+                (F('ra') - data_file.ra) * (F('ra') - data_file.ra) +
+                (F('dec') - data_file.dec) * (F('dec') - data_file.dec),
+                output_field=FloatField()
+            )
+            objs = bbox.annotate(distance_sq=dist_sq).order_by('distance_sq')
+
+        if objs.exists():
             if print_to_terminal:
-                print('Object already known...')
-            #   If there is one or more objects returned,
-            #   select the closest object
-            obj = objs.annotate(
-                distance=ExpressionWrapper(
-                    ((F('ra') - data_file.ra) ** 2 +
-                     (F('dec') - data_file.dec) ** 2
-                     ) ** (1. / 2.),
-                    output_field=DecimalField()
-                )
-            ).order_by('distance')[0]
+                print('Object already known (target: {})'.format(target))
+            obj = objs.first()
+            # Extra safety: if not in bbox case, also try exact/iexact name match
+        else:
+            obj = None
+            # # Fallback 1: strict name match
+            # by_name = Object.objects.filter(name__iexact=target)
+            # if by_name.exists():
+            #     obj = by_name.first()
+            # else:
+            #     by_name_ic = Object.objects.filter(name__icontains=target)
+            #     if by_name_ic.exists():
+            #         obj = by_name_ic.first()
+            #     else:
+            #         obj = None
+
+        if obj is not None:
             obj.datafiles.add(data_file)
             obj.observation_run.add(observation_run)
             obj.is_main = True
@@ -249,7 +269,7 @@ def evaluate_data_file(data_file, observation_run, print_to_terminal=False):
                 )
 
         #   Handling of Solar system objects
-        elif target in solar_system:
+        elif obj is None and target in solar_system:
             #     Make a new object
             obj = Object(
                 name=target,
@@ -266,7 +286,7 @@ def evaluate_data_file(data_file, observation_run, print_to_terminal=False):
             obj.save()
 
         #   Handling of special targets
-        elif target in special_targets:
+        elif obj is None and target in special_targets:
             #     Make a new object
             obj = Object(
                 name=target,
@@ -282,7 +302,7 @@ def evaluate_data_file(data_file, observation_run, print_to_terminal=False):
             obj.save()
         else:
             if print_to_terminal:
-                print('New object')
+                print('New object (target: {})'.format(target))
             #   Set Defaults
             object_ra = data_file.ra
             object_dec = data_file.dec
@@ -292,20 +312,24 @@ def evaluate_data_file(data_file, observation_run, print_to_terminal=False):
 
             #   Query Simbad for object name
             custom_simbad = Simbad()
+            # print(custom_simbad.list_votable_fields().pprint(max_lines=-1, max_width=-1))
             custom_simbad.add_votable_fields(
-                'otypes',
+                # 'otypes',
+                'maintype',
+                'alltypes',
                 'ids',
+                'flux(V)',
             )
             simbad_tbl = custom_simbad.query_object(target)
 
             #   Get Simbad coordinates
             if simbad_tbl is not None and len(simbad_tbl) > 0:
                 simbad_ra = Angle(
-                    simbad_tbl[0]['RA'],
-                    unit='hour',
+                    simbad_tbl[0]['ra'],
+                    unit='degree',
                 ).degree
                 simbad_dec = Angle(
-                    simbad_tbl[0]['DEC'],
+                    simbad_tbl[0]['dec'],
                     unit='degree',
                 ).degree
 
@@ -320,14 +344,18 @@ def evaluate_data_file(data_file, observation_run, print_to_terminal=False):
                     object_simbad_resolved = True
                     object_data_table = simbad_tbl[0]
 
+                if print_to_terminal:
+                    print('Object resolved based on name:')
+                    print(object_simbad_resolved)
+
             #   Search Simbad based on coordinates
             if not object_simbad_resolved:
                 simbad_region_query = Simbad()
                 simbad_region_query.add_votable_fields(
-                    'otypes',
+                    # 'otypes',
+                    'maintype',
+                    'alltypes',
                     'ids',
-                    'distance_result',
-                    # 'uvby',
                     'flux(V)',
                 )
                 result_table = simbad_region_query.query_region(
@@ -346,18 +374,18 @@ def evaluate_data_file(data_file, observation_run, print_to_terminal=False):
                     #   are available otherwise use the object
                     #   with the smallest distance to the
                     #   coordinates
-                    if np.all(result_table['FLUX_V'].mask):
+                    if np.all(result_table['V'].mask):
                         index = 0
                     else:
                         index = np.argmin(
-                            result_table['FLUX_V'].data
+                            result_table['V'].data
                         )
                     simbad_ra = Angle(
-                        result_table[index]['RA'],
-                        unit='hour',
+                        result_table[index]['ra'],
+                        unit='degree',
                     ).degree
                     simbad_dec = Angle(
-                        result_table[index]['DEC'],
+                        result_table[index]['dec'],
                         unit='degree',
                     ).degree
                     object_ra = simbad_ra
@@ -365,23 +393,35 @@ def evaluate_data_file(data_file, observation_run, print_to_terminal=False):
                     object_simbad_resolved = True
                     object_data_table = result_table[index]
 
+                if print_to_terminal:
+                    print('Object resolved based on coordinates:')
+                    print(object_simbad_resolved)
+
             #   Set object type based on Simbad
             if object_simbad_resolved:
-                object_types = object_data_table['OTYPES']
+                # print('object_data_table:')
+                # print(object_data_table.pprint(max_lines=-1, max_width=-1))
+                # print(object_data_table)
 
-                #   Decode information in object string to
-                #   get a rough object estimate
-                if 'ISM' in object_types or 'PN' in object_types:
-                    object_type = 'NE'
-                elif 'Cl*' in object_types or 'As*' in object_types:
+                raw_types = object_data_table['alltypes.otypes']
+                types_str = '' if raw_types is None else str(raw_types)
+                # print('types_str:')
+                # print(types_str)
+
+                #   Decode information in object string to get a rough object estimate
+                if 'Cl*' in types_str or 'As*' in types_str or 'OpC' in types_str:
                     object_type = 'SC'
-                elif 'G' in object_types:
+                elif 'ISM' in types_str or 'PN' in types_str or 'SNR' in types_str or 'HII' in types_str:
+                    object_type = 'NE'
+                elif '|G|' in types_str or 'Sy2' in types_str or 'LIN' in types_str:
                     object_type = 'GA'
-                elif '*' in object_types:
+                elif '*' in types_str:
                     object_type = 'ST'
 
                 #   Set default name
-                object_name = object_data_table['MAIN_ID']
+                main_id = object_data_table['main_id']
+                if main_id:
+                    object_name = str(main_id)
 
             #     Make a new object
             obj = Object(
@@ -407,7 +447,15 @@ def evaluate_data_file(data_file, observation_run, print_to_terminal=False):
                 )
 
                 #   Get aliases from Simbad
-                aliases = object_data_table['IDS'].split('|')
+                aliases_field = None
+                try:
+                    aliases_field = object_data_table['IDS']
+                except Exception:
+                    try:
+                        aliases_field = object_data_table['ids']
+                    except Exception:
+                        aliases_field = None
+                aliases = [] if aliases_field is None else str(aliases_field).split('|')
                 # print(aliases)
 
                 #   Create Simbad link

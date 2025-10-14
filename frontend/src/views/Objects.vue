@@ -1,6 +1,5 @@
 <template>
-  <div class="objects">
-    <div class="container">
+  <v-container fluid class="objects">
       <!-- Header with title -->
       <div class="d-flex align-center justify-space-between mb-4">
         <h1 class="text-h4">Objects</h1>
@@ -56,11 +55,71 @@
             </v-col>
           </v-row>
           <v-row class="mt-2">
+            <v-col cols="12" sm="6">
+              <v-text-field
+                v-model.number="nLightMin"
+                type="number"
+                label="Lights min"
+                prepend-inner-icon="mdi-brightness-5"
+                single-line
+                hide-details
+                density="comfortable"
+                variant="outlined"
+                clearable
+              ></v-text-field>
+            </v-col>
+            <v-col cols="12" sm="6">
+              <v-text-field
+                v-model.number="nLightMax"
+                type="number"
+                label="Lights max"
+                prepend-inner-icon="mdi-brightness-7"
+                single-line
+                hide-details
+                density="comfortable"
+                variant="outlined"
+                clearable
+              ></v-text-field>
+            </v-col>
+          </v-row>
+          <v-row>
+            <v-col cols="12" sm="6">
+              <v-select
+                v-model="photometryFilter"
+                :items="boolFilterItems"
+                item-title="title"
+                item-value="value"
+                label="Photometry"
+                prepend-inner-icon="mdi-weather-sunny"
+                single-line
+                hide-details
+                density="comfortable"
+                variant="outlined"
+                clearable
+              ></v-select>
+            </v-col>
+            <v-col cols="12" sm="6">
+              <v-select
+                v-model="spectroscopyFilter"
+                :items="boolFilterItems"
+                item-title="title"
+                item-value="value"
+                label="Spectroscopy"
+                prepend-inner-icon="mdi-chart-bell-curve"
+                single-line
+                hide-details
+                density="comfortable"
+                variant="outlined"
+                clearable
+              ></v-select>
+            </v-col>
+          </v-row>
+          <v-row>
             <v-col cols="12">
-              <v-card variant="outlined" class="pa-2 coordinate-filter">
+              <v-card variant="outlined" class="pa-2 coordinate-filter" role="group" aria-labelledby="coord-title">
                 <v-card-title class="text-subtitle-1 d-flex align-center coordinate-filter-title">
-                  <v-icon class="mr-2">mdi-crosshairs-gps</v-icon>
-                  Coordinates
+                  <v-icon class="mr-2" aria-hidden="true">mdi-crosshairs-gps</v-icon>
+                  <span id="coord-title">Coordinates</span>
                 </v-card-title>
                 <v-card-text>
                   <v-row>
@@ -73,6 +132,9 @@
                         hide-details
                         placeholder="HH:MM:SS"
                         prepend-inner-icon="mdi-alpha-r-circle"
+                        :rules="raRules"
+                        autocomplete="off"
+                        inputmode="text"
                       ></v-text-field>
                     </v-col>
                     <v-col cols="12" sm="4">
@@ -84,11 +146,14 @@
                         hide-details
                         placeholder="DD:MM:SS"
                         prepend-inner-icon="mdi-alpha-d-circle"
+                        :rules="decRules"
+                        autocomplete="off"
+                        inputmode="text"
                       ></v-text-field>
                     </v-col>
                     <v-col cols="12" sm="4">
                       <v-row>
-                        <v-col cols="8">
+                        <v-col cols="8" sm="7" xs="8">
                           <v-text-field
                             v-model="radius"
                             label="Radius"
@@ -97,15 +162,19 @@
                             hide-details
                             type="number"
                             prepend-inner-icon="mdi-ruler"
+                            :rules="radiusRules"
+                            autocomplete="off"
+                            inputmode="decimal"
                           ></v-text-field>
                         </v-col>
-                        <v-col cols="4">
+                        <v-col cols="4" sm="5" xs="4">
                           <v-select
                             v-model="radiusUnit"
                             :items="['arcsec', 'arcmin', 'deg']"
                             density="comfortable"
                             variant="outlined"
                             hide-details
+                            autocomplete="off"
                           ></v-select>
                         </v-col>
                       </v-row>
@@ -123,6 +192,17 @@
                         Apply Coordinates Filter
                       </v-btn>
                     </v-col>
+                    <v-col cols="12" class="mt-1">
+                      <v-btn
+                        block
+                        variant="text"
+                        color="secondary"
+                        @click="resetFilters"
+                        prepend-icon="mdi-filter-remove"
+                      >
+                        Reset Filters
+                      </v-btn>
+                    </v-col>
                   </v-row>
                 </v-card-text>
               </v-card>
@@ -130,6 +210,9 @@
           </v-row>
         </v-card-text>
       </v-card>
+
+      <!-- Error state -->
+      <v-alert v-if="objectsError" type="error" variant="tonal" class="mb-3">{{ objectsError }}</v-alert>
 
       <!-- Objects table -->
       <v-card>
@@ -143,14 +226,26 @@
           @update:sort-by="handleSort"
           hide-default-footer
         >
+          <template #loading>
+            <LoadingState type="table" />
+          </template>
+
+          <template #no-data>
+            <EmptyState text="No objects found." />
+          </template>
           <!-- Name column with link -->
           <template v-slot:item.name="{ item }">
-            <router-link
-              :to="`/objects/${item.pk}`"
-              class="text-decoration-none primary--text"
-            >
-              {{ item.name }}
-            </router-link>
+            <v-tooltip :text="item.name" location="top">
+              <template #activator="{ props }">
+                <router-link
+                  v-bind="props"
+                  :to="`/objects/${item.pk}`"
+                  class="text-decoration-none primary--text table-link cell-truncate"
+                >
+                  {{ item.name }}
+                </router-link>
+              </template>
+            </v-tooltip>
           </template>
 
           <!-- Type column with chip -->
@@ -166,6 +261,26 @@
           <!-- Dec column -->
           <template v-slot:item.dec="{ item }">
             {{ formatDec(item.dec) }}
+          </template>
+
+          <!-- Lights column -->
+          <template v-slot:item.n_light="{ item }">
+            {{ item.n_light ?? '—' }}
+          </template>
+
+          <!-- Light exposure time column -->
+          <template v-slot:item.light_expo_time="{ item }">
+            {{ formatExposureTime(item.light_expo_time || 0) }}
+          </template>
+
+          <!-- Photometry column -->
+          <template v-slot:item.photometry="{ item }">
+            <v-icon :color="item.photometry ? 'success' : 'disabled'">{{ item.photometry ? 'mdi-check-circle' : 'mdi-close-circle' }}</v-icon>
+          </template>
+
+          <!-- Spectroscopy column -->
+          <template v-slot:item.spectroscopy="{ item }">
+            <v-icon :color="item.spectroscopy ? 'success' : 'disabled'">{{ item.spectroscopy ? 'mdi-check-circle' : 'mdi-close-circle' }}</v-icon>
           </template>
 
           <!-- Created at column -->
@@ -190,36 +305,23 @@
             <div class="d-flex flex-wrap gap-1">
               <v-chip
                 v-for="run in item.observation_run"
-                :key="run.pk"
-                size="small"
-                :color="getRunStatusColor(run.reduction_status)"
+                :key="run.pk || run.id || run.name"
+                size="x-small"
+                variant="outlined"
+                color="primary"
                 class="mr-1"
-                :to="run.href"
+                :to="(run.pk || run.id) ? (`/observation-runs/${run.pk || run.id}`) : undefined"
                 link
               >
                 {{ run.name }}
-                <v-tooltip
-                  :text="`Reduction status: ${run.reduction_status_display}\nFITS: ${run.n_fits}\nExposure: ${formatExposureTime(run.expo_time)}`"
-                  location="top"
-                >
-                  <template v-slot:activator="{ props }">
-                    <v-icon
-                      v-bind="props"
-                      size="small"
-                      class="ml-1"
-                    >
-                      mdi-information
-                    </v-icon>
-                  </template>
-                </v-tooltip>
               </v-chip>
             </div>
           </template>
         </v-data-table>
 
         <!-- Custom pagination controls -->
-        <v-card-actions class="d-flex align-center justify-space-between px-4 py-2">
-          <div class="d-flex align-center">
+        <v-card-actions class="d-flex align-center justify-space-between px-4 py-2 card-actions-responsive">
+          <div class="d-flex align-center actions-left">
             <span class="text-body-2 mr-4">Items per page:</span>
             <v-select
               v-model="itemsPerPage"
@@ -232,10 +334,11 @@
               class="items-per-page-select"
               style="width: 100px"
               @update:model-value="handleItemsPerPageChange"
+              aria-label="Items per page"
             ></v-select>
           </div>
 
-          <div class="d-flex align-center">
+          <div class="d-flex align-center actions-right">
             <span class="text-body-2 mr-4">
               {{ paginationInfo }}
             </span>
@@ -244,47 +347,71 @@
               variant="text"
               :disabled="currentPage === 1"
               @click="handlePageChange(1)"
-              class="mx-1"
+              class="mx-1 pagination-btn"
+              aria-label="First page"
             ></v-btn>
             <v-btn
               icon="mdi-chevron-left"
               variant="text"
               :disabled="currentPage === 1"
               @click="handlePageChange(currentPage - 1)"
-              class="mx-1"
+              class="mx-1 pagination-btn"
+              aria-label="Previous page"
             ></v-btn>
             <v-btn
               icon="mdi-chevron-right"
               variant="text"
               :disabled="currentPage >= totalPages"
               @click="handlePageChange(currentPage + 1)"
-              class="mx-1"
+              class="mx-1 pagination-btn"
+              aria-label="Next page"
             ></v-btn>
             <v-btn
               icon="mdi-page-last"
               variant="text"
               :disabled="currentPage >= totalPages"
               @click="handlePageChange(totalPages)"
-              class="mx-1"
+              class="mx-1 pagination-btn"
+              aria-label="Last page"
             ></v-btn>
+            <v-btn
+              variant="text"
+              color="primary"
+              prepend-icon="mdi-content-copy"
+              class="ml-2"
+              @click="copyShareLink"
+              aria-label="Copy link to current view"
+            >
+              Copy link
+            </v-btn>
           </div>
         </v-card-actions>
       </v-card>
-    </div>
-  </div>
+  </v-container>
 </template>
 
 <script setup>
 import { ref, onMounted, watch, computed } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
+import { useQuerySync } from '@/composables/useQuerySync'
 import { api } from '@/services/api'
 import { debounce } from 'lodash'
+import { formatDateTime } from '@/utils/datetime'
+import { useNotifyStore } from '@/store/notify'
+import EmptyState from '@/components/ui/EmptyState.vue'
+import ErrorState from '@/components/ui/ErrorState.vue'
+import LoadingState from '@/components/ui/LoadingState.vue'
 
 // Data
+const router = useRouter()
+const route = useRoute()
+
 const currentPage = ref(1)
 const itemsPerPage = ref(10)
 const totalItems = ref(0)
 const objects = ref([])
 const loading = ref(false)
+const objectsError = ref('')
 const search = ref('')
 const selectedType = ref(null)
 const selectedRun = ref(null)
@@ -292,10 +419,58 @@ const sortBy = ref('name')
 const sortDesc = ref(false)
 const observationRuns = ref([])
 const loadingRuns = ref(false)
+const photometryFilter = ref(null)
+const spectroscopyFilter = ref(null)
+const nLightMin = ref(null)
+const nLightMax = ref(null)
 const ra = ref('')
 const dec = ref('')
 const radius = ref('')
 const radiusUnit = ref('arcsec')
+const notify = useNotifyStore()
+const boolFilterItems = [
+  { title: 'Yes', value: true },
+  { title: 'No', value: false },
+]
+
+// Query param helpers
+const parseIntParam = (v, fallback) => {
+  const n = Number.parseInt(String(v))
+  return Number.isFinite(n) && n > 0 ? n : fallback
+}
+
+const truthy = (v) => v !== undefined && v !== null && v !== ''
+
+const serializeQuery = () => {
+  const q = {}
+  q.page = currentPage.value
+  q.pageSize = itemsPerPage.value
+  if (search.value) q.q = search.value
+  if (selectedType.value) q.type = selectedType.value
+  if (selectedRun.value?.pk) q.run = selectedRun.value.pk
+  if (sortBy.value) q.sort = sortBy.value
+  if (sortDesc.value) q.desc = '1'
+  if (ra.value) q.ra = ra.value
+  if (dec.value) q.dec = dec.value
+  if (radius.value) q.radius = radius.value
+  if (radiusUnit.value && radiusUnit.value !== 'arcsec') q.runit = radiusUnit.value
+  return q
+}
+
+const applyQuery = () => {
+  const q = route.query
+  currentPage.value = parseIntParam(q.page, 1)
+  itemsPerPage.value = parseIntParam(q.pageSize, 10)
+  if (truthy(q.q)) search.value = String(q.q)
+  if (truthy(q.type)) selectedType.value = String(q.type)
+  if (truthy(q.run)) selectedRun.value = { pk: String(q.run), name: String(q.run) }
+  if (truthy(q.sort)) sortBy.value = String(q.sort)
+  sortDesc.value = q.desc === '1'
+  if (truthy(q.ra)) ra.value = String(q.ra)
+  if (truthy(q.dec)) dec.value = String(q.dec)
+  if (truthy(q.radius)) radius.value = String(q.radius)
+  if (truthy(q.runit)) radiusUnit.value = String(q.runit)
+}
 
 // Computed properties
 const totalPages = computed(() => {
@@ -318,6 +493,10 @@ const headers = [
   { title: 'Object Type', key: 'object_type', sortable: true },
   { title: 'RA', key: 'ra', sortable: true },
   { title: 'Dec', key: 'dec', sortable: true },
+  { title: 'Lights', key: 'n_light', sortable: false },
+  { title: 'Light Exp. Time', key: 'light_expo_time', sortable: false },
+  { title: 'Photometry', key: 'photometry', sortable: false },
+  { title: 'Spectroscopy', key: 'spectroscopy', sortable: false },
   { title: 'Tags', key: 'tags', sortable: false },
   { title: 'Observation Runs', key: 'observation_runs', sortable: false }
 ]
@@ -342,10 +521,7 @@ const sortOptions = [
 ]
 
 // Methods
-const formatDate = (date) => {
-  if (!date) return 'N/A'
-  return new Date(date).toLocaleDateString()
-}
+const formatDate = (date) => formatDateTime(date, { dateStyle: 'short' })
 
 const formatRA = (ra) => {
   if (ra === undefined || ra === null) return 'N/A'
@@ -391,6 +567,7 @@ const fetchObservationRuns = async () => {
 const fetchObjects = async () => {
   try {
     loading.value = true
+    objectsError.value = ''
     const params = {
       page: currentPage.value,
       itemsPerPage: itemsPerPage.value === -1 ? 10000 : itemsPerPage.value,
@@ -407,17 +584,29 @@ const fetchObjects = async () => {
     
     // Add coordinate filter if coordinates are provided
     if (ra.value && dec.value && radius.value) {
-      params.ra = convertRAToDegrees(ra.value)
-      params.dec = convertDecToDegrees(dec.value)
-      
-      // Convert radius to arcseconds
-      let radiusArcsec = parseFloat(radius.value)
-      if (radiusUnit.value === 'arcmin') {
-        radiusArcsec *= 60
-      } else if (radiusUnit.value === 'deg') {
-        radiusArcsec *= 3600
+      const raDeg = safeConvertRA(ra.value)
+      const decDeg = safeConvertDec(dec.value)
+      const rad = Number.parseFloat(String(radius.value))
+      if (raDeg !== null && decDeg !== null && Number.isFinite(rad) && rad > 0) {
+        params.ra = raDeg
+        params.dec = decDeg
+        let radiusArcsec = rad
+        if (radiusUnit.value === 'arcmin') radiusArcsec *= 60
+        else if (radiusUnit.value === 'deg') radiusArcsec *= 3600
+        params.radius = radiusArcsec
       }
-      params.radius = radiusArcsec
+    }
+    if (photometryFilter.value !== null && photometryFilter.value !== undefined) {
+      params.photometry = photometryFilter.value
+    }
+    if (spectroscopyFilter.value !== null && spectroscopyFilter.value !== undefined) {
+      params.spectroscopy = spectroscopyFilter.value
+    }
+    if (nLightMin.value !== null && nLightMin.value !== undefined && nLightMin.value !== '') {
+      params.n_light_min = nLightMin.value
+    }
+    if (nLightMax.value !== null && nLightMax.value !== undefined && nLightMax.value !== '') {
+      params.n_light_max = nLightMax.value
     }
     
     const response = await api.getObjectsVuetify(params)
@@ -427,6 +616,7 @@ const fetchObjects = async () => {
     console.error('Error fetching objects:', error)
     objects.value = []
     totalItems.value = 0
+    objectsError.value = 'Failed to load objects.'
   } finally {
     loading.value = false
   }
@@ -435,13 +625,13 @@ const fetchObjects = async () => {
 const handlePageChange = (newPage) => {
   if (newPage >= 1 && newPage <= totalPages.value) {
     currentPage.value = newPage
-    fetchObjects()
+    syncQueryAndFetch()
   }
 }
 
 const handleItemsPerPageChange = (value) => {
   currentPage.value = 1
-  fetchObjects()
+  syncQueryAndFetch()
 }
 
 const handleSort = (newSortBy) => {
@@ -451,7 +641,7 @@ const handleSort = (newSortBy) => {
   } else {
     sortBy.value = 'name'  // default sorting
   }
-  fetchObjects()
+  syncQueryAndFetch()
 }
 
 const getRunStatusColor = (status) => {
@@ -487,39 +677,99 @@ const customFilter = (item, queryText, itemText) => {
 
 // Watch for changes in filters
 watch([search, selectedType, selectedRun], () => {
-  currentPage.value = 1  // Reset to first page when filters change
-  fetchObjects()
+  currentPage.value = 1
+  syncQueryAndFetch()
 })
 
 const applyCoordinateFilter = () => {
-  // Convert coordinates to decimal degrees
-  const raDeg = convertRAToDegrees(ra.value)
-  const decDeg = convertDecToDegrees(dec.value)
-  
-  // Convert radius to arcseconds
-  let radiusArcsec = parseFloat(radius.value)
-  if (radiusUnit.value === 'arcmin') {
-    radiusArcsec *= 60
-  } else if (radiusUnit.value === 'deg') {
-    radiusArcsec *= 3600
-  }
-  
-  // Update the filter parameters
   currentPage.value = 1
-  fetchObjects()
+  syncQueryAndFetch()
 }
 
-const convertRAToDegrees = (ra) => {
-  const [hours, minutes, seconds] = ra.split(':').map(Number)
+const resetFilters = () => {
+  search.value = ''
+  selectedType.value = null
+  selectedRun.value = null
+  ra.value = ''
+  dec.value = ''
+  radius.value = ''
+  radiusUnit.value = 'arcsec'
+  currentPage.value = 1
+  sortBy.value = 'name'
+  sortDesc.value = false
+  syncQueryAndFetch()
+}
+
+const copyShareLink = async () => {
+  try {
+    await navigator.clipboard.writeText(window.location.href)
+    notify.success('Link copied')
+  } catch (e) {
+    console.error('Copy link failed', e)
+  }
+}
+
+const safeConvertRA = (value) => {
+  if (!value || typeof value !== 'string') return null
+  const m = value.trim().match(/^([0-1]?\d|2[0-3]):([0-5]?\d):([0-5]?\d(?:\.\d+)?)$/)
+  if (!m) return null
+  const hours = Number(m[1])
+  const minutes = Number(m[2])
+  const seconds = Number(m[3])
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes) || !Number.isFinite(seconds)) return null
+  if (minutes >= 60 || seconds >= 60) return null
   return (hours + minutes / 60 + seconds / 3600) * 15
 }
 
-const convertDecToDegrees = (dec) => {
-  const [degrees, minutes, seconds] = dec.split(':').map(Number)
-  return degrees + minutes / 60 + seconds / 3600
+const safeConvertDec = (value) => {
+  if (!value || typeof value !== 'string') return null
+  const m = value.trim().match(/^([+\-]?)(\d{1,2}):([0-5]?\d):([0-5]?\d(?:\.\d+)?)$/)
+  if (!m) return null
+  const sign = m[1] === '-' ? -1 : 1
+  const degrees = Number(m[2])
+  const minutes = Number(m[3])
+  const seconds = Number(m[4])
+  if (!Number.isFinite(degrees) || !Number.isFinite(minutes) || !Number.isFinite(seconds)) return null
+  if (degrees > 90 || minutes >= 60 || seconds >= 60) return null
+  const dec = degrees + minutes / 60 + seconds / 3600
+  return sign * dec
 }
 
+const { applyQuery: applyQuerySync, syncQueryAndFetch } = useQuerySync(
+  { page: currentPage, pageSize: itemsPerPage, q: search, type: selectedType, run: selectedRun, phot: photometryFilter, spec: spectroscopyFilter, nlmin: nLightMin, nlmax: nLightMax, sort: sortBy, desc: sortDesc, ra, dec, radius, runit: radiusUnit },
+  [
+    { key: 'page', fromQuery: (v) => { const n = parseInt(v); return Number.isFinite(n) && n > 0 ? n : 1 }, defaultValue: 1 },
+    { key: 'pageSize', fromQuery: (v) => { const n = parseInt(v); return Number.isFinite(n) && (n > 0 || n === -1) ? n : 10 }, defaultValue: 10 },
+    { key: 'q' },
+    { key: 'type' },
+    { key: 'run', toQuery: (v) => v?.pk || v, fromQuery: (v) => v ? { pk: String(v), name: String(v) } : null },
+    { key: 'phot', toQuery: (v) => (v === true ? '1' : v === false ? '0' : undefined), fromQuery: (v) => (v === '1' ? true : v === '0' ? false : null) },
+    { key: 'spec', toQuery: (v) => (v === true ? '1' : v === false ? '0' : undefined), fromQuery: (v) => (v === '1' ? true : v === '0' ? false : null) },
+    { key: 'nlmin', toQuery: (v) => (v || v === 0 ? String(v) : undefined), fromQuery: (v) => (v !== undefined ? Number(v) : null) },
+    { key: 'nlmax', toQuery: (v) => (v || v === 0 ? String(v) : undefined), fromQuery: (v) => (v !== undefined ? Number(v) : null) },
+    { key: 'sort', defaultValue: 'name' },
+    { key: 'desc', fromQuery: (v) => v === '1', toQuery: (v) => (v ? '1' : undefined) },
+    { key: 'ra' },
+    { key: 'dec' },
+    { key: 'radius' },
+    { key: 'runit', defaultValue: 'arcsec' },
+  ],
+  fetchObjects
+)
+
+// Vuetify rules for inputs
+const raRules = [
+  (v) => !v || /^([0-1]?\d|2[0-3]):([0-5]?\d):([0-5]?\d(?:\.\d+)?)$/.test(String(v).trim()) || 'Format HH:MM:SS'
+]
+const decRules = [
+  (v) => !v || /^[+\-]?(\d{1,2}):([0-5]?\d):([0-5]?\d(?:\.\d+)?)$/.test(String(v).trim()) || 'Format ±DD:MM:SS'
+]
+const radiusRules = [
+  (v) => !v || (Number.isFinite(Number(v)) && Number(v) > 0) || 'Enter a positive number'
+]
+
 onMounted(() => {
+  applyQuerySync()
   fetchObjects()
   fetchObservationRuns()
 })
@@ -535,8 +785,9 @@ onMounted(() => {
 }
 
 .v-data-table :deep(th) {
-  font-weight: bold !important;
-  color: var(--v-theme-primary) !important;
+  position: sticky;
+  top: 0;
+  z-index: 2;
 }
 
 .v-data-table :deep(td) {
@@ -545,10 +796,55 @@ onMounted(() => {
 
 .v-data-table :deep(.v-data-table__wrapper) {
   overflow-x: auto;
+  overflow-y: visible;
+}
+
+/* Unify link hover/focus styles like other tables */
+:deep(.table-link) {
+  color: var(--v-theme-primary);
+  text-decoration: none;
+  font-weight: 600;
+  transition: all var(--v-theme-transition-fast);
+  position: relative;
+  padding: 2px 4px;
+  border-radius: var(--v-theme-radius-sm);
+  background-color: rgba(var(--v-theme-primary-light), 0.3);
+  display: inline-block;
+  margin: -2px -4px;
+}
+
+:deep(.table-link:hover) {
+  color: var(--v-theme-primary-dark);
+  background-color: rgba(var(--v-theme-primary-light), 0.9);
+  transform: translateY(-1px);
+}
+
+:deep(.table-link::after) {
+  content: '';
+  position: absolute;
+  width: 100%;
+  height: 2px;
+  bottom: 0;
+  left: 0;
+  background-color: var(--v-theme-primary);
+  transform: scaleX(0);
+  transition: transform var(--v-theme-transition-fast);
+  border-radius: var(--v-theme-radius-sm);
+}
+
+:deep(.table-link:hover::after) {
+  transform: scaleX(1);
 }
 
 .items-per-page-select {
   max-width: 100px;
+}
+
+/* Focus ring for pagination and important controls */
+.pagination-btn:focus-visible {
+  outline: 2px solid rgb(var(--v-theme-primary));
+  outline-offset: 2px;
+  border-radius: 50%;
 }
 
 .coordinate-filter {
@@ -560,4 +856,27 @@ onMounted(() => {
 .coordinate-filter-title {
   color: rgba(144, 150, 159, 1) !important;
 }
-</style> 
+
+/* Responsive wrapping for action bar */
+.card-actions-responsive {
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.card-actions-responsive .actions-left,
+.card-actions-responsive .actions-right {
+  flex-wrap: wrap;
+}
+.card-actions-responsive .actions-left { row-gap: 8px; }
+.card-actions-responsive .actions-right { row-gap: 8px; }
+.card-actions-responsive .items-per-page-select { min-width: 96px; }
+
+/* Single-line truncation with ellipsis */
+.cell-truncate {
+  display: inline-block;
+  max-width: 320px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
+}
+</style>

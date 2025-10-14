@@ -1,12 +1,34 @@
 <template>
   <div class="dashboard">
     <div class="container">
+      <h1 class="sr-only">Dashboard</h1>
+      <v-alert
+        v-if="error"
+        type="error"
+        variant="tonal"
+        class="mb-4"
+      >
+        {{ error }}
+        <v-btn class="ml-2" size="small" color="primary" @click="handleRetry">Retry</v-btn>
+      </v-alert>
       <!-- Overview -->
       <v-card class="mt-4 overview-card">
         <v-card-title class="py-2 primary white--text">Overview</v-card-title>
         <v-card-text class="pt-0">
+          <template v-if="loading">
+            <v-row dense>
+              <v-col cols="12" sm="6" md="4" v-for="n in 3" :key="`ov1-${n}`">
+                <v-skeleton-loader type="card"></v-skeleton-loader>
+              </v-col>
+            </v-row>
+            <v-row dense class="mt-2">
+              <v-col cols="12" sm="6" md="2" v-for="n in 6" :key="`ov2-${n}`">
+                <v-skeleton-loader type="card"></v-skeleton-loader>
+              </v-col>
+            </v-row>
+          </template>
           <!-- First Row: Observation Runs and Total Objects -->
-          <v-row dense>
+          <v-row dense v-else>
             <v-col cols="12" sm="6" md="4">
               <v-card variant="outlined" class="h-100 stat-card">
                 <v-card-text class="text-center pa-2">
@@ -45,7 +67,7 @@
           </v-row>
 
           <!-- Second Row: All other object statistics -->
-          <v-row dense class="mt-2">
+          <v-row dense class="mt-2" v-if="!loading">
             <v-col cols="12" sm="6" md="2" v-for="(count, type) in objectTypes" :key="type">
               <v-card variant="outlined" class="h-100 stat-card">
                 <v-card-text class="text-center pa-2">
@@ -67,27 +89,40 @@
           <v-card class="recent-card">
             <v-card-title class="primary white--text">Recent Objects</v-card-title>
             <v-card-text>
-              <v-table class="custom-table">
-                <thead>
-                  <tr>
-                    <th class="text-primary">Name</th>
-                    <th class="text-primary">Type</th>
-                    <th class="text-primary">Last Modified</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="object in recentObjects" :key="object.id">
-                    <td>
-                      <router-link :to="`/objects/${object.id}`" class="text-decoration-none primary--text">
-                        {{ object.name }}
-                      </router-link>
-                    </td>
-                    <td class="text-secondary">{{ object.object_type_display }}</td>
-                    <td class="text-secondary">{{ formatDate(object.last_modified) }}</td>
-                  </tr>
-                </tbody>
-              </v-table>
+              <template v-if="loading">
+                <v-skeleton-loader type="table"></v-skeleton-loader>
+              </template>
+              <template v-else>
+                <v-table class="custom-table" v-if="recentObjects && recentObjects.length">
+                  <thead>
+                    <tr>
+                      <th class="text-primary" scope="col">Name</th>
+                      <th class="text-primary" scope="col">Type</th>
+                      <th class="text-primary" scope="col">Last Modified</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="object in recentObjects" :key="object.pk || object.id">
+                      <td>
+                        <v-tooltip :text="object.name" location="top">
+                          <template #activator="{ props }">
+                            <router-link v-bind="props" :to="`/objects/${object.pk || object.id}`" class="text-decoration-none primary--text cell-truncate">
+                              {{ object.name }}
+                            </router-link>
+                          </template>
+                        </v-tooltip>
+                      </td>
+                      <td class="text-secondary">{{ object.object_type_display }}</td>
+                      <td class="text-secondary">{{ formatDate(object.last_modified) }}</td>
+                    </tr>
+                  </tbody>
+                </v-table>
+                <div v-else class="text-caption text-secondary">No recent objects.</div>
+              </template>
             </v-card-text>
+            <v-card-actions class="justify-end">
+              <v-btn variant="text" color="primary" to="/objects">View all</v-btn>
+            </v-card-actions>
           </v-card>
         </v-col>
 
@@ -95,35 +130,48 @@
           <v-card class="recent-card">
             <v-card-title class="primary white--text">Recent Observation Runs</v-card-title>
             <v-card-text>
-              <v-table class="custom-table">
-                <thead>
-                  <tr>
-                    <th class="text-primary">Name</th>
-                    <th class="text-primary">Date</th>
-                    <th class="text-primary">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="run in recentRuns" :key="run.id">
-                    <td>
-                      <router-link :to="`/runs/${run.id}`" class="text-decoration-none primary--text">
-                        {{ run.name }}
-                      </router-link>
-                    </td>
-                    <td class="text-secondary">{{ formatDate(run.date) }}</td>
-                    <td>
-                      <v-chip
-                        :color="getStatusColor(run.status)"
-                        size="small"
-                        class="status-chip"
-                      >
-                        {{ run.status }}
-                      </v-chip>
-                    </td>
-                  </tr>
-                </tbody>
-              </v-table>
+              <template v-if="loading">
+                <v-skeleton-loader type="table"></v-skeleton-loader>
+              </template>
+              <template v-else>
+                <v-table class="custom-table" v-if="recentRuns && recentRuns.length">
+                  <thead>
+                    <tr>
+                      <th class="text-primary" scope="col">Name</th>
+                      <th class="text-primary" scope="col">Date</th>
+                      <th class="text-primary" scope="col">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="run in recentRuns" :key="run.pk || run.id">
+                      <td>
+                        <v-tooltip :text="run.name" location="top">
+                          <template #activator="{ props }">
+                            <router-link v-bind="props" :to="`/observation-runs/${run.pk || run.id}`" class="text-decoration-none primary--text cell-truncate">
+                              {{ run.name }}
+                            </router-link>
+                          </template>
+                        </v-tooltip>
+                      </td>
+                      <td class="text-secondary">{{ formatDate(run.date) }}</td>
+                      <td>
+                        <v-chip
+                          :color="getStatusColor(run.status || run.reduction_status)"
+                          size="small"
+                          class="status-chip"
+                        >
+                          {{ run.status || run.reduction_status || 'n/a' }}
+                        </v-chip>
+                      </td>
+                    </tr>
+                  </tbody>
+                </v-table>
+                <div v-else class="text-caption text-secondary">No recent runs.</div>
+              </template>
             </v-card-text>
+            <v-card-actions class="justify-end">
+              <v-btn variant="text" color="primary" to="/observation-runs">View all</v-btn>
+            </v-card-actions>
           </v-card>
         </v-col>
       </v-row>
@@ -180,17 +228,58 @@
           </div>
         </v-card-text>
       </v-card>
+
+      <!-- Activity over time (optional) -->
+      <v-card class="mt-4">
+        <v-card-title class="d-flex align-center justify-space-between">
+          Activity over time
+          <div class="d-flex align-center">
+            <v-select
+              v-model="timeDistModel"
+              :items="[{ title: 'Runs', value: 'run' }, { title: 'Objects', value: 'object' }]"
+              style="max-width: 140px"
+              density="compact"
+              variant="outlined"
+              hide-details
+              class="mr-2"
+            />
+            <v-select
+              v-model="timeDistMonths"
+              :items="timeDistMonthItems"
+              style="max-width: 160px"
+              density="compact"
+              variant="outlined"
+              hide-details
+              class="mr-2"
+            />
+            <v-btn v-if="!timeDistVisible" variant="text" color="primary" @click="handleShowPlot" :loading="timeDistLoading">Load</v-btn>
+            <v-btn v-else variant="text" color="primary" @click="handleHidePlot">Hide</v-btn>
+          </div>
+        </v-card-title>
+        <v-card-text>
+          <v-alert v-if="timeDistError" type="error" variant="tonal">{{ timeDistError }}</v-alert>
+          <v-skeleton-loader v-else-if="timeDistLoading" type="image" />
+          <div v-else :class="['time-dist-wrapper', { hidden: !timeDistVisible }]">
+            <div id="time-dist-container"></div>
+          </div>
+        </v-card-text>
+      </v-card>
     </div>
   </div>
 </template>
 
 <script>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { api } from '@/services/api'
+import { getStatusColor } from '@/utils/status'
+import { useNotifyStore } from '@/store/notify'
+import { formatDateTime } from '@/utils/datetime'
+import { useQuerySync } from '@/composables/useQuerySync'
 
 export default {
   name: 'Dashboard',
   setup() {
+    const notify = useNotifyStore()
     const stats = ref({
       files: {
         total: 0,
@@ -238,10 +327,7 @@ export default {
       { title: 'Actions', key: 'actions', sortable: false }
     ]
 
-    const formatDate = (date) => {
-      if (!date) return 'N/A'
-      return new Date(date).toLocaleDateString()
-    }
+    const formatDate = (date) => formatDateTime(date, { dateStyle: 'short' })
 
     const fetchStats = async () => {
       try {
@@ -331,10 +417,14 @@ export default {
       }
     }
 
-    onMounted(() => {
+    const handleRetry = () => {
       fetchStats()
       fetchRecentRuns()
       fetchRecentObjects()
+    }
+
+    onMounted(() => {
+      handleRetry()
     })
 
     const objectTypes = {
@@ -371,18 +461,91 @@ export default {
       'Other': 'other'
     }
 
-    const getStatusColor = (status) => {
-      switch (status) {
-        case 'completed':
-          return 'success'
-        case 'in_progress':
-          return 'warning'
-        case 'error':
-          return 'error'
-        default:
-          return 'secondary'
+    
+
+    // Time distribution state and loader
+    const timeDistModel = ref('run')
+    const timeDistLoading = ref(false)
+    const timeDistError = ref('')
+    const timeDistVisible = ref(false)
+    const timeDistCache = new Map()
+    const timeDistMonths = ref('12')
+    const timeDistMonthItems = [
+      { title: 'Last 12 months', value: '12' },
+      { title: 'Last 24 months', value: '24' },
+      { title: 'Last 60 months', value: '60' },
+      { title: 'Since start', value: 'all' },
+    ]
+
+    const ensureBokeh = async () => {
+      if (window.Bokeh) return
+      await new Promise((resolve, reject) => {
+        const script = document.createElement('script')
+        script.src = 'https://cdn.bokeh.org/bokeh/release/bokeh-3.1.0.min.js'
+        script.onload = resolve
+        script.onerror = reject
+        document.head.appendChild(script)
+      })
+    }
+
+    const loadTimeDistribution = async () => {
+      timeDistError.value = ''
+      timeDistLoading.value = true
+      try {
+        await ensureBokeh()
+        const key = `${timeDistModel.value}:${timeDistMonths.value}`
+        let item = timeDistCache.get(key)
+        if (!item) {
+          const base = import.meta.env.VITE_API_BASE || '/api'
+          const params = new URLSearchParams({ model: timeDistModel.value, months: timeDistMonths.value, label: timeDistModel.value === 'run' ? 'Runs' : 'Objects' })
+          const res = await fetch(`${base}/runs/time-distribution/?${params.toString()}`)
+          if (!res.ok) throw new Error(`HTTP ${res.status}`)
+          item = await res.json()
+          timeDistCache.set(key, item)
+        }
+        const container = document.getElementById('time-dist-container')
+        if (container) container.innerHTML = ''
+        window.Bokeh.embed.embed_item(item, 'time-dist-container')
+        try { notify.success('Activity plot loaded') } catch {}
+        timeDistVisible.value = true
+      } catch (e) {
+        console.error(e)
+        timeDistError.value = 'Failed to load activity plot.'
+      } finally {
+        timeDistLoading.value = false
       }
     }
+
+    const { applyQuery, syncQueryAndFetch } = useQuerySync(
+      { model: timeDistModel, months: timeDistMonths, showPlot: timeDistVisible },
+      [
+        { key: 'model', defaultValue: 'run' },
+        { key: 'months', defaultValue: '12' },
+        { key: 'showPlot', fromQuery: (v) => v === '1', toQuery: (v) => (v ? '1' : undefined) },
+      ],
+      () => {
+        if (timeDistVisible.value && !timeDistLoading.value) {
+          loadTimeDistribution()
+        }
+      }
+    )
+
+    watch([timeDistModel, timeDistMonths], () => {
+      syncQueryAndFetch()
+    })
+
+    const handleShowPlot = async () => {
+      timeDistVisible.value = true
+      await loadTimeDistribution()
+      syncQueryAndFetch()
+    }
+
+    const handleHidePlot = () => {
+      timeDistVisible.value = false
+      syncQueryAndFetch()
+    }
+
+    applyQuery()
 
     return {
       stats,
@@ -396,7 +559,17 @@ export default {
       reductionStatuses,
       fileTypes,
       dataTypes,
-      getStatusColor
+      getStatusColor,
+      timeDistModel,
+      timeDistLoading,
+      timeDistError,
+      timeDistVisible,
+      timeDistMonths,
+      timeDistMonthItems,
+      loadTimeDistribution,
+      handleShowPlot,
+      handleHidePlot,
+      handleRetry
     }
   }
 }
@@ -519,6 +692,16 @@ export default {
   transform: scaleX(1);
 }
 
+/* Single-line truncation with ellipsis */
+.cell-truncate {
+  display: inline-block;
+  max-width: 280px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
+}
+
 .custom-table :deep(.status) {
   padding: 4px 8px;
   border-radius: var(--v-theme-radius-sm);
@@ -566,6 +749,13 @@ export default {
 
 .file-stat-col {
   margin-bottom: var(--v-theme-spacing-md);
+}
+
+.time-dist-wrapper {
+  width: 100%;
+}
+.time-dist-wrapper.hidden {
+  display: none;
 }
 
 /* Responsive adjustments */

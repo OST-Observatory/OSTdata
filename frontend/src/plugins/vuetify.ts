@@ -81,6 +81,55 @@ const ostdataTheme: ThemeDefinition = {
   },
 }
 
+const darkTheme: ThemeDefinition = {
+  dark: true,
+  colors: {
+    primary: '#90caf9',
+    'primary-dark': '#42a5f5',
+    'primary-light': '#1e293b',
+    'on-primary': '#0b0f14',
+    secondary: '#1f2937',
+    'secondary-dark': '#111827',
+    'secondary-light': '#334155',
+    'on-secondary': '#e5e7eb',
+    success: '#66bb6a',
+    'on-success': '#0b0f14',
+    warning: '#ffa726',
+    'on-warning': '#0b0f14',
+    error: '#ef5350',
+    'on-error': '#0b0f14',
+    info: '#29b6f6',
+    'on-info': '#0b0f14',
+    surface: '#0f172a',
+    'on-surface': '#e5e7eb',
+    'surface-variant': '#111827',
+    'on-surface-variant': '#cbd5e1',
+    background: '#0b0f14',
+    'on-background': '#e5e7eb',
+  },
+  variables: {
+    'theme-shadow-app-bar': '0 2px 8px rgba(0,0,0,0.6)',
+    'theme-shadow-card': '0 2px 4px rgba(0,0,0,0.5)',
+    'theme-shadow-card-hover': '0 4px 8px rgba(0,0,0,0.6)',
+    'theme-border-app-bar': '1px solid rgba(255,255,255,0.06)',
+    'theme-border-card': '1px solid rgba(255,255,255,0.06)',
+    'theme-radius-sm': '4px',
+    'theme-radius-md': '8px',
+    'theme-radius-lg': '12px',
+    'theme-spacing-xs': '8px',
+    'theme-spacing-sm': '12px',
+    'theme-spacing-md': '16px',
+    'theme-spacing-lg': '20px',
+    'theme-spacing-xl': '24px',
+    'theme-transition-fast': '0.2s ease-in-out',
+    'theme-transition-normal': '0.3s ease-in-out',
+    'theme-opacity-hover': 0.08,
+    'theme-container-max-width': '1400px',
+    'theme-scrollbar-width': '8px',
+    'theme-scrollbar-height': '8px',
+  }
+}
+
 export default createVuetify({
   components,
   directives,
@@ -88,6 +137,7 @@ export default createVuetify({
     defaultTheme: 'ostdata',
     themes: {
       ostdata: ostdataTheme,
+      dark: darkTheme,
     },
   },
   defaults: {
@@ -98,21 +148,37 @@ export default createVuetify({
       elevation: 2,
       border: '1px solid rgba(21, 132, 203, 0.1)',
     },
+    VIcon: {
+      size: 22,
+    },
     VCard: {
       elevation: 2,
       border: '1px solid rgba(21, 132, 203, 0.08)',
       rounded: 'md',
+      class: 'mb-4',
+    },
+    VCardTitle: {
+      class: 'py-2',
+    },
+    VCardText: {
+      class: 'pt-2 pb-4',
     },
     VBtn: {
       ripple: false,
       variant: 'text',
       class: 'text-none',
+      density: 'comfortable',
     },
     VListItem: {
       rounded: 'sm',
     },
     VTable: {
       rounded: 'md',
+      density: 'comfortable',
+      hover: true,
+      class: 'custom-table',
+    },
+    VDataTable: {
       density: 'comfortable',
       hover: true,
       class: 'custom-table',
@@ -127,6 +193,10 @@ export default createVuetify({
     VTextField: {
       variant: 'outlined',
       density: 'comfortable',
+    },
+    VChip: {
+      size: 'small',
+      variant: 'tonal',
     },
   },
   display: {

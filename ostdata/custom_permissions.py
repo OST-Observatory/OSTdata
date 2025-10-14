@@ -14,27 +14,25 @@ class IsAllowedOnRun(permissions.BasePermission):
     """
 
     def has_object_permission(self, request, view, obj):
+        # Resolve the permission subject: for DataFile use its observation_run
+        subject = getattr(obj, 'observation_run', obj)
 
-        #     Show the object if the user is allowed to see this observation run
-        #     (GET, HEAD or OPTIONS)
+        # Show the object if the user is allowed to see the associated run/object
+        # (GET, HEAD or OPTIONS)
         if request.method in permissions.SAFE_METHODS:
             if request.user.is_anonymous:
-                #return obj.run.is_public
-                return obj.is_public
+                return getattr(subject, 'is_public', False)
             else:
-                #return request.user.can_read(obj.run)
-                return request.user.can_read(obj)
+                return request.user.can_read(subject)
 
         #   User can add objects to this observation run?
         if request.method == ['POST'] and not request.user.is_anonymous:
-            #return request.user.can_add(obj.run)
-            return request.user.can_add(obj)
+            return request.user.can_add(subject)
 
         #   Check if the user is allowed to edit/delete this specific
         #   object
-        if (request.method in ['PUT', 'PATCH', 'DELETE']
-            and not request.user.is_anonymous):
-            return request.user.can_edit(obj)
+        if (request.method in ['PUT', 'PATCH', 'DELETE'] and not request.user.is_anonymous):
+            return request.user.can_edit(subject)
 
 
         return False

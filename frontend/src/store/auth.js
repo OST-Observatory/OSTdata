@@ -1,16 +1,18 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
+import router from '@/router'
 
 export const useAuthStore = defineStore('auth', () => {
   const user = ref(null)
   const token = ref(localStorage.getItem('token'))
+  const API_BASE_URL = import.meta.env?.VITE_API_BASE || '/api'
 
   const isAuthenticated = computed(() => !!token.value)
   const username = computed(() => user.value?.username)
 
   async function login(credentials) {
     try {
-      const response = await fetch('/api/auth/login/', {
+      const response = await fetch(`${API_BASE_URL}/users/auth/login/`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -26,6 +28,14 @@ export const useAuthStore = defineStore('auth', () => {
       token.value = data.token
       user.value = data.user
       localStorage.setItem('token', data.token)
+
+      // Navigate back to intended page if present
+      const next = router.currentRoute.value.query?.next
+      if (typeof next === 'string' && next) {
+        router.replace(next)
+      } else {
+        // stay on current route; optionally redirect to dashboard
+      }
     } catch (error) {
       console.error('Login error:', error)
       throw error
@@ -34,7 +44,7 @@ export const useAuthStore = defineStore('auth', () => {
 
   async function logout() {
     try {
-      await fetch('/api/auth/logout/', {
+      await fetch(`${API_BASE_URL}/users/auth/logout/`, {
         method: 'POST',
         headers: {
           'Authorization': `Token ${token.value}`,
@@ -53,7 +63,7 @@ export const useAuthStore = defineStore('auth', () => {
     if (!token.value) return false
 
     try {
-      const response = await fetch('/api/auth/user/', {
+      const response = await fetch(`${API_BASE_URL}/users/auth/user/`, {
         headers: {
           'Authorization': `Token ${token.value}`,
         },

@@ -13,6 +13,7 @@ from obs_run.models import ObservationRun, DataFile
 from tags.models import Tag
 from tags.api.serializers import TagSerializer
 from objects.api.simple_serializers import ObjectSimpleSerializer
+from objects.api.serializers import normalize_alias, INSTRUMENT_ALIASES, TELESCOPE_ALIASES
 
 
 # ===============================================================
@@ -34,6 +35,9 @@ class RunListSerializer(ModelSerializer):
     n_fits = SerializerMethodField()
     n_img = SerializerMethodField()
     n_ser = SerializerMethodField()
+    n_light = SerializerMethodField()
+    n_flat = SerializerMethodField()
+    n_dark = SerializerMethodField()
     expo_time = SerializerMethodField()
     start_time = SerializerMethodField()
     end_time = SerializerMethodField()
@@ -53,6 +57,9 @@ class RunListSerializer(ModelSerializer):
             'n_fits',
             'n_img',
             'n_ser',
+            'n_light',
+            'n_flat',
+            'n_dark',
             'expo_time',
             'start_time',
             'end_time',
@@ -97,6 +104,15 @@ class RunListSerializer(ModelSerializer):
         # sers = obj.datafile_set.filter(file_type__exact='SER')
         # return len(sers)
         return obj.datafile_set.filter(file_type__exact='SER').count()
+
+    def get_n_light(self, obj):
+        return obj.datafile_set.filter(exposure_type__exact='LI').count()
+
+    def get_n_flat(self, obj):
+        return obj.datafile_set.filter(exposure_type__exact='FL').count()
+
+    def get_n_dark(self, obj):
+        return obj.datafile_set.filter(exposure_type__exact='DA').count()
 
     def get_expo_time(self, obj):
         data_files = obj.datafile_set.all()
@@ -149,6 +165,8 @@ class RunSerializer(ModelSerializer):
     n_img = SerializerMethodField()
     n_ser = SerializerMethodField()
     expo_time = SerializerMethodField()
+    start_time = SerializerMethodField()
+    end_time = SerializerMethodField()
 
     owner = ReadOnlyField(source='added_by.username')
 
@@ -160,6 +178,8 @@ class RunSerializer(ModelSerializer):
             'reduction_status',
             'reduction_status_display',
             'note',
+            'photometry',
+            'spectroscopy',
             'tags',
             'tag_ids',
             'href',
@@ -168,6 +188,8 @@ class RunSerializer(ModelSerializer):
             'n_img',
             'n_ser',
             'expo_time',
+            'start_time',
+            'end_time',
         ]
         read_only_fields = ('pk', 'tags', 'reduction_status_display')
 
@@ -207,6 +229,20 @@ class RunSerializer(ModelSerializer):
 
         return total_expo_time
 
+    def get_start_time(self, obj):
+        # Filter JD to avoid default date (2000-01-01 00:00:00)
+        data_files = obj.datafile_set.filter(hjd__gt=2451545).order_by('hjd')
+        if data_files.exists():
+            return data_files.first().obs_date
+        return '2000-01-01 00:00:00'
+
+    def get_end_time(self, obj):
+        # Filter JD to avoid default date (2000-01-01 00:00:00)
+        data_files = obj.datafile_set.filter(hjd__gt=2451545).order_by('-hjd')
+        if data_files.exists():
+            return data_files.first().obs_date
+        return '2000-01-01 00:00:00'
+
 
 ################################################################################
 
@@ -239,6 +275,7 @@ class SimpleRunSerializer(ModelSerializer):
 class DataFileSerializer(ModelSerializer):
     tags = SerializerMethodField()
     exposure_type_display = SerializerMethodField()
+    binning = SerializerMethodField()
     tag_ids = PrimaryKeyRelatedField(
         many=True,
         queryset=Tag.objects.all(),
@@ -258,6 +295,9 @@ class DataFileSerializer(ModelSerializer):
             'file_path',
             'file_name',
             'file_type',
+            'instrument',
+            'telescope',
+            'binning',
             'exposure_type',
             'exposure_type_display',
             'tags',
@@ -293,5 +333,37 @@ class DataFileSerializer(ModelSerializer):
     def get_exposure_type_display(self, obj):
         return obj.get_exposure_type_display()
 
+    def get_binning(self, obj):
+        try:
+            header = obj.get_fits_header()
+            bx = header.get('XBINNING') or header.get('XBIN') or header.get('BINX')
+            by = header.get('YBINNING') or header.get('YBIN') or header.get('BINY')
+            if (bx is None or by is None) and header.get('BINNING'):
+                import re
+                parts = [p for p in re.split(r"[^0-9]+", str(header.get('BINNING'))) if p]
+                if len(parts) >= 2:
+                    bx = parts[0]
+                    by = parts[1]
+            bx = int(str(bx)) if bx is not None else 1
+            by = int(str(by)) if by is not None else 1
+            return f"{bx}x{by}"
+        except Exception:
+            return "1x1"
+
     def get_observation_run_name(self, obj):
         return obj.observation_run.name
+
+    # Override to_representation to normalize instrument/telescope aliases
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        try:
+            if 'instrument' in data and data['instrument']:
+                data['instrument'] = normalize_alias(data['instrument'], INSTRUMENT_ALIASES)
+        except Exception:
+            pass
+        try:
+            if 'telescope' in data and data['telescope']:
+                data['telescope'] = normalize_alias(data['telescope'], TELESCOPE_ALIASES)
+        except Exception:
+            pass
+        return data

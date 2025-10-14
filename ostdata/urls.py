@@ -46,6 +46,7 @@ urlpatterns = [
     path('api/runs/', include("obs_run.api.urls", namespace='runs-api')),
     path('api/tags/', include("tags.api.urls", namespace='tags-api')),
     path('api/objects/', include("objects.api.urls", namespace='objects-api')),
+    path('api/users/', include("users.api.urls", namespace='users-api')),
 
     path(r'admin/', admin.site.urls),
 

@@ -12,7 +12,6 @@ import AppLayout from './components/layout/AppLayout.vue'
 /* Global styles */
 html {
   scrollbar-width: var(--v-theme-scrollbar-width);
-  scrollbar-height: var(--v-theme-scrollbar-height);
 }
 
 ::-webkit-scrollbar {
@@ -72,5 +71,15 @@ a:hover {
 .v-table .v-table__wrapper > table {
   border-collapse: separate;
   border-spacing: 0;
+}
+
+/* Respect user preference for reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *:not(.v-overlay__scrim) {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 </style> 

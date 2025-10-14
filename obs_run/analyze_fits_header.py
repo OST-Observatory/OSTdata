@@ -67,7 +67,7 @@ def extract_fits_header_info(header):
         try:
             data['dec'] = Angle(header.get('OBJCTDEC', 0.), unit='degree').degree
         except:
-            data['ra'] = 0.
+            data['dec'] = 0.
 
     #   Telescope and instrument info
     data['instrument'] = header.get('INSTRUME', 'UK')
@@ -81,7 +81,27 @@ def extract_fits_header_info(header):
     data['naxis1'] = header.get('NAXIS1', -1)
     data['naxis2'] = header.get('NAXIS2', -1)
     data['pixel_size'] = header.get('XPIXSZ', -1)
-    # data['binning'] = header.get'XBINNING', -1)
+
+    #   Binning factors (robust to different header conventions)
+    binx = header.get('XBINNING', None) or header.get('XBIN', None) or header.get('BINX', None)
+    biny = header.get('YBINNING', None) or header.get('YBIN', None) or header.get('BINY', None)
+    binning = header.get('BINNING', None)
+    def _parse_int(v):
+        try:
+            return int(str(v).strip())
+        except Exception:
+            return None
+    bx = _parse_int(binx)
+    by = _parse_int(biny)
+    if (bx is None or by is None) and binning is not None:
+        # Accept formats like "2x2", "2 2", "2,2"
+        import re
+        parts = [p for p in re.split(r"[^0-9]+", str(binning)) if p]
+        if len(parts) >= 2:
+            bx = _parse_int(parts[0]) or 1
+            by = _parse_int(parts[1]) or 1
+    data['binning_x'] = bx or 1
+    data['binning_y'] = by or 1
 
     #   Observing conditions
     data['air_mass'] = header.get('AIRMASS', -1)
@@ -96,6 +116,59 @@ def extract_fits_header_info(header):
 
 
 ############################################################################
+
+
+def detect_instrument(naxis1, naxis2, pixel_um, binx, biny):
+    """
+    Infer instrument/camera name from geometry and pixel size.
+    Accepts binned image sizes; will scale back to unbinned using binning factors.
+    """
+    try:
+        bw = max(int(binx), 1)
+        bh = max(int(biny), 1)
+    except Exception:
+        bw = 1
+        bh = 1
+    try:
+        w = int(naxis1) * bw
+        h = int(naxis2) * bh
+    except Exception:
+        w, h = -1, -1
+    try:
+        px = float(pixel_um)
+    except Exception:
+        px = -1.0
+
+    catalog = [
+        { 'name': 'QHY600M', 'px_um': 3.76, 'w': 9576, 'h': 6388, 'w_alt': 9600, 'h_alt': 6422 },
+        { 'name': 'QHY268M', 'px_um': 3.76, 'w': 6252, 'h': 4176, 'w_alt': 6280, 'h_alt': 4210 },
+        { 'name': 'ST8',     'px_um': 9.00, 'w': 1530, 'h': 1020 },
+        { 'name': 'ST7',     'px_um': 9.00, 'w': 765,  'h': 510  },
+        { 'name': 'STF-8300M','px_um': 5.40,'w': 3326, 'h': 2504 },
+        { 'name': 'ST-i',    'px_um': 7.40, 'w': 648,  'h': 486  },
+        { 'name': 'QHY485C', 'px_um': 2.90, 'w': 3864, 'h': 2180 },
+        { 'name': 'Skyris 445C', 'px_um': 3.75, 'w': 1280, 'h': 960 },
+        { 'name': 'ASI174MM', 'px_um': 5.86, 'w': 1936, 'h': 1216 },
+        { 'name': 'ASI220MM', 'px_um': 4.00, 'w': 1920, 'h': 1080 },
+        { 'name': 'ASI678MM', 'px_um': 2.00, 'w': 3840, 'h': 2160 },
+    ]
+
+    def close(a, b, tol=0.03):
+        try:
+            return abs(a - b) <= tol * max(a, b)
+        except Exception:
+            return False
+
+    for item in catalog:
+        if px > 0 and item['px_um'] > 0 and not close(px, item['px_um'], 0.15):
+            pass
+        targets = [(item['w'], item['h'])]
+        if 'w_alt' in item and 'h_alt' in item:
+            targets.append((item['w_alt'], item['h_alt']))
+        for (tw, th) in targets:
+            if (close(w, tw, 0.03) and close(h, th, 0.03)) or (close(w, th, 0.03) and close(h, tw, 0.03)):
+                return item['name']
+    return None
 
 
 def analyze_fits(datafile):
@@ -181,5 +254,32 @@ def analyze_fits(datafile):
     else:
         datafile.main_target = '-'
         datafile.header_target_name = '-'
+
+    # Infer instrument from header/geometry if header instrument is generic or missing
+    try:
+        header_instr = header_data.get('instrument', '') or ''
+    except Exception:
+        header_instr = ''
+
+    inferred = detect_instrument(
+        header_data.get('naxis1', -1),
+        header_data.get('naxis2', -1),
+        header_data.get('pixel_size', -1),
+        header_data.get('binning_x', 1),
+        header_data.get('binning_y', 1),
+    )
+
+    # Prefer inferred instrument when header is generic or missing
+    generic_markers = ['unknown', 'uk', 'qhyccd-cameras-capture', 'asi camera (1)']
+    assign_inferred = False
+    if inferred:
+        if not header_instr:
+            assign_inferred = True
+        else:
+            lower = header_instr.strip().lower()
+            if any(g in lower for g in generic_markers):
+                assign_inferred = True
+    if assign_inferred:
+        datafile.instrument = inferred
 
     datafile.save()

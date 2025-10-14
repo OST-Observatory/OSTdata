@@ -1,6 +1,7 @@
 
 from django_filters import rest_framework as filters
-from django.db.models import Count
+from django.db.models import Count, F, FloatField, ExpressionWrapper, Q
+import re
 
 from obs_run.models import ObservationRun, DataFile
 from tags.models import Tag
@@ -158,12 +159,45 @@ class DataFileFilter(filters.FilterSet):
         lookup_expr='icontains',
         )
 
+    instrument = filters.CharFilter(
+        field_name="instrument",
+        lookup_expr='icontains',
+    )
+
+    #   Main target filter (tokenized, tolerant to whitespace variations)
+    main_target = filters.CharFilter(method='filter_main_target_tokens')
+
+    #   Exposure time range
+    exptime_min = filters.NumberFilter(
+        field_name="exptime",
+        lookup_expr='gte',
+    )
+    exptime_max = filters.NumberFilter(
+        field_name="exptime",
+        lookup_expr='lte',
+    )
+
 
     #   Exposure time filter
     exposure_type = filters.MultipleChoiceFilter(
         field_name="exposure_type",
         choices=DataFile.EXPOSURE_TYPE_POSSIBILITIES,
         )
+
+    #   Spectroscopy flag
+    spectroscopy = filters.BooleanFilter(
+        field_name="spectroscopy",
+    )
+
+    #   File name contains (match on path string)
+    file_name = filters.CharFilter(
+        field_name="datafile",
+        lookup_expr='icontains',
+    )
+
+    #   Total pixel count range (naxis1 * naxis2)
+    pixel_count_min = filters.NumberFilter(method='filter_pixel_count_min')
+    pixel_count_max = filters.NumberFilter(method='filter_pixel_count_max')
 
     #   Tag filter
     tags = filters.ModelMultipleChoiceFilter(queryset=Tag.objects.all())
@@ -192,3 +226,31 @@ class DataFileFilter(filters.FilterSet):
             return parent.order_by(order_name)
         else:
             return parent.order_by('observation_run')
+
+    # Methods for pixel count filters
+    def _with_pixel_count(self, queryset):
+        return queryset.annotate(
+            pixel_count=ExpressionWrapper(F('naxis1') * F('naxis2'), output_field=FloatField())
+        )
+
+    def filter_pixel_count_min(self, queryset, name, value):
+        qs = self._with_pixel_count(queryset)
+        return qs.filter(pixel_count__gte=value)
+
+    def filter_pixel_count_max(self, queryset, name, value):
+        qs = self._with_pixel_count(queryset)
+        return qs.filter(pixel_count__lte=value)
+
+    def filter_main_target_tokens(self, queryset, name, value):
+        if not value:
+            return queryset
+        # Split by whitespace AND at alpha-numeric boundaries (e.g., "M67" -> ["M","67"]) so that
+        # inputs without spaces still match names with spaces like "M 67".
+        tokens = [t for t in re.split(r"\s+|(?<=\D)(?=\d)|(?<=\d)(?=\D)", str(value).strip()) if t]
+        if not tokens:
+            return queryset
+        q = Q()
+        # Build AND across tokens, each token may match main_target OR header_target_name
+        for t in tokens:
+            q &= (Q(main_target__icontains=t) | Q(header_target_name__icontains=t))
+        return queryset.filter(q)

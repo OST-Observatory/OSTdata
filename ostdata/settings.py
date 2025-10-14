@@ -43,6 +43,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'rest_framework',
+    'rest_framework.authtoken',
     'rest_framework_datatables',
     'django_filters',
     'simple_history',
@@ -144,7 +145,7 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = 'en-us'
 
-TIME_ZONE = 'UTC'
+TIME_ZONE = 'Europe/Berlin'
 
 USE_I18N = True
 
@@ -183,10 +184,22 @@ if env("DEVICE") in platform.node():
 else:
    from .settings_development import DEBUG, ALLOWED_HOSTS, DATABASES, LOGGING
 
-# CORS Einstellungen
+# CORS settings for frontend communication
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",  # Vite dev server
     "http://127.0.0.1:5173",
 ]
 
 CORS_ALLOW_CREDENTIALS = True
+
+CORS_ALLOWED_HEADERS = [
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
+]
