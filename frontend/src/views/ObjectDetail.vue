@@ -16,7 +16,17 @@
       <!-- Basic Data -->
       <v-col cols="12" md="4">
         <v-card class="uniform-height">
-          <v-card-title>Basic Data</v-card-title>
+          <v-card-title class="d-flex justify-space-between align-center">
+            Basic Data
+            <v-btn
+              v-if="isAuthenticated"
+              icon="mdi-pencil"
+              size="small"
+              variant="text"
+              aria-label="Edit basic data"
+              @click="openBasicDialog"
+            ></v-btn>
+          </v-card-title>
           <v-card-text>
             <v-row>
               <v-col cols="6">
@@ -148,6 +158,36 @@
         </v-card>
       </v-col>
     </v-row>
+
+    <!-- Edit Basic Data Dialog -->
+    <v-dialog v-model="basicDialog" max-width="520" @keydown.esc.prevent="closeBasicDialog" aria-labelledby="edit-basic-title">
+      <v-card>
+        <v-card-title id="edit-basic-title">Edit Basic Data</v-card-title>
+        <v-card-text>
+          <v-form>
+            <v-select
+              v-model="editObjectType"
+              :items="objectTypeOptions"
+              item-title="title"
+              item-value="value"
+              label="Object Type"
+              variant="outlined"
+              density="comfortable"
+              hide-details
+            />
+            <div class="d-flex align-center mt-3" style="gap: 16px">
+              <v-switch v-model="editSpectroscopy" label="Spectroscopy" color="primary" hide-details density="comfortable" />
+              <v-switch v-model="editPhotometry" label="Photometry" color="primary" hide-details density="comfortable" />
+            </div>
+          </v-form>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn color="primary" variant="flat" :loading="savingBasic" @click="saveBasicData">Save</v-btn>
+          <v-btn variant="text" @click="closeBasicDialog" ref="basicCloseBtn">Cancel</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
 
     <!-- Sky Map and Aliases -->
     <v-row>
@@ -454,6 +494,12 @@ const showObservationRuns = ref(false)
 const showDataFiles = ref(false)
 const loadingObservationRuns = ref(false)
 const loadingDataFiles = ref(false)
+const basicDialog = ref(false)
+const savingBasic = ref(false)
+const basicCloseBtn = ref(null)
+const editObjectType = ref(null)
+const editSpectroscopy = ref(false)
+const editPhotometry = ref(false)
 
 // Computed properties
 const isAuthenticated = computed(() => authStore.isAuthenticated)
@@ -472,6 +518,52 @@ const internalIdentifiers = computed(() => {
     .map(alias => alias.name)
     .join(', ')
 })
+
+const objectTypeOptions = [
+  { title: 'Galaxy', value: 'GA' },
+  { title: 'Star Cluster', value: 'SC' },
+  { title: 'Nebula', value: 'NE' },
+  { title: 'Star', value: 'ST' },
+  { title: 'Solar System', value: 'SO' },
+  { title: 'Other', value: 'OT' },
+  { title: 'Unknown', value: 'UK' },
+]
+
+const openBasicDialog = () => {
+  editObjectType.value = object.value?.object_type || null
+  editSpectroscopy.value = !!object.value?.spectroscopy
+  editPhotometry.value = !!object.value?.photometry
+  basicDialog.value = true
+}
+
+const closeBasicDialog = () => {
+  basicDialog.value = false
+  try {
+    const el = basicCloseBtn.value
+    if (el && typeof el.focus === 'function') setTimeout(() => el.focus(), 0)
+  } catch {}
+}
+
+const saveBasicData = async () => {
+  if (!object.value) return
+  try {
+    savingBasic.value = true
+    const payload = {
+      object_type: editObjectType.value,
+      spectroscopy: editSpectroscopy.value,
+      photometry: editPhotometry.value,
+    }
+    await api.updateObject(object.value.pk || object.value.id, payload)
+    const updated = await api.getObject(object.value.pk || object.value.id)
+    object.value = updated
+    basicDialog.value = false
+    try { notify.success('Basic data updated') } catch {}
+  } catch (e) {
+    console.error('Error saving basic data', e)
+  } finally {
+    savingBasic.value = false
+  }
+}
 
 // Table headers
 const observationRunHeaders = [

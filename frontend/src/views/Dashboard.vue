@@ -30,7 +30,7 @@
           <!-- First Row: Observation Runs and Total Objects -->
           <v-row dense v-else>
             <v-col cols="12" sm="6" md="4">
-              <v-card variant="outlined" class="h-100 stat-card">
+              <v-card variant="outlined" class="h-100 stat-card" :to="{ path: '/observation-runs' }" link>
                 <v-card-text class="text-center pa-2">
                   <div class="text-subtitle-2 mb-1 text-primary">Observation Runs</div>
                   <div class="text-h6 primary--text">{{ stats.runs?.total || 0 }}</div>
@@ -42,7 +42,7 @@
             </v-col>
 
             <v-col cols="12" sm="6" md="4">
-              <v-card variant="outlined" class="h-100 stat-card">
+              <v-card variant="outlined" class="h-100 stat-card" :to="{ path: '/objects' }" link>
                 <v-card-text class="text-center pa-2">
                   <div class="text-subtitle-2 mb-1 text-primary">Total Objects</div>
                   <div class="text-h6 primary--text">{{ stats.objects?.total || 0 }}</div>
@@ -69,7 +69,12 @@
           <!-- Second Row: All other object statistics -->
           <v-row dense class="mt-2" v-if="!loading">
             <v-col cols="12" sm="6" md="2" v-for="(count, type) in objectTypes" :key="type">
-              <v-card variant="outlined" class="h-100 stat-card">
+              <v-card
+                variant="outlined"
+                class="h-100 stat-card"
+                :to="{ path: '/objects', query: { type: mapObjectTypeToCode(type) } }"
+                link
+              >
                 <v-card-text class="text-center pa-2">
                   <div class="text-subtitle-2 mb-1 text-primary">{{ type }}</div>
                   <div class="text-h6 primary--text">{{ stats.objects?.[count] || 0 }}</div>
@@ -433,7 +438,20 @@ export default {
       'Nebulae': 'nebulae',
       'Stars': 'stars',
       'Solar System': 'solar_system',
-      'Other Objects': 'other'
+      'Other': 'other'
+    }
+
+    const mapObjectTypeToCode = (label) => {
+      const map = {
+        'Galaxies': 'GA',
+        'Star Clusters': 'SC',
+        'Nebulae': 'NE',
+        'Stars': 'ST',
+        'Solar System': 'SO',
+        'Other': 'OT',
+        'Unknown': 'UK',
+      }
+      return map[label] || ''
     }
 
     const reductionStatuses = {
@@ -556,6 +574,7 @@ export default {
       headers,
       formatDate,
       objectTypes,
+      mapObjectTypeToCode,
       reductionStatuses,
       fileTypes,
       dataTypes,

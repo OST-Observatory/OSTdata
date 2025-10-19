@@ -7,9 +7,19 @@
           <v-card class="uniform-height">
             <v-card-title class="d-flex align-center justify-space-between">
               Basic Data
-              <v-chip :color="getStatusColor(run?.status || run?.reduction_status)" size="small">
-                {{ run?.status || run?.reduction_status || 'n/a' }}
-              </v-chip>
+              <div class="d-flex align-center" style="gap: 8px">
+                <v-btn
+                  v-if="isAuthenticated"
+                  icon="mdi-pencil"
+                  size="small"
+                  variant="text"
+                  aria-label="Edit observation type"
+                  @click="openObsTypeDialog"
+                ></v-btn>
+                <v-chip :color="getStatusColor(run?.status || run?.reduction_status)" size="small">
+                  {{ run?.status || run?.reduction_status || 'n/a' }}
+                </v-chip>
+              </div>
             </v-card-title>
             <div class="text-caption text-secondary px-4">Times shown in {{ tzDisplay }}.</div>
             <v-card-text>
@@ -115,6 +125,24 @@
           </v-card>
         </v-col>
       </v-row>
+
+      <!-- Edit Observation Type Dialog -->
+      <v-dialog v-model="obsTypeDialog" max-width="520" @keydown.esc.prevent="closeObsTypeDialog" aria-labelledby="edit-obs-type-title">
+        <v-card>
+          <v-card-title id="edit-obs-type-title">Edit Observation Type</v-card-title>
+          <v-card-text>
+            <div class="d-flex align-center" style="gap: 16px">
+              <v-switch v-model="editSpectroscopy" label="Spectroscopy" color="primary" hide-details density="comfortable" />
+              <v-switch v-model="editPhotometry" label="Photometry" color="primary" hide-details density="comfortable" />
+            </div>
+          </v-card-text>
+          <v-card-actions>
+            <v-spacer />
+            <v-btn color="primary" variant="flat" :loading="savingObsType" @click="saveObsType">Save</v-btn>
+            <v-btn variant="text" @click="closeObsTypeDialog" ref="obsTypeCloseBtn">Cancel</v-btn>
+          </v-card-actions>
+        </v-card>
+      </v-dialog>
 
       <!-- Edit Notes Dialog -->
       <v-dialog v-model="notesDialog" max-width="640" @keydown.esc.prevent="closeNotesDialog" aria-labelledby="edit-run-notes-title">
@@ -358,7 +386,14 @@
                   <td>{{ df.exposure_type_display || df.exposure_type }}</td>
                   <td>{{ formatExposureTime(df.exptime) }}</td>
                   <td class="text-right">
-                    <v-btn variant="text" size="small" icon aria-label="Preview" @click="openPreview(df)">
+                    <v-btn
+                      v-if="!isSer(df)"
+                      variant="text"
+                      size="small"
+                      icon
+                      aria-label="Preview"
+                      @click="openPreview(df)"
+                    >
                       <v-icon>mdi-image-search</v-icon>
                     </v-btn>
                     <v-btn variant="text" size="small" icon :href="api.getDataFileDownloadUrl(df.pk || df.id)" :aria-label="`Download ${df.file_name}`">
@@ -590,6 +625,11 @@ const tagDialog = ref(false)
 const availableTags = ref([])
 const selectedTags = ref([])
 const tagCloseBtn = ref(null)
+const obsTypeDialog = ref(false)
+const editSpectroscopy = ref(false)
+const editPhotometry = ref(false)
+const savingObsType = ref(false)
+const obsTypeCloseBtn = ref(null)
 
 const dateString = computed(() => {
   if (!run.value?.name) return ''
@@ -808,6 +848,13 @@ const isLight = (df) => {
   return code === 'LI' || df?.exposure_type_display === 'Light'
 }
 
+const isSer = (df) => {
+  const name = String(df?.file_name || '')
+  const extMatch = /\.ser$/i.test(name)
+  const typeMatch = String(df?.file_type || '').toUpperCase() === 'SER'
+  return extMatch || typeMatch
+}
+
 const fetchRunDataFiles = async () => {
   try {
     loadingDataFiles.value = true
@@ -1012,6 +1059,32 @@ const saveRunNotes = async () => {
     try { notify.success('Notes updated') } catch {}
   } catch (e) {
     console.error(e)
+  }
+}
+
+const openObsTypeDialog = () => {
+  editSpectroscopy.value = !!run.value?.spectroscopy
+  editPhotometry.value = !!run.value?.photometry
+  obsTypeDialog.value = true
+}
+
+const closeObsTypeDialog = () => {
+  obsTypeDialog.value = false
+  try { const el = obsTypeCloseBtn.value; if (el && typeof el.focus === 'function') setTimeout(() => el.focus(), 0) } catch {}
+}
+
+const saveObsType = async () => {
+  try {
+    savingObsType.value = true
+    await api.updateObservationRun(runId, { spectroscopy: editSpectroscopy.value, photometry: editPhotometry.value })
+    const data = await api.getObservationRun(runId)
+    run.value = data
+    obsTypeDialog.value = false
+    try { notify.success('Observation type updated') } catch {}
+  } catch (e) {
+    console.error('Error updating observation type', e)
+  } finally {
+    savingObsType.value = false
   }
 }
 

@@ -429,6 +429,7 @@ const radius = ref('')
 const radiusUnit = ref('arcsec')
 const notify = useNotifyStore()
 const boolFilterItems = [
+  { title: 'Not selected', value: null },
   { title: 'Yes', value: true },
   { title: 'No', value: false },
 ]

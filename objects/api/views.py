@@ -218,6 +218,23 @@ class ObjectVuetifyViewSet(viewsets.ModelViewSet):
         if object_type:
             queryset = queryset.filter(object_type=object_type)
         
+        # Handle observation flags (photometry/spectroscopy)
+        def parse_bool(val):
+            if val is None:
+                return None
+            s = str(val).strip().lower()
+            if s in ('1', 'true', 'yes', 'on'): return True
+            if s in ('0', 'false', 'no', 'off'): return False
+            return None
+
+        photometry = parse_bool(self.request.query_params.get('photometry', None))
+        if photometry is not None:
+            queryset = queryset.filter(photometry=photometry)
+
+        spectroscopy = parse_bool(self.request.query_params.get('spectroscopy', None))
+        if spectroscopy is not None:
+            queryset = queryset.filter(spectroscopy=spectroscopy)
+
         # Handle observation run filter
         observation_run = self.request.query_params.get('observation_run', None)
         if observation_run:
