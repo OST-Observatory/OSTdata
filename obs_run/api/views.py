@@ -41,6 +41,11 @@ try:
 except Exception:
     Image = None
 
+from django.utils import timezone
+from django.db import transaction
+from obs_run.models import DownloadJob
+from obs_run.tasks import build_zip_task
+
 
 # ===============================================================
 #   OBSERVATION RUNS
@@ -216,6 +221,38 @@ def get_datafile_thumbnail(request, pk):
             img.save(buf, format='PNG')
             buf.seek(0)
             return HttpResponse(buf.getvalue(), content_type='image/png')
+    except Exception as e:
+        return Response({"detail": str(e)}, status=400)
+
+
+@api_view(['GET'])
+def get_datafile_header(request, pk):
+    """
+    Return sanitized FITS header for a DataFile as JSON. If the user is anonymous,
+    only headers for files in public runs are accessible.
+    """
+    try:
+        df = DataFile.objects.select_related('observation_run').get(pk=pk)
+    except DataFile.DoesNotExist:
+        return Response({"detail": "Not found"}, status=404)
+
+    run = df.observation_run
+    if request.user.is_anonymous and run and not run.is_public:
+        return Response({"detail": "Not found"}, status=404)
+
+    file_path = Path(df.datafile)
+    if not file_path.exists() or not file_path.is_file():
+        return Response({"detail": "File not found"}, status=404)
+
+    # Determine FITS by type or extension
+    file_type = (df.file_type or '').upper()
+    is_fits = (file_type == 'FITS') or (file_path.suffix.lower() in ['.fits', '.fit', '.fts'])
+    if not is_fits:
+        return Response({"header": {}}, status=200)
+
+    try:
+        header = df.get_fits_header()
+        return Response({"header": header}, status=200)
     except Exception as e:
         return Response({"detail": str(e)}, status=400)
 
@@ -591,6 +628,7 @@ def getDashboardStats(request):
             'darks': files.filter(exposure_type='DA').count(),
             'flats': files.filter(exposure_type='FL').count(),
             'lights': files.filter(exposure_type='LI').count(),
+            'waves': files.filter(exposure_type='WA').count(),
             'fits': files.filter(file_type__exact='FITS').count(),
             'jpeg': files.filter(file_type__exact='JPG').count(),
             'cr2': files.filter(file_type__exact='CR2').count(),
@@ -625,3 +663,100 @@ def getDashboardStats(request):
     stats['files']['storage_size'] = get_size_dir(data_path) * pow(1000, -4)  # Convert to TB
 
     return Response(stats)
+
+@api_view(['POST'])
+def create_download_job_bulk(request):
+    """Create a DownloadJob for arbitrary datafiles (IDs and/or filters across runs)."""
+    payload = request.data if hasattr(request, 'data') else {}
+    selected_ids = payload.get('ids') or []
+    filters = payload.get('filters') or {}
+
+    job = DownloadJob.objects.create(
+        user=request.user if request.user.is_authenticated else None,
+        run=None,
+        selected_ids=selected_ids,
+        filters=filters,
+        status='queued',
+    )
+    build_zip_task.delay(job.pk)
+    return Response({'job_id': job.pk}, status=201)
+
+@api_view(['POST'])
+def create_download_job(request, run_pk):
+    """Create a DownloadJob and enqueue the Celery task."""
+    try:
+        run = ObservationRun.objects.get(pk=run_pk)
+    except ObservationRun.DoesNotExist:
+        return Response({'detail': 'Run not found'}, status=404)
+
+    if request.user.is_anonymous and not run.is_public:
+        return Response({'detail': 'Not found'}, status=404)
+
+    payload = request.data if hasattr(request, 'data') else {}
+    selected_ids = payload.get('ids') or []
+    filters = payload.get('filters') or {}
+
+    with transaction.atomic():
+        job = DownloadJob.objects.create(
+            user=request.user if request.user.is_authenticated else None,
+            run=run,
+            selected_ids=selected_ids,
+            filters=filters,
+            status='queued',
+        )
+    build_zip_task.delay(job.pk)
+    return Response({'job_id': job.pk}, status=201)
+
+
+@api_view(['GET'])
+def download_job_status(request, job_id):
+    try:
+        job = DownloadJob.objects.get(pk=job_id)
+    except DownloadJob.DoesNotExist:
+        return Response({'detail': 'Not found'}, status=404)
+    if job.user_id and (not request.user.is_authenticated or request.user.pk != job.user_id):
+        return Response({'detail': 'Not found'}, status=404)
+    if job.user_id is None and request.user.is_anonymous and job.run and not job.run.is_public:
+        return Response({'detail': 'Not found'}, status=404)
+    return Response({
+        'status': job.status,
+        'progress': job.progress,
+        'bytes_total': job.bytes_total,
+        'bytes_done': job.bytes_done,
+        'url': (f"/api/runs/jobs/{job.pk}/download" if job.status == 'done' and job.file_path else None),
+        'error': job.error or None,
+    })
+
+
+@api_view(['POST'])
+def cancel_download_job(request, job_id):
+    try:
+        job = DownloadJob.objects.get(pk=job_id)
+    except DownloadJob.DoesNotExist:
+        return Response({'detail': 'Not found'}, status=404)
+    if job.user_id and (not request.user.is_authenticated or request.user.pk != job.user_id):
+        return Response({'detail': 'Not found'}, status=404)
+    if job.status in ('done', 'failed', 'cancelled', 'expired'):
+        return Response({'status': job.status})
+    job.status = 'cancelled'
+    job.finished_at = timezone.now()
+    job.save(update_fields=['status', 'finished_at'])
+    return Response({'status': job.status})
+
+
+@api_view(['GET'])
+def download_job_download(request, job_id):
+    try:
+        job = DownloadJob.objects.get(pk=job_id)
+    except DownloadJob.DoesNotExist:
+        return Response({'detail': 'Not found'}, status=404)
+    if job.user_id and (not request.user.is_authenticated or request.user.pk != job.user_id):
+        return Response({'detail': 'Not found'}, status=404)
+    if job.status != 'done' or not job.file_path:
+        return Response({'detail': 'Not ready'}, status=400)
+    path = Path(job.file_path)
+    if not path.exists():
+        return Response({'detail': 'File missing'}, status=404)
+    from django.http import FileResponse
+    filename = path.name
+    return FileResponse(open(path, 'rb'), as_attachment=True, filename=filename)

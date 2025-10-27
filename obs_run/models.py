@@ -106,6 +106,10 @@ class DataFile(models.Model):
     #   The file
     datafile = models.FilePathField(max_length=150)
 
+    #   File metadata for reconciliation and integrity
+    file_size = models.BigIntegerField(default=0)
+    content_hash = models.CharField(max_length=64, default='', db_index=True)
+
     #   File type (FITS, CR2, ...)
     file_type = models.CharField(max_length=50, default='')
 
@@ -114,12 +118,14 @@ class DataFile(models.Model):
     DARK = 'DA'
     FLAT = 'FL'
     LIGHT = 'LI'
+    WAVE = 'WA'
     UNKNOWN = 'UK'
     EXPOSURE_TYPE_POSSIBILITIES = (
         (BIAS, 'Bias'),
         (DARK, 'Dark'),
         (FLAT, 'Flat'),
         (LIGHT, 'Light'),
+        (WAVE, 'Wave'),
         (UNKNOWN, 'Unknown'),
     )
     exposure_type = models.CharField(
@@ -263,3 +269,47 @@ class DataFile(models.Model):
             self.exposure_type,
             self.obs_date,
         )
+
+
+class DownloadJob(models.Model):
+    """Background job to prepare ZIP archives of data files.
+    Stores minimal state for polling and retrieval.
+    """
+    STATUS_CHOICES = (
+        ('queued', 'Queued'),
+        ('running', 'Running'),
+        ('done', 'Done'),
+        ('failed', 'Failed'),
+        ('cancelled', 'Cancelled'),
+        ('expired', 'Expired'),
+    )
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='download_jobs',
+    )
+    run = models.ForeignKey(
+        ObservationRun,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='download_jobs',
+    )
+    selected_ids = models.JSONField(null=True, blank=True)
+    filters = models.JSONField(null=True, blank=True)
+    status = models.CharField(max_length=16, choices=STATUS_CHOICES, default='queued')
+    progress = models.IntegerField(default=0)
+    bytes_total = models.BigIntegerField(default=0)
+    bytes_done = models.BigIntegerField(default=0)
+    file_path = models.CharField(max_length=512, blank=True, default='')
+    error = models.TextField(blank=True, default='')
+    created_at = models.DateTimeField(auto_now_add=True)
+    started_at = models.DateTimeField(null=True, blank=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
+    expires_at = models.DateTimeField(null=True, blank=True)
+
+    def __str__(self):
+        return f"DownloadJob #{self.pk} ({self.status})"

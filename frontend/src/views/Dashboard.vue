@@ -1,7 +1,8 @@
 <template>
-  <div class="dashboard">
-    <div class="container">
-      <h1 class="sr-only">Dashboard</h1>
+  <v-container fluid class="dashboard">
+      <div class="d-flex align-center justify-space-between mb-4">
+        <h1 class="text-h4">Dashboard</h1>
+      </div>
       <v-alert
         v-if="error"
         type="error"
@@ -269,8 +270,7 @@
           </div>
         </v-card-text>
       </v-card>
-    </div>
-  </div>
+  </v-container>
 </template>
 
 <script>

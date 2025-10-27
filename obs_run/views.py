@@ -109,6 +109,7 @@ def dashboard(request):
     stats['ndarks'] = files.filter(exposure_type='DA').count()
     stats['nflats'] = files.filter(exposure_type='FL').count()
     stats['nlights'] = files.filter(exposure_type='LI').count()
+    stats['nwaves'] = files.filter(exposure_type='WA').count()
     stats['nfits'] = files.filter(file_type__exact='FITS').count()
     stats['njpeg'] = files.filter(file_type__exact='JPG').count()
     stats['ncr2'] = files.filter(file_type__exact='CR2').count()

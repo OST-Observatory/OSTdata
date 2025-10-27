@@ -14,7 +14,7 @@
         <v-card-text>
           <v-row>
             <v-col cols="12" sm="8" md="6">
-              <v-text-field
+      <v-text-field
                 v-model="search"
                 label="Search tags"
                 prepend-inner-icon="mdi-magnify"
@@ -272,9 +272,14 @@ const handleItemsPerPageChange = () => {
   syncQueryAndFetch()
 }
 
+import { debounce } from 'lodash'
+const debouncedSyncTags = debounce(() => {
+  syncQueryAndFetch()
+}, 300)
+
 watch(search, () => {
   currentPage.value = 1
-  syncQueryAndFetch()
+  debouncedSyncTags()
 })
 
 // CRUD (optional)
@@ -413,6 +418,11 @@ fetchTags()
 .v-data-table :deep(.v-data-table__wrapper) {
   overflow-x: auto;
   overflow-y: visible;
+}
+
+/* Align cell padding with other overview tables */
+.v-data-table :deep(td) {
+  padding: 8px 16px !important;
 }
 
 /* Responsive wrapping for action bar */

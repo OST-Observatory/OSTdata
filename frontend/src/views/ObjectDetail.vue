@@ -348,46 +348,142 @@
               </div>
 
               <!-- Downloads -->
-              <div class="d-flex align-center flex-wrap mb-2 px-4" style="gap: 12px">
-                <v-btn color="primary" variant="flat" @click="downloadAllObjectFiles" :loading="downloadingAll">Download all</v-btn>
-                <v-btn color="primary" variant="text" :disabled="!filteredDataFiles.length" @click="downloadFilteredObjectFiles">Download filtered</v-btn>
-                <v-btn color="primary" variant="text" :disabled="!selectedIds.length" @click="downloadSelectedObjectFiles">Download selected ({{ selectedIds.length }})</v-btn>
+              <div class="d-flex align-center flex-wrap mb-2 px-4" style="gap: 12px" role="toolbar" aria-label="Data files actions">
+                <v-btn color="primary" variant="flat" @click="handleDownloadAllObjectFiles" :loading="downloadingAll" aria-label="Download all files">Download all</v-btn>
+                <v-btn color="primary" variant="text" :disabled="!filteredDataFiles.length" @click="handleDownloadFilteredObjectFiles" aria-label="Download filtered files">Download filtered</v-btn>
+                <v-btn color="primary" variant="text" :disabled="!selectedIds.length" @click="downloadSelectedObjectFiles" :aria-label="`Download selected (${selectedIds.length})`">Download selected ({{ selectedIds.length }})</v-btn>
               </div>
 
-              <v-data-table
-                :headers="objectDataFileHeaders"
-                :items="filteredDataFiles"
-                :loading="loadingDataFiles"
-                class="elevation-1"
-              >
-                <template v-slot:item.select="{ item }">
-                  <v-checkbox v-model="selectedIds" :value="(item.pk || item.id)" density="compact" hide-details />
-                </template>
-                <template v-slot:item.file_name="{ item }">
-                  {{ item.file_name }}
-                </template>
-                <template v-slot:item.obs_date="{ item }">
-                  {{ formatDate(item.obs_date) }}
-                </template>
-                <template v-slot:item.coordinates="{ item }">
-                  {{ item.ra_hms }} {{ item.dec_dms }}
-                </template>
-                <template v-slot:item.observation_run="{ item }">
-                  <router-link :to="`/observation-runs/${item.observation_run}`" class="text-decoration-none">
-                    {{ formatRunNameFromId(item.observation_run_name) }}
-                  </router-link>
-                </template>
-                <template v-slot:item.tools="{ item }">
-                  <div class="text-right">
-                    <v-btn variant="text" size="small" icon aria-label="Preview" @click="openPreview(item)">
-                      <v-icon>mdi-image-search</v-icon>
-                    </v-btn>
-                    <v-btn variant="text" size="small" icon :href="api.getDataFileDownloadUrl(item.pk || item.id)" :aria-label="`Download ${item.file_name}`">
-                      <v-icon>mdi-download</v-icon>
-                    </v-btn>
-                  </div>
-                </template>
-              </v-data-table>
+              <v-skeleton-loader v-if="loadingDataFiles" type="table"></v-skeleton-loader>
+              <template v-else>
+                <v-table v-if="objDfPagedItems && objDfPagedItems.length" class="custom-table">
+                  <thead>
+                    <tr>
+                      <th class="text-primary" style="width:36px">
+                        <v-checkbox v-model="selectAll" density="compact" hide-details @change="toggleSelectAll" aria-label="Select all files" />
+                      </th>
+                      <th class="text-primary">File Name</th>
+                      <th class="text-primary">Time</th>
+                      <th class="text-primary">Target</th>
+                      <th class="text-primary">Coordinates</th>
+                      <th class="text-primary">File Type</th>
+                      <th class="text-primary">Binning</th>
+                      <th class="text-primary">Instrument</th>
+                      <th class="text-primary">Exposure Type</th>
+                      <th class="text-primary">Exp. Time</th>
+                      <th class="text-primary text-right">Tools</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="df in objDfPagedItems" :key="df.pk || df.id">
+                      <td>
+                        <v-checkbox v-model="selectedIds" :value="(df.pk || df.id)" density="compact" hide-details :aria-label="`Select ${df.file_name}`" />
+                      </td>
+                      <td>{{ df.file_name }}</td>
+                      <td>{{ formatDate(df.obs_date) }}</td>
+                      <td>
+                        <template v-if="(df.exposure_type || '').toUpperCase() === 'LI'">
+                          <router-link
+                            v-if="df.main_target && df.main_target.trim()"
+                            :to="`/objects/${getObjectIdByTargetName(df.main_target)}`"
+                            class="text-decoration-none primary--text"
+                          >{{ df.main_target }}</router-link>
+                          <span v-else>{{ df.main_target || '—' }}</span>
+                        </template>
+                        <span v-else class="text-secondary">—</span>
+                      </td>
+                      <td>{{ df.ra_hms }} {{ df.dec_dms }}</td>
+                      <td>{{ df.file_type }}</td>
+                      <td>{{ df.binning || '1x1' }}</td>
+                      <td>{{ df.instrument || '—' }}</td>
+                      <td>{{ df.exposure_type_display || df.exposure_type }}</td>
+                      <td>{{ formatExposureTime(df.exptime) }}</td>
+                      <td class="text-right">
+                        <v-btn
+                          v-if="String(df.file_type || '').toUpperCase() !== 'SER'"
+                          variant="text"
+                          size="small"
+                          icon
+                          aria-label="Preview"
+                          @click="openPreview(df)"
+                        >
+                          <v-icon>mdi-image-search</v-icon>
+                        </v-btn>
+                        <v-btn
+                          variant="text"
+                          size="small"
+                          icon
+                          :disabled="String(df.file_type || '').toUpperCase() !== 'FITS'"
+                          :aria-label="`View FITS header for ${df.file_name}`"
+                          @click="openHeader(df)"
+                        >
+                          <v-icon>mdi-file-document-outline</v-icon>
+                        </v-btn>
+                        <v-btn variant="text" size="small" icon :href="api.getDataFileDownloadUrl(df.pk || df.id)" :aria-label="`Download ${df.file_name}`">
+                          <v-icon>mdi-download</v-icon>
+                        </v-btn>
+                      </td>
+                    </tr>
+                  </tbody>
+                </v-table>
+                <div v-else class="text-caption text-secondary">No data files.</div>
+              </template>
+              <v-card-actions class="d-flex align-center justify-space-between px-4 py-2 card-actions-responsive">
+                <div class="d-flex align-center actions-left">
+                  <span class="text-body-2 mr-4">Items per page:</span>
+                  <v-select
+                    v-model="objDfItemsPerPage"
+                    :items="objDfPageSizeOptions"
+                    item-title="title"
+                    item-value="value"
+                    density="compact"
+                    variant="outlined"
+                    hide-details
+                    class="items-per-page-select"
+                    style="width: 100px"
+                    @update:model-value="handleObjDfItemsPerPageChange"
+                    aria-label="Items per page"
+                  ></v-select>
+                </div>
+
+                <div class="d-flex align-center actions-right">
+                  <span class="text-body-2 mr-4">
+                    {{ objDfPaginationInfo }}
+                  </span>
+                  <v-btn
+                    icon="mdi-page-first"
+                    variant="text"
+                    :disabled="objDfPage === 1"
+                    @click="handleObjDfPageChange(1)"
+                    class="mx-1 pagination-btn"
+                    aria-label="First page"
+                  ></v-btn>
+                  <v-btn
+                    icon="mdi-chevron-left"
+                    variant="text"
+                    :disabled="objDfPage === 1"
+                    @click="handleObjDfPageChange(objDfPage - 1)"
+                    class="mx-1 pagination-btn"
+                    aria-label="Previous page"
+                  ></v-btn>
+                  <v-btn
+                    icon="mdi-chevron-right"
+                    variant="text"
+                    :disabled="objDfPage >= objDfTotalPages"
+                    @click="handleObjDfPageChange(objDfPage + 1)"
+                    class="mx-1 pagination-btn"
+                    aria-label="Next page"
+                  ></v-btn>
+                  <v-btn
+                    icon="mdi-page-last"
+                    variant="text"
+                    :disabled="objDfPage >= objDfTotalPages"
+                    @click="handleObjDfPageChange(objDfTotalPages)"
+                    class="mx-1 pagination-btn"
+                    aria-label="Last page"
+                  ></v-btn>
+                </div>
+              </v-card-actions>
               </div>
             </div>
           </v-expand-transition>
@@ -416,6 +512,38 @@
         <v-card-actions>
           <v-spacer />
           <v-btn variant="text" color="primary" @click="previewDialog = false">Close</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <!-- FITS Header dialog -->
+    <v-dialog v-model="headerDialog" max-width="800" aria-labelledby="header-title">
+      <v-card>
+        <v-card-title id="header-title">{{ headerTitle || 'FITS Header' }}</v-card-title>
+        <v-card-text>
+          <v-alert v-if="headerError" type="error" variant="tonal">{{ headerError }}</v-alert>
+          <v-skeleton-loader v-else-if="headerLoading" type="table" />
+          <template v-else>
+            <v-table density="compact">
+              <thead>
+                <tr>
+                  <th class="text-primary" style="width: 30%">Key</th>
+                  <th class="text-primary">Value</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="([k, v], idx) in headerEntries" :key="k || idx">
+                  <td class="font-mono">{{ k }}</td>
+                  <td class="font-mono">{{ formatHeaderValue(v) }}</td>
+                </tr>
+              </tbody>
+            </v-table>
+            <div v-if="!headerEntries.length" class="text-caption text-secondary">No header data.</div>
+          </template>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" color="primary" @click="headerDialog = false">Close</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -494,6 +622,8 @@ const showObservationRuns = ref(false)
 const showDataFiles = ref(false)
 const loadingObservationRuns = ref(false)
 const loadingDataFiles = ref(false)
+const objDfPage = ref(1)
+const objDfItemsPerPage = ref(10)
 const basicDialog = ref(false)
 const savingBasic = ref(false)
 const basicCloseBtn = ref(null)
@@ -819,8 +949,12 @@ const formatRunName = (run) => {
 }
 
 const formatRunNameFromId = (name) => {
-  if (!name || name.length < 8) return name
-  return `${name.substring(0, 4)}-${name.substring(4, 6)}-${name.substring(6, 8)}`
+  if (!name) return name
+  const digits = String(name).replace(/\D/g, '')
+  if (digits.length >= 8) {
+    return `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6, 8)}`
+  }
+  return name
 }
 
 const getStatusColor = (status) => {
@@ -868,6 +1002,7 @@ const dfFilterExpMax = ref(null)
 
 const exposureTypeOptions = [
   { title: 'Light (LI)', value: 'LI' },
+  { title: 'Wave (WA)', value: 'WA' },
   { title: 'Flat (FL)', value: 'FL' },
   { title: 'Dark (DA)', value: 'DA' },
   { title: 'Bias (BI)', value: 'BI' },
@@ -907,6 +1042,61 @@ const filteredDataFiles = computed(() => {
   return items
 })
 
+const objDfPagedItems = computed(() => {
+  if (objDfItemsPerPage.value === -1) return filteredDataFiles.value
+  const start = (objDfPage.value - 1) * objDfItemsPerPage.value
+  return filteredDataFiles.value.slice(start, start + objDfItemsPerPage.value)
+})
+
+// Checkbox select-all and selection helpers for paged items
+const selectAll = ref(false)
+watch(objDfPagedItems, () => {
+  selectAll.value = false
+  selectedIds.value = []
+})
+const toggleSelectAll = () => {
+  if (selectAll.value) {
+    selectedIds.value = (objDfPagedItems.value || []).map(df => df.pk || df.id)
+  } else {
+    selectedIds.value = []
+  }
+}
+
+// For Object Detail, link target always resolves to the current object id
+const getObjectIdByTargetName = (name) => {
+  return object.value?.pk || object.value?.id || route.params.id
+}
+
+const objDfTotalPages = computed(() => {
+  if (objDfItemsPerPage.value === -1) return 1
+  return Math.max(1, Math.ceil((filteredDataFiles.value.length || 0) / (objDfItemsPerPage.value || 10)))
+})
+
+const objDfPaginationInfo = computed(() => {
+  if (objDfItemsPerPage.value === -1) return `Showing all ${filteredDataFiles.value.length}`
+  const start = (objDfPage.value - 1) * objDfItemsPerPage.value + 1
+  const end = Math.min(objDfPage.value * objDfItemsPerPage.value, filteredDataFiles.value.length)
+  return `${start}-${end} of ${filteredDataFiles.value.length}`
+})
+
+const objDfPageSizeOptions = [
+  { title: '10', value: 10 },
+  { title: '25', value: 25 },
+  { title: '50', value: 50 },
+  { title: '100', value: 100 },
+  { title: 'All', value: -1 },
+]
+
+const handleObjDfPageChange = (newPage) => {
+  if (newPage >= 1 && newPage <= objDfTotalPages.value) {
+    objDfPage.value = newPage
+  }
+}
+
+const handleObjDfItemsPerPageChange = () => {
+  objDfPage.value = 1
+}
+
 const resetDfFilters = () => {
   dfFilterFileName.value = ''
   dfFilterType.value = ''
@@ -944,6 +1134,51 @@ const downloadFilteredObjectFiles = () => {
   window.location.href = url
 }
 
+// Async job helpers (bulk, across runs)
+const pollJobUntilReady = async (jobId, { timeoutMs = 120000, intervalMs = 1500 } = {}) => {
+  const start = Date.now()
+  while (Date.now() - start < timeoutMs) {
+    const status = await api.getDownloadJobStatus(jobId)
+    if (status?.status === 'done' && status?.url) return status
+    if (status?.status === 'failed' || status?.status === 'cancelled') throw new Error(status?.error || 'Job failed')
+    await new Promise(r => setTimeout(r, intervalMs))
+  }
+  throw new Error('Timed out waiting for download job')
+}
+
+const triggerAsyncBulkDownload = async (ids = [], filters = {}) => {
+  try {
+    downloadingAll.value = true
+    const res = await api.createBulkDownloadJob(ids, filters)
+    const jobId = res?.job_id
+    if (!jobId) throw new Error('Job not created')
+    const status = await pollJobUntilReady(jobId)
+    await api.downloadJobFile(jobId)
+  } finally {
+    downloadingAll.value = false
+  }
+}
+
+const handleDownloadAllObjectFiles = async () => {
+  const count = Array.isArray(dataFiles.value) ? dataFiles.value.length : 0
+  if (count > 5) {
+    const ids = (Array.isArray(dataFiles.value) ? dataFiles.value : []).map(f => f.pk || f.id)
+    await triggerAsyncBulkDownload(ids, {})
+  } else {
+    await downloadAllObjectFiles()
+  }
+}
+
+const handleDownloadFilteredObjectFiles = async () => {
+  const count = filteredDataFiles.value.length
+  if (count > 5) {
+    const ids = filteredDataFiles.value.map(f => f.pk || f.id)
+    await triggerAsyncBulkDownload(ids, {})
+  } else {
+    downloadFilteredObjectFiles()
+  }
+}
+
 const previewDialog = ref(false)
 const previewTitle = ref('')
 const previewUrl = ref('')
@@ -959,6 +1194,37 @@ const openPreview = (df) => {
 }
 const handlePreviewLoad = () => { previewLoading.value = false }
 const handlePreviewError = () => { previewLoading.value = false }
+
+// FITS header dialog
+const headerDialog = ref(false)
+const headerTitle = ref('')
+const headerLoading = ref(false)
+const headerError = ref('')
+const headerEntries = ref([])
+const openHeader = async (df) => {
+  headerTitle.value = df?.file_name || 'FITS Header'
+  headerError.value = ''
+  headerEntries.value = []
+  headerDialog.value = true
+  try {
+    headerLoading.value = true
+    const payload = await api.getDataFileHeader(df?.pk || df?.id)
+    const hdr = (payload && payload.header) ? payload.header : {}
+    headerEntries.value = Object.entries(hdr).sort((a, b) => String(a[0]).localeCompare(String(b[0])))
+  } catch (e) {
+    console.error('Failed to fetch FITS header', e)
+    headerError.value = 'Failed to fetch FITS header.'
+  } finally {
+    headerLoading.value = false
+  }
+}
+const formatHeaderValue = (v) => {
+  if (v === null || v === undefined) return '—'
+  if (typeof v === 'object') {
+    try { return JSON.stringify(v) } catch { return String(v) }
+  }
+  return String(v)
+}
 
 // Binning options derived from data
 const binningOptions = computed(() => {

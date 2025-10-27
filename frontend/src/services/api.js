@@ -141,6 +141,7 @@ export const api = {
     const url = `${base}/runs/datafiles/${pk}/thumbnail/?w=${encodeURIComponent(w)}`
     return url
   },
+  getDataFileHeader: (pk) => fetchWithAuth(`/runs/datafiles/${pk}/header/`),
   getDataFileDownloadUrl: (pk) => {
     const base = API_BASE_URL
     return `${base}/runs/datafiles/${pk}/download/`
@@ -165,6 +166,53 @@ export const api = {
     const qs = params.toString()
     return `${base}/runs/runs/${runId}/download/${qs ? `?${qs}` : ''}`
   },
+  // Async download jobs for a run
+  createRunDownloadJob: (runId, ids = [], filters = {}) => {
+    return fetchWithAuth(`/runs/runs/${runId}/download-jobs/`, {
+      method: 'POST',
+      body: JSON.stringify({ ids, filters })
+    })
+  },
+  getDownloadJobStatus: (jobId) => fetchWithAuth(`/runs/jobs/${jobId}/status`),
+  getDownloadJobDownloadUrl: (jobId) => {
+    const base = API_BASE_URL
+    return `${base}/runs/jobs/${encodeURIComponent(jobId)}/download`
+  },
+  downloadJobFile: async (jobId) => {
+    // Authenticated fetch to download file as blob
+    const authStore = useAuthStore()
+    const url = `${API_BASE_URL}/runs/jobs/${encodeURIComponent(jobId)}/download`
+    const headers = {}
+    if (authStore.token) headers['Authorization'] = `Token ${authStore.token}`
+    const resp = await fetch(url, { headers })
+    if (!resp.ok) {
+      let msg = `Download failed (${resp.status})`
+      try {
+        const data = await resp.json()
+        msg = data?.detail || data?.error || msg
+      } catch {}
+      try { const notify = useNotifyStore(); notify.error(msg) } catch {}
+      throw new Error(msg)
+    }
+    const blob = await resp.blob()
+    // Try to get filename from header
+    let filename = `download_job_${jobId}.zip`
+    const cd = resp.headers.get('Content-Disposition') || resp.headers.get('content-disposition')
+    if (cd) {
+      const m = cd.match(/filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i)
+      const val = (m && (m[1] || m[2])) ? decodeURIComponent(m[1] || m[2]) : null
+      if (val) filename = val
+    }
+    const link = document.createElement('a')
+    link.href = URL.createObjectURL(blob)
+    link.download = filename
+    document.body.appendChild(link)
+    link.click()
+    setTimeout(() => {
+      URL.revokeObjectURL(link.href)
+      link.remove()
+    }, 0)
+  },
   getDataFilesZipUrl: (ids = [], filters) => {
     const base = API_BASE_URL
     const params = new URLSearchParams()
@@ -183,6 +231,13 @@ export const api = {
     }
     const qs = params.toString()
     return `${base}/runs/datafiles/download/${qs ? `?${qs}` : ''}`
+  },
+  // Async bulk (across runs) download jobs
+  createBulkDownloadJob: (ids = [], filters = {}) => {
+    return fetchWithAuth('/runs/datafiles/download-jobs/', {
+      method: 'POST',
+      body: JSON.stringify({ ids, filters })
+    })
   },
 
   // Objects

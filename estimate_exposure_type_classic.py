@@ -39,6 +39,8 @@ if __name__ == "__main__":
                     data_file.exposure_type = 'FL'
                 if estimated_exposure_type == 'light':
                     data_file.exposure_type = 'LI'
+                if estimated_exposure_type == 'wave':
+                    data_file.exposure_type = 'WA'
 
                 if spectrum_type == 'dados':
                     data_file.spectrograph = 'D'

@@ -48,6 +48,7 @@ INSTALLED_APPS = [
     'django_filters',
     'simple_history',
     'corsheaders',
+    'django_celery_results',
 ]
 
 MIDDLEWARE = [
@@ -184,6 +185,15 @@ if env("DEVICE") in platform.node():
 else:
    from .settings_development import DEBUG, ALLOWED_HOSTS, DATABASES, LOGGING
 
+# Celery configuration
+# Eager mode default for development unless overridden via env
+CELERY_TASK_ALWAYS_EAGER = env.bool('CELERY_TASK_ALWAYS_EAGER', default=False)
+CELERY_TASK_EAGER_PROPAGATES = env.bool('CELERY_TASK_EAGER_PROPAGATES', default=True)
+
+CELERY_BROKER_URL = env('CELERY_BROKER_URL', default='redis://localhost:6379/0')
+CELERY_RESULT_BACKEND = env('CELERY_RESULT_BACKEND', default='redis://localhost:6379/1')
+CELERY_RESULT_EXTENDED = True
+
 # CORS settings for frontend communication
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",  # Vite dev server
@@ -203,3 +213,13 @@ CORS_ALLOWED_HEADERS = [
     'x-csrftoken',
     'x-requested-with',
 ]
+
+# Optional: schedule periodic reconcile of filesystem vs DB (disabled by default)
+from celery.schedules import crontab
+CELERY_BEAT_SCHEDULE = {}
+if env.bool('ENABLE_FS_RECONCILE', default=False):
+    CELERY_BEAT_SCHEDULE['reconcile_filesystem'] = {
+        'task': 'obs_run.tasks.reconcile_filesystem',
+        'schedule': crontab(minute='*/30'),  # every 30 minutes
+        'args': (),
+    }

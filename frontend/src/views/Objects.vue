@@ -225,6 +225,7 @@
           :sort-by="[{ key: sortBy.replace('-', ''), order: sortBy.startsWith('-') ? 'desc' : 'asc' }]"
           @update:sort-by="handleSort"
           hide-default-footer
+          class="custom-table"
         >
           <template #loading>
             <LoadingState type="table" />
@@ -676,8 +677,18 @@ const customFilter = (item, queryText, itemText) => {
   return textOne.indexOf(searchText) > -1
 }
 
-// Watch for changes in filters
-watch([search, selectedType, selectedRun], () => {
+// Debounced sync for text search
+const debouncedSyncQuery = debounce(() => {
+  syncQueryAndFetch()
+}, 300)
+
+// Watchers: debounce text search; others immediately
+watch(search, () => {
+  currentPage.value = 1
+  debouncedSyncQuery()
+})
+
+watch([selectedType, selectedRun], () => {
   currentPage.value = 1
   syncQueryAndFetch()
 })
@@ -788,6 +799,7 @@ onMounted(() => {
 .v-data-table :deep(th) {
   position: sticky;
   top: 0;
+  background: rgb(var(--v-theme-surface));
   z-index: 2;
 }
 

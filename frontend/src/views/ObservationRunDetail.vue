@@ -337,9 +337,9 @@
             <v-btn variant="text" color="primary" @click="resetDfFilters" aria-label="Reset filters" block>Reset</v-btn>
           </div>
           <div class="d-flex align-center flex-wrap mb-2 px-4" style="gap: 12px">
-            <v-btn color="primary" variant="flat" @click="downloadAll" :loading="downloadingAll">Download all</v-btn>
-            <v-btn color="primary" variant="text" :disabled="!dataFilesTotal" @click="downloadFiltered">Download filtered</v-btn>
-            <v-btn color="primary" variant="text" :disabled="!selectedIds.length" @click="downloadSelected">Download selected ({{ selectedIds.length }})</v-btn>
+            <v-btn color="primary" variant="flat" @click="handleDownloadAll" :loading="downloadingAll" aria-label="Download all files">Download all</v-btn>
+            <v-btn color="primary" variant="text" :disabled="!dataFilesTotal" @click="handleDownloadFiltered" aria-label="Download filtered files">Download filtered</v-btn>
+            <v-btn color="primary" variant="text" :disabled="!selectedIds.length" @click="downloadSelected" :aria-label="`Download selected (${selectedIds.length})`">Download selected ({{ selectedIds.length }})</v-btn>
           </div>
           <v-skeleton-loader v-if="loadingDataFiles" type="table"></v-skeleton-loader>
           <template v-else>
@@ -347,7 +347,7 @@
               <thead>
                 <tr>
                   <th class="text-primary" style="width:36px">
-                    <v-checkbox v-model="selectAll" density="compact" hide-details @change="toggleSelectAll" />
+                    <v-checkbox v-model="selectAll" density="compact" hide-details @change="toggleSelectAll" aria-label="Select all files" />
                   </th>
                   <th class="text-primary">File Name</th>
                   <th class="text-primary">Time</th>
@@ -396,6 +396,16 @@
                     >
                       <v-icon>mdi-image-search</v-icon>
                     </v-btn>
+                    <v-btn
+                      variant="text"
+                      size="small"
+                      icon
+                      :disabled="String(df.file_type || '').toUpperCase() !== 'FITS'"
+                      :aria-label="`View FITS header for ${df.file_name}`"
+                      @click="openHeader(df)"
+                    >
+                      <v-icon>mdi-file-document-outline</v-icon>
+                    </v-btn>
                     <v-btn variant="text" size="small" icon :href="api.getDataFileDownloadUrl(df.pk || df.id)" :aria-label="`Download ${df.file_name}`">
                       <v-icon>mdi-download</v-icon>
                     </v-btn>
@@ -409,23 +419,61 @@
             <div v-else class="text-caption text-secondary">No data files found for this run.</div>
           </template>
         </v-card-text>
-            <v-card-actions class="justify-end">
-              <v-pagination
-                v-model="dataFilesPage"
-                :length="dataFilesItemsPerPage === -1 ? 1 : Math.max(1, Math.ceil(dataFilesTotal / dataFilesItemsPerPage))"
-                total-visible="7"
-                density="comfortable"
-              />
-              <v-select
-                v-model="dataFilesItemsPerPage"
-                :items="dataFilesPageSizeOptions"
-                item-title="title"
-                item-value="value"
-                label="Items per page"
-                density="comfortable"
-                style="max-width: 180px;"
-                variant="outlined"
-              />
+            <v-card-actions class="d-flex align-center justify-space-between px-4 py-2 card-actions-responsive">
+              <div class="d-flex align-center actions-left">
+                <span class="text-body-2 mr-4">Items per page:</span>
+                <v-select
+                  v-model="dataFilesItemsPerPage"
+                  :items="dataFilesPageSizeOptions"
+                  item-title="title"
+                  item-value="value"
+                  density="compact"
+                  variant="outlined"
+                  hide-details
+                  class="items-per-page-select"
+                  style="width: 100px"
+                  @update:model-value="handleDfItemsPerPageChange"
+                  aria-label="Items per page"
+                ></v-select>
+              </div>
+
+              <div class="d-flex align-center actions-right">
+                <span class="text-body-2 mr-4">
+                  {{ dfPaginationInfo }}
+                </span>
+                <v-btn
+                  icon="mdi-page-first"
+                  variant="text"
+                  :disabled="dataFilesPage === 1"
+                  @click="handleDfPageChange(1)"
+                  class="mx-1 pagination-btn"
+                  aria-label="First page"
+                ></v-btn>
+                <v-btn
+                  icon="mdi-chevron-left"
+                  variant="text"
+                  :disabled="dataFilesPage === 1"
+                  @click="handleDfPageChange(dataFilesPage - 1)"
+                  class="mx-1 pagination-btn"
+                  aria-label="Previous page"
+                ></v-btn>
+                <v-btn
+                  icon="mdi-chevron-right"
+                  variant="text"
+                  :disabled="dataFilesPage >= dfTotalPages"
+                  @click="handleDfPageChange(dataFilesPage + 1)"
+                  class="mx-1 pagination-btn"
+                  aria-label="Next page"
+                ></v-btn>
+                <v-btn
+                  icon="mdi-page-last"
+                  variant="text"
+                  :disabled="dataFilesPage >= dfTotalPages"
+                  @click="handleDfPageChange(dfTotalPages)"
+                  class="mx-1 pagination-btn"
+                  aria-label="Last page"
+                ></v-btn>
+              </div>
             </v-card-actions>
           </v-card>
         </v-col>
@@ -509,6 +557,38 @@
         </v-card>
       </v-dialog>
 
+      <!-- FITS Header dialog -->
+      <v-dialog v-model="headerDialog" max-width="800" aria-labelledby="header-title">
+        <v-card>
+          <v-card-title id="header-title">{{ headerTitle || 'FITS Header' }}</v-card-title>
+          <v-card-text>
+            <v-alert v-if="headerError" type="error" variant="tonal">{{ headerError }}</v-alert>
+            <v-skeleton-loader v-else-if="headerLoading" type="table" />
+            <template v-else>
+              <v-table density="compact">
+                <thead>
+                  <tr>
+                    <th class="text-primary" style="width: 30%">Key</th>
+                    <th class="text-primary">Value</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="([k, v], idx) in headerEntries" :key="k || idx">
+                    <td class="font-mono">{{ k }}</td>
+                    <td class="font-mono">{{ formatHeaderValue(v) }}</td>
+                  </tr>
+                </tbody>
+              </v-table>
+              <div v-if="!headerEntries.length" class="text-caption text-secondary">No header data.</div>
+            </template>
+          </v-card-text>
+          <v-card-actions>
+            <v-spacer />
+            <v-btn variant="text" color="primary" @click="headerDialog = false">Close</v-btn>
+          </v-card-actions>
+        </v-card>
+      </v-dialog>
+
       <!-- Sky FOV dialog -->
       <v-dialog v-model="fovDialog" max-width="900" @keydown.esc.prevent="closeFov" aria-labelledby="fov-title">
         <v-card>
@@ -574,6 +654,7 @@ const dfFilterPixelsMin = ref(null)
 const dfFilterPixelsMax = ref(null)
 const exposureTypeOptions = [
   { title: 'Light (LI)', value: 'LI' },
+  { title: 'Wave (WA)', value: 'WA' },
   { title: 'Flat (FL)', value: 'FL' },
   { title: 'Dark (DA)', value: 'DA' },
   { title: 'Bias (BI)', value: 'BI' },
@@ -915,6 +996,30 @@ const resetDfFilters = () => {
   dfFilterFileName.value = ''
 }
 
+const dfTotalPages = computed(() => {
+  if (dataFilesItemsPerPage.value === -1) return 1
+  return Math.max(1, Math.ceil((dataFilesTotal.value || 0) / (dataFilesItemsPerPage.value || 10)))
+})
+
+const dfPaginationInfo = computed(() => {
+  if (dataFilesItemsPerPage.value === -1) return `Showing all ${dataFilesTotal.value}`
+  const start = (dataFilesPage.value - 1) * dataFilesItemsPerPage.value + 1
+  const end = Math.min(dataFilesPage.value * dataFilesItemsPerPage.value, dataFilesTotal.value)
+  return `${start}-${end} of ${dataFilesTotal.value}`
+})
+
+const handleDfPageChange = (newPage) => {
+  if (newPage >= 1 && newPage <= dfTotalPages.value) {
+    dataFilesPage.value = newPage
+    fetchRunDataFiles()
+  }
+}
+
+const handleDfItemsPerPageChange = () => {
+  dataFilesPage.value = 1
+  fetchRunDataFiles()
+}
+
 watch([run, dateString], () => {
   try {
     const base = 'OST Data Archive'
@@ -1178,6 +1283,37 @@ const openPreview = (df) => {
 const handlePreviewLoad = () => {
   previewLoading.value = false
 }
+// FITS header dialog
+const headerDialog = ref(false)
+const headerTitle = ref('')
+const headerLoading = ref(false)
+const headerError = ref('')
+const headerEntries = ref([])
+const openHeader = async (df) => {
+  headerTitle.value = df?.file_name || 'FITS Header'
+  headerError.value = ''
+  headerEntries.value = []
+  headerDialog.value = true
+  try {
+    headerLoading.value = true
+    const payload = await api.getDataFileHeader(df?.pk || df?.id)
+    const hdr = (payload && payload.header) ? payload.header : {}
+    // Convert object to sorted entries (keys alphabetical)
+    headerEntries.value = Object.entries(hdr).sort((a, b) => String(a[0]).localeCompare(String(b[0])))
+  } catch (e) {
+    console.error('Failed to fetch FITS header', e)
+    headerError.value = 'Failed to fetch FITS header.'
+  } finally {
+    headerLoading.value = false
+  }
+}
+const formatHeaderValue = (v) => {
+  if (v === null || v === undefined) return '—'
+  if (typeof v === 'object') {
+    try { return JSON.stringify(v) } catch { return String(v) }
+  }
+  return String(v)
+}
 // Downloads
 const selectedIds = ref([])
 const selectAll = ref(false)
@@ -1223,6 +1359,53 @@ const buildCurrentFilters = () => ({
 const downloadFiltered = () => {
   const url = api.getRunDataFilesZipUrl(runId, [], buildCurrentFilters())
   window.location.href = url
+}
+
+// Async job helpers
+const pollJobUntilReady = async (jobId, { timeoutMs = 120000, intervalMs = 1500 } = {}) => {
+  const start = Date.now()
+  while (Date.now() - start < timeoutMs) {
+    const status = await api.getDownloadJobStatus(jobId)
+    if (status?.status === 'done' && status?.url) {
+      return status
+    }
+    if (status?.status === 'failed' || status?.status === 'cancelled') {
+      throw new Error(status?.error || 'Job failed')
+    }
+    await new Promise(r => setTimeout(r, intervalMs))
+  }
+  throw new Error('Timed out waiting for download job')
+}
+
+const triggerAsyncDownload = async (ids = [], filters = {}) => {
+  try {
+    downloadingAll.value = true
+    const res = await api.createRunDownloadJob(runId, ids, filters)
+    const jobId = res?.job_id
+    if (!jobId) throw new Error('Job not created')
+    try { notify.success('Preparing download...') } catch {}
+    const status = await pollJobUntilReady(jobId)
+    await api.downloadJobFile(jobId)
+  } finally {
+    downloadingAll.value = false
+  }
+}
+
+const handleDownloadAll = async () => {
+  // If many files, prefer async job
+  if ((dataFilesTotal.value || 0) > 5) {
+    await triggerAsyncDownload([], {})
+  } else {
+    await downloadAll()
+  }
+}
+
+const handleDownloadFiltered = async () => {
+  if ((dataFilesTotal.value || 0) > 5) {
+    await triggerAsyncDownload([], buildCurrentFilters())
+  } else {
+    downloadFiltered()
+  }
 }
 
 const handlePreviewError = (e) => {

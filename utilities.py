@@ -15,6 +15,8 @@ from astropy.visualization import simple_norm
 from scipy import ndimage, signal
 
 import matplotlib.pyplot as plt
+import hashlib
+import logging
 
 import django
 from django.db.models import F, ExpressionWrapper, DecimalField, FloatField
@@ -24,6 +26,18 @@ django.setup()
 
 from objects.models import Object
 from obs_run.models import ObservationRun, DataFile
+logger = logging.getLogger(__name__)
+
+def compute_file_hash(path: Path, chunk_size: int = 1024 * 1024) -> str:
+    hasher = hashlib.sha256()
+    with open(path, 'rb') as f:
+        while True:
+            chunk = f.read(chunk_size)
+            if not chunk:
+                break
+            hasher.update(chunk)
+    return hasher.hexdigest()
+
 
 
 def add_new_observation_run(data_path, print_to_terminal=False,
@@ -46,12 +60,14 @@ def add_new_observation_run(data_path, print_to_terminal=False,
         Default is ``False``.
     """
     #   Regular expression definitions for allowed directory name
-    rex1 = re.compile("^[0-9]{8}$")
-    rex2 = re.compile("^[0-9]{4}.[0-9]{2}.[0-9]{2}$")
+    rex1 = re.compile(r"^[0-9]{8}$")
+    rex2 = re.compile(r"^[0-9]{4}.[0-9]{2}.[0-9]{2}$")
+    #   Also allow names like YYYY-MM-DD_suffix (e.g., 2023-11-01_test)
+    rex3 = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}_[^/\\]+$")
 
     #   Get name of observation run
     basename = data_path.name
-    if rex1.match(basename) or rex2.match(basename):
+    if rex1.match(basename) or rex2.match(basename) or rex3.match(basename):
         #   Create new run
         new_observation_run = ObservationRun(
             name=basename,
@@ -134,10 +150,47 @@ def add_new_data_file(path_to_file, observation_run, print_to_terminal=False):
     else:
         return False
 
+    abs_path = path_to_file.absolute()
+    try:
+        file_size = abs_path.stat().st_size
+    except Exception:
+        file_size = 0
+    try:
+        content_hash = compute_file_hash(abs_path)
+    except Exception:
+        content_hash = ''
+
+    # Duplicate detection: skip if same absolute path already tracked
+    existing_by_path = DataFile.objects.filter(datafile=str(abs_path)).first()
+    if existing_by_path is not None:
+        try:
+            logger.warning("Duplicate path in run %s: skipping %s (already tracked as #%s)",
+                           getattr(observation_run, 'name', '?'), str(abs_path), existing_by_path.pk)
+        except Exception:
+            pass
+        return False
+
+    # Duplicate detection within the same run by size+hash (only when hash present)
+    if content_hash:
+        dup_qs = DataFile.objects.filter(
+            observation_run=observation_run,
+            content_hash=content_hash,
+            file_size=file_size,
+        )
+        if dup_qs.exists():
+            try:
+                logger.warning("Duplicate content in run %s: skipping %s (matches #%s)",
+                               getattr(observation_run, 'name', '?'), str(abs_path), dup_qs.first().pk)
+            except Exception:
+                pass
+            return False
+
     data_file = DataFile(
         observation_run=observation_run,
-        datafile=path_to_file.absolute(),
+        datafile=abs_path,
         file_type=file_type,
+        file_size=file_size,
+        content_hash=content_hash,
     )
     data_file.save()
 
@@ -170,6 +223,18 @@ def evaluate_data_file(data_file, observation_run, print_to_terminal=False):
     #   Set data file information from file header data
     data_file.set_info()
     data_file.save()
+    # Update file metadata (size/hash) to reflect any external changes
+    try:
+        p = Path(str(data_file.datafile))
+        data_file.file_size = p.stat().st_size if p.exists() else 0
+        try:
+            data_file.content_hash = compute_file_hash(p) if p.exists() else ''
+        except Exception:
+            # Keep previous hash if reading fails
+            pass
+        data_file.save(update_fields=['file_size', 'content_hash'])
+    except Exception:
+        pass
     print('data_file.exposure_type:')
     print(data_file.exposure_type)
 

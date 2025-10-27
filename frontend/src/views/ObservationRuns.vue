@@ -265,7 +265,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { api } from '@/services/api'
 import { formatDateTime } from '@/utils/datetime'
 import { getStatusColor } from '@/utils/status'
@@ -390,6 +390,25 @@ const fetchRuns = async () => {
     loading.value = false
   }
 }
+// Debounced sync for text inputs
+import { debounce } from 'lodash'
+const debouncedSyncRuns = debounce(() => {
+  syncQueryAndFetch()
+}, 300)
+
+// Watchers: debounce for search/objectFilter; immediate for selects
+watch(search, () => {
+  currentPage.value = 1
+  debouncedSyncRuns()
+})
+watch(objectFilter, () => {
+  currentPage.value = 1
+  debouncedSyncRuns()
+})
+watch([selectedStatus, photometryFilter, spectroscopyFilter], () => {
+  currentPage.value = 1
+  syncQueryAndFetch()
+})
 
 const handleSort = (newSortBy) => {
   if (newSortBy.length > 0) {
@@ -563,6 +582,11 @@ onMounted(() => {
 .v-data-table :deep(.v-data-table__wrapper) {
   overflow-x: auto;
   overflow-y: visible;
+}
+
+/* Align cell padding with Objects overview */
+.v-data-table :deep(td) {
+  padding: 8px 16px !important;
 }
 
 /* Responsive wrapping for action bar */

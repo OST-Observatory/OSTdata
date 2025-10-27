@@ -19,32 +19,25 @@ cd ostdata
 
 For the rest of this guide, we will assume that this directory is located in the user's home directory.
 
-You need the python-dev package and virtualenv  (we assume here a Debian system or one of its derivatives, such as Ubuntu). Moreover you should update pip:
+You need the python-dev package (we assume here a Debian system or one of its derivatives, such as Ubuntu). Moreover you should update pip:
 ```
-sudo apt-get install python-dev-is-python3
+sudo apt install python-dev-is-python3
 pip install -U pip
-pip install virtualenv
 ```
 
 ### 2. Create the virtual environment
 
 Create a new virtual python environment for OSTdata and activate it (Bash syntax):
 ```
-virtualenv ostdata_env
+python -m venv ostdata_env
 source ostdata_env/bin/activate
 ```
 
 On Windows Computers do
 
 ```
-virtualenv ostdata_env
+python -m venv ostdata_env
 ostdata_env\Scripts\Activate
-```
-
-If this fails with an error similar to: Error: unsupported locale setting
-do:
-```
-export LC_ALL=C
 ```
 
 ### 3. Clone OSTdata from github
@@ -182,10 +175,7 @@ Instructions on how to generate a secret key can be found here: https://tech.ser
 
 ### 3. Setup the database
 ```
-python manage.py makemigrations obs_run
-python manage.py makemigrations objects
-python manage.py makemigrations users
-python manage.py makemigrations tags
+python manage.py makemigrations
 python manage.py migrate
 ```
 
@@ -212,6 +202,44 @@ You should use a different username instead of admin to increase security.
 ```
 python manage.py collectstatic
 ```
+
+
+### Frontend (Vue) build and static files
+
+This project includes a Vue 3 + Vite frontend under `OSTdata/frontend/`.
+
+1) Install Node.js (Debian/Ubuntu):
+```
+sudo apt update
+sudo apt install -y nodejs npm
+```
+
+2) Configure API base URL for production (so the SPA calls the correct backend path). If your site runs under `/data_archive`, set:
+```
+cd OSTdata/frontend
+echo "VITE_API_BASE=/data_archive/api" > .env.production
+```
+If your site runs at the domain root, you can keep the default `/api`.
+
+3) Install dependencies and build:
+```
+cd OSTdata/frontend
+npm ci || npm install
+npm run build
+```
+This produces a `dist/` folder with static assets.
+
+4) Make the built assets available to Django’s static pipeline:
+- Simple option (no settings change): copy/move the built assets into the Django static directory, then run `collectstatic`.
+```
+mkdir -p ../static/app
+cp -r dist/* ../static/app/
+cd ..
+python manage.py collectstatic
+```
+- Alternative (settings-based): add the `frontend/dist` directory to `STATICFILES_DIRS` so `collectstatic` picks it up automatically. Then just run `collectstatic` after each build.
+
+Make sure your Apache static alias points to the Django static root (see section “Serve static files”).
 
 
 ## Setup gunicorn
@@ -388,8 +416,276 @@ Restart the Apache web server so that the changes take into effect:
 sudo systemctl restart apache2
 ```
 
-The weather station website should now be up and running.
+The data archive website should now be up and running.
 
+## Directory watcher (automatic ingest)
+
+This project includes a filesystem watcher that monitors your data root and automatically:
+- creates new Observation Runs for new top-level directories
+- ingests new files below a run
+- updates DB paths and run name when a top-level run directory is renamed
+- reacts to file modifications (re-extracts header info and updates stats)
+
+Configure environment in `ostdata/.env`:
+
+```
+# Absolute directory to watch
+DATA_DIRECTORY=/absolute/path/to/data
+
+# Optional: enable periodic FS/DB reconciliation (Celery Beat)
+ENABLE_FS_RECONCILE=false
+
+# Optional: watcher tuning
+# Debounce window for modified events (seconds)
+WATCH_DEBOUNCE_SECONDS=2.0
+# Comma-separated list of ignored file suffixes
+WATCH_IGNORED_SUFFIXES=.filepart,.bck,.swp
+# Delay before processing newly created files (seconds)
+WATCH_CREATED_DELAY_SECONDS=20
+# Optional stability window (seconds): file size must remain unchanged
+WATCH_STABILITY_SECONDS=0
+```
+
+Run the watcher (manual):
+
+```
+python OSTdata/data_directory_watchdog.py
+```
+
+Run the watcher as systemd service (recommended):
+
+```
+sudo nano /etc/systemd/system/ostdata-watcher.service
+```
+
+```
+[Unit]
+Description=OSTdata directory watcher
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/path/to/OSTdata
+Environment=PYTHONUNBUFFERED=1
+Environment=DJANGO_SETTINGS_MODULE=ostdata.settings
+ExecStart=/path/to/venv/bin/python OSTdata/data_directory_watchdog.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Then:
+
+```
+sudo systemctl daemon-reload
+sudo systemctl enable ostdata-watcher
+sudo systemctl start ostdata-watcher
+sudo journalctl -u ostdata-watcher -f
+```
+
+Notes:
+- Only top-level directories are treated as runs. Subfolders are ignored for run create/delete.
+- File modifications are debounced (short delay) to avoid re-processing half-written files.
+- File moves update the stored path; top-level run renames also update the run name and all paths under it.
+
+Hash-based recovery of renamed files:
+- Each DataFile stores file_size and a SHA-256 content_hash computed at ingest and on modification.
+- If a rename/move is missed while the watcher is down, the periodic reconcile task scans the expected run directory for files matching the same size and hash and rewrites DB paths accordingly.
+- The watcher’s move handler also attempts a hash-based match when it cannot find the original record.
+
+### One-off rename helper
+
+If a run folder was renamed outside the watcher, fix DB names/paths with:
+
+```
+python manage.py rename_run OLD_RUN_NAME NEW_RUN_NAME [--data-root /absolute/data]
+```
+
+### Optional periodic reconcile (Celery Beat)
+
+To enable an automated reconciliation (verify/correct stored paths to match the current run name and existing files), set in `ostdata/.env`:
+
+```
+ENABLE_FS_RECONCILE=true
+```
+
+Ensure Celery Beat is running (see Celery section). The task runs every 30 minutes by default and logs a summary.
+
+## Async Download Jobs (Celery)
+
+This project supports asynchronous preparation of ZIP archives for data files using Celery. You can run tasks synchronously (eager mode, no Redis needed) or with Redis for real async behavior. Production notes included below.
+
+Frontend behavior (Data Files tables):
+- Observation Run Detail → Data Files:
+  - "Download all" and "Download filtered" automatically use the asynchronous download job when more than 5 files are involved. Otherwise, a direct download is used.
+  - Progress is polled in the background; once ready, the ZIP download starts automatically (with authentication).
+- Object Detail → Data Files:
+  - Same behavior as above; this view uses the bulk job (across runs).
+- Note: In eager mode (without Redis) jobs run synchronously and the download is usually available immediately.
+
+### 1) Minimal setup (no Redis, eager mode)
+
+- Install dependencies (in your venv):
+  - `pip install -r requirements.txt`
+- Configure environment:
+  - Set `CELERY_TASK_ALWAYS_EAGER=true` (or in `.env`: `CELERY_TASK_ALWAYS_EAGER=1`).
+  - No broker or worker is needed; tasks run synchronously in the Django process.
+- Use the API:
+  - Create job: `POST /api/runs/runs/{run_id}/download-jobs/` with JSON `{ "ids": [..]?, "filters": {..}? }`
+  - Poll status: `GET /api/runs/jobs/{job_id}/status`
+  - Download when ready: `GET /api/runs/jobs/{job_id}/download`
+
+### 2) Local async setup (Redis via Docker)
+
+- Start Redis (step-by-step):
+  1. Install Docker if you don’t have it:
+     - Windows/macOS: install "Docker Desktop" from the official site and start it (ensure it’s running).
+     - Linux (Debian/Ubuntu):
+       - `sudo apt update`
+       - `sudo apt install -y docker.io`
+       - Add your user to the docker group so you can run docker without sudo: `sudo usermod -aG docker $USER` and then log out/in (or reboot) once.
+  2. Verify Docker works: `docker --version` (should print a version) and `docker run hello-world` (should print a hello message).
+  3. Start a Redis container locally:
+     - Command:
+       ```bash
+       docker run --name ost-redis -p 6379:6379 -d --restart unless-stopped redis:7-alpine
+       ```
+       - `--name ost-redis`: names the container so you can manage it easily
+       - `-p 6379:6379`: maps Redis’ default port to your machine
+       - `-d`: runs in background (detached)
+       - `--restart unless-stopped`: auto-start on reboot
+  4. Check it’s running:
+     - `docker ps` should show a container named `ost-redis` with `0.0.0.0:6379->6379/tcp`
+  5. Stop/Start later:
+     - Stop: `docker stop ost-redis`
+     - Start again: `docker start ost-redis`
+- Configure environment (e.g. in `.env`):
+  - `CELERY_TASK_ALWAYS_EAGER=0`
+  - `CELERY_BROKER_URL=redis://localhost:6379/0`
+  - `CELERY_RESULT_BACKEND=redis://localhost:6379/1`
+- Run Celery worker (from `OSTdata/`):
+  - `celery -A ostdata worker -l info`
+  - On macOS/Windows, you may add `-P solo`.
+- Use the same API endpoints as above. Jobs will run in the background; poll status and download when done.
+
+### 3) Production configuration
+
+- Redis/Broker (local installation on the same server):
+  1. Install Redis (Debian/Ubuntu):
+     - `sudo apt update`
+     - `sudo apt install -y redis-server`
+  2. Enable/Start the service:
+     - `sudo systemctl enable redis-server`
+     - `sudo systemctl start redis-server`
+     - Check status: `systemctl status redis-server` (should be active/running)
+  3. Verify Redis is working:
+     - `redis-cli ping` → should return `PONG`
+  4. Recommended config (bind to localhost only):
+     - Edit `/etc/redis/redis.conf` and ensure:
+       - `bind 127.0.0.1 ::1` (or at least `127.0.0.1`)
+       - `protected-mode yes`
+     - Restart Redis: `sudo systemctl restart redis-server`
+  5. Django/Celery environment (e.g. in `/etc/environment` or your service unit):
+     - `CELERY_TASK_ALWAYS_EAGER=0`
+     - `CELERY_BROKER_URL=redis://127.0.0.1:6379/0`
+     - `CELERY_RESULT_BACKEND=redis://127.0.0.1:6379/1`
+  6. Apply migrations (includes result backend tables):
+     - From your project directory: `python manage.py migrate`
+
+- Workers (systemd services):
+  - Run Celery under systemd so it starts on boot and is supervised.
+  - Example unit file `/etc/systemd/system/celery.service`:
+    ```ini
+    [Unit]
+    Description=Celery Worker for OSTdata
+    After=network.target redis-server.service
+
+    [Service]
+    Type=simple
+    User=www-data
+    Group=www-data
+    WorkingDirectory=/path/to/OSTdata
+    Environment=PYTHONUNBUFFERED=1
+    Environment=CELERY_TASK_ALWAYS_EAGER=0
+    Environment=CELERY_BROKER_URL=redis://127.0.0.1:6379/0
+    Environment=CELERY_RESULT_BACKEND=redis://127.0.0.1:6379/1
+    ExecStart=/path/to/venv/bin/celery -A ostdata worker -l info -Q default -O fair
+    Restart=always
+    RestartSec=5
+
+    [Install]
+    WantedBy=multi-user.target
+    ```
+  - Reload and start:
+    - `sudo systemctl daemon-reload`
+    - `sudo systemctl enable celery`
+    - `sudo systemctl start celery`
+    - Check logs: `journalctl -u celery -f`
+  - Optional: Celery Beat for periodic tasks (e.g., cleanup). Create `/etc/systemd/system/celery-beat.service`:
+    ```ini
+    [Unit]
+    Description=Celery Beat for OSTdata
+    After=network.target redis-server.service
+
+    [Service]
+    Type=simple
+    User=www-data
+    Group=www-data
+    WorkingDirectory=/path/to/OSTdata
+    Environment=PYTHONUNBUFFERED=1
+    Environment=CELERY_TASK_ALWAYS_EAGER=0
+    Environment=CELERY_BROKER_URL=redis://127.0.0.1:6379/0
+    Environment=CELERY_RESULT_BACKEND=redis://127.0.0.1:6379/1
+    ExecStart=/path/to/venv/bin/celery -A ostdata beat -l info
+    Restart=always
+    RestartSec=5
+
+    [Install]
+    WantedBy=multi-user.target
+    ```
+
+- Storage and cleanup:
+  - Ensure the worker user has read access to data files and write access to a temp directory for ZIPs.
+  - Plan for cleanup of old ZIPs. Options:
+    - Cron job that deletes ZIPs older than N days in your temp directory.
+    - A Celery Beat periodic task that queries `DownloadJob` and removes files past `expires_at`.
+
+- Security:
+  - Keep Redis bound to `127.0.0.1` unless you explicitly need remote access; otherwise firewall the port.
+  - The API enforces ownership/visibility: ZIPs can only be downloaded by the user who created the job (or for public runs when anonymous).
+
+### API summary
+
+- `POST /api/runs/runs/{run_id}/download-jobs/` → `{ job_id }`
+- `GET /api/runs/jobs/{job_id}/status` → `{ status, progress, bytes_total, bytes_done, url? }`
+- `POST /api/runs/jobs/{job_id}/cancel` → `{ status }`
+- `GET /api/runs/jobs/{job_id}/download` → ZIP file when ready
+
+Payload example for job creation:
+
+```json
+{
+  "ids": [1, 2, 3],
+  "filters": {
+    "file_type": "FITS",
+    "main_target": "M67",
+    "exposure_type": ["LI"],
+    "spectroscopy": false,
+    "exptime_min": 10,
+    "exptime_max": 600,
+    "file_name": "light",
+    "instrument": "QHY"
+  }
+}
+```
+
+Notes:
+- In eager mode, job creation returns immediately and the resulting ZIP can usually be downloaded right away.
+- The ZIP is generated on the server’s filesystem; ensure adequate disk space and permissions.
 
 # Acknowledgements
 
