@@ -589,7 +589,8 @@ def analyze_and_update_exposure_type(file_path, plot_histogram=False,
         if print_to_terminal:
             print('File: ', file_path.absolute())
 
-        header = fits.getheader(file_path, 0)
+        # Tolerate FITS without SIMPLE card to avoid noisy logs
+        header = fits.getheader(file_path, 0, ignore_missing_simple=True)
 
         image_type_fits = header.get('IMAGETYP', 'UK')
         if image_type_fits == 'Flat Field':
@@ -612,7 +613,7 @@ def analyze_and_update_exposure_type(file_path, plot_histogram=False,
 
         n_pix_x = naxis1 * binning
 
-        image_data_original = fits.getdata(file_path, 0)
+        image_data_original = fits.getdata(file_path, 0, ignore_missing_simple=True)
 
         img_shape = image_data_original.shape
         # print(image_data_original.shape)

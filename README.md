@@ -382,7 +382,7 @@ ProxyPass /data_archive unix://${SOCKET_NAME}|http://%{HTTP_HOST}
 ProxyPassReverse /data_archive unix://${SOCKET_NAME}|http://%{HTTP_HOST}
 ```
 
-The first block of lines ensures that our Django weather station app trusts our web server, while the second block ensures that requests for static files are not directed to the Unix socket, as these files are supplied directly by the Apache server (see next step). The third block of commands directs requests to the 'data_archive' page to the Unix socket, and thus to our Django weather app. Replace 'path_to_home_directory' with the actual path to your home directory.
+The first block of lines ensures that our Django data archive app trusts our web server, while the second block ensures that requests for static files are not directed to the Unix socket, as these files are supplied directly by the Apache server (see next step). The third block of commands directs requests to the 'data_archive' page to the Unix socket, and thus to our Django data archive app. Replace 'path_to_home_directory' with the actual path to your home directory.
 
 
 ### 3. Serve static files
@@ -417,6 +417,61 @@ sudo systemctl restart apache2
 ```
 
 The data archive website should now be up and running.
+
+### Alternative: Serve the new Vue SPA (frontend/dist) directly [transitional]
+
+If you want to serve the new frontend build (Vite, Vue 3) directly from Apache while keeping the legacy frontend in place, you can use this transitional setup. It serves the SPA and its assets directly from `frontend/dist` and only proxies API calls to Django (Gunicorn). This allows you to test the new UI in production without deleting the old assets.
+
+Requirements:
+- Build the frontend (see "Frontend (Vue) build and static files") so `OSTdata/frontend/dist/` exists.
+- Set `VITE_API_BASE` to `/data_archive/api` for production builds.
+- Enable required Apache modules: `a2enmod proxy proxy_http rewrite`.
+
+Example vhost snippet (adjust all paths):
+
+```
+SSLProxyEngine on
+SSLProxyVerify none
+SSLProxyCheckPeerCN off
+SSLProxyCheckPeerName off
+ProxyPreserveHost On
+
+# 1) Keep Django static served directly
+ProxyPass /data_archive/static/ !
+Alias "/data_archive/static" "/path_to_home_directory/ostdata/OSTdata/static"
+<Directory "/path_to_home_directory/ostdata/OSTdata/static">
+  Require all granted
+  Options -Indexes
+  AllowOverride None
+</Directory>
+
+# 2) Serve the new SPA (Vite build) directly
+Alias "/data_archive/" "/path_to_home_directory/ostdata/OSTdata/frontend/dist/"
+<Directory "/path_to_home_directory/ostdata/OSTdata/frontend/dist">
+  Require all granted
+  Options -Indexes
+  AllowOverride None
+</Directory>
+
+# 3) Proxy API only to Django (Gunicorn)
+Define SOCKET_NAME /path_to_home_directory/ostdata/run/gunicorn.sock
+ProxyPass        /data_archive/api unix://${SOCKET_NAME}|http://%{HTTP_HOST}/data_archive/api
+ProxyPassReverse /data_archive/api unix://${SOCKET_NAME}|http://%{HTTP_HOST}/data_archive/api
+
+# 4) SPA history fallback: everything except /api and /static -> index.html
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteBase /data_archive/
+  RewriteRule ^(api|static)/ - [L]
+  RewriteRule ^$ index.html [L]
+  RewriteRule . /data_archive/index.html [L]
+  # Note: If you keep legacy routes, ensure their prefixes are excluded above
+</IfModule>
+```
+
+Notes (transitional):
+- Legacy frontend files can remain in `static/` or elsewhere; Vite assets use hashed filenames, avoiding collisions.
+- Once you fully switch to the new frontend, you may simplify the config by removing the legacy static paths and the transitional alias, and serve only through Django static if preferred.
 
 ## Directory watcher (automatic ingest)
 

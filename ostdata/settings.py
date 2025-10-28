@@ -160,7 +160,7 @@ STATIC_URL = 'static/'
 STATIC_ROOT = BASE_DIR / 'static/'
 
 # Extra locations for static files
-STATICFILES_DIRS = ['site_static',]
+STATICFILES_DIRS = ['site_static', 'frontend/dist',]
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.0/ref/settings/#default-auto-field

@@ -129,12 +129,13 @@ def plot_observation_conditions(obs_run_pk):
 
         #   Apply JD to datetime conversion and enforce display timezone via JS formatter
         tz, tz_name, is_utc = _get_plot_timezone()
-        fmt_code = (
-            "const d=new Date(tick);"
-            "const loc=(navigator.languages&&navigator.languages.length)?navigator.languages:undefined;"
-            f"return new Intl.DateTimeFormat(loc, {{ timeZone: '{tz_name}', year:'2-digit', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' }}).format(d);"
+        fig.xaxis.formatter = mpl.DatetimeTickFormatter(
+            minutes="%y-%m-%d %H:%M",
+            hours="%y-%m-%d %H:%M",
+            days="%y-%m-%d",
+            months="%y-%m",
+            years="%Y",
         )
-        fig.xaxis.formatter = mpl.FuncTickFormatter(code=fmt_code)
 
         #   Axes on all four sides (top/right mirror bottom/left)
         try:
@@ -283,12 +284,13 @@ def plot_visibility(start_hjd, exposure_time, ra, dec):
         times = times.to_datetime(timezone=tz)
 
         #   Enforce browser locale on x-axis via formatter
-        fmt_code = (
-            "const d=new Date(tick);"
-            "const loc=(navigator.languages&&navigator.languages.length)?navigator.languages:undefined;"
-            f"return new Intl.DateTimeFormat(loc, {{ timeZone: '{tz_name}', year:'2-digit', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' }}).format(d);"
+        fig.xaxis.formatter = mpl.DatetimeTickFormatter(
+            minutes="%y-%m-%d %H:%M",
+            hours="%y-%m-%d %H:%M",
+            days="%y-%m-%d",
+            months="%y-%m",
+            years="%Y",
         )
-        fig.xaxis.formatter = mpl.FuncTickFormatter(code=fmt_code)
 
         fig.line(
             times,
@@ -672,12 +674,11 @@ def time_distribution_model(model, yaxis_label, months=None):
     fig.add_glyph(source, glyph)
 
     #   Apply JD to datetime conversion
-    fmt_code = (
-        "const d=new Date(tick);"
-        "const loc=(navigator.languages&&navigator.languages.length)?navigator.languages:undefined;"
-        f"return new Intl.DateTimeFormat(loc, {{ timeZone: '{tz_name}', year:'2-digit', month:'2-digit', day:'2-digit' }}).format(d);"
+    fig.xaxis.formatter = mpl.DatetimeTickFormatter(
+        days="%y-%m-%d",
+        months="%y-%m",
+        years="%Y",
     )
-    fig.xaxis.formatter = mpl.FuncTickFormatter(code=fmt_code)
 
     #   Set figure labels
     fig.toolbar.logo = None
@@ -703,7 +704,11 @@ def time_distribution_model(model, yaxis_label, months=None):
     )
 
     #   Apply JD to datetime conversion
-    fig.xaxis.formatter = mpl.FuncTickFormatter(code=fmt_code)
+    fig.xaxis.formatter = mpl.DatetimeTickFormatter(
+        days="%y-%m-%d",
+        months="%y-%m",
+        years="%Y",
+    )
 
     #   Plot cumulative number
     fig.line(
@@ -781,7 +786,7 @@ def plot_sky_fov(ra_center_deg, dec_center_deg, fov_x_deg, fov_y_deg, scale=8.0,
     )
 
     # Scatter stars
-    fig.circle(x=stars['ra_degrees'], y=stars['dec_degrees'], size=size, color='white', line_color=None, fill_alpha=0.9)
+    fig.scatter(x=stars['ra_degrees'], y=stars['dec_degrees'], size=size, color='white', line_color=None, fill_alpha=0.9, marker="circle")
     fig.background_fill_color = "#000014"
     fig.border_fill_color = "#000014"
     fig.outline_line_color = "#333"

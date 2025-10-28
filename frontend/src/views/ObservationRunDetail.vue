@@ -1041,7 +1041,8 @@ const ensureBokehLoaded = async () => {
   if (window.Bokeh) return
   await new Promise((resolve, reject) => {
     const script = document.createElement('script')
-    script.src = 'https://cdn.bokeh.org/bokeh/release/bokeh-3.1.0.min.js'
+    const ver = import.meta.env.VITE_BOKEH_VERSION || '3.8.0'
+    script.src = `https://cdn.bokeh.org/bokeh/release/bokeh-${ver}.min.js`
     script.onload = resolve
     script.onerror = reject
     document.head.appendChild(script)

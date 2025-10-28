@@ -14,6 +14,7 @@ from astropy.coordinates.angles import Angle
 from tags.models import Tag
 
 from .analyze_files import set_file_info
+from pathlib import Path
 
 
 ############################################################################
@@ -221,7 +222,16 @@ class DataFile(models.Model):
             Get FITS Header
         """
         try:
-            header = fits.getheader(self.datafile, hdu)
+            # Only attempt for FITS files
+            path = Path(self.datafile)
+            ext = path.suffix.lower()
+            file_type = (self.file_type or '').upper()
+            is_fits = (file_type == 'FITS') or (ext in ['.fits', '.fit', '.fts'])
+            if not is_fits:
+                return {}
+
+            # Tolerate some malformed headers without spamming logs
+            header = fits.getheader(self.datafile, hdu, ignore_missing_simple=True)
             h = OrderedDict()
             #   Sanitize header
             for k, v in header.items():

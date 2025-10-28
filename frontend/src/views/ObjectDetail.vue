@@ -427,7 +427,7 @@
                   </tbody>
                 </v-table>
                 <div v-else class="text-caption text-secondary">No data files.</div>
-              </template>
+                </template>
               <v-card-actions class="d-flex align-center justify-space-between px-4 py-2 card-actions-responsive">
                 <div class="d-flex align-center actions-left">
                   <span class="text-body-2 mr-4">Items per page:</span>
@@ -437,14 +437,14 @@
                     item-title="title"
                     item-value="value"
                     density="compact"
-                    variant="outlined"
+                      variant="outlined"
                     hide-details
                     class="items-per-page-select"
                     style="width: 100px"
                     @update:model-value="handleObjDfItemsPerPageChange"
                     aria-label="Items per page"
                   ></v-select>
-                </div>
+                  </div>
 
                 <div class="d-flex align-center actions-right">
                   <span class="text-body-2 mr-4">
@@ -554,7 +554,7 @@
         <v-card-title id="edit-tags-title">Edit Tags</v-card-title>
         <v-card-text role="group" aria-labelledby="tags-title">
         <h3 id="tags-title" class="sr-only">Select tags for this object</h3>
-        <v-checkbox
+          <v-checkbox
             v-for="(tag, idx) in availableTags"
             :key="tag?.pk || tag?.name || idx"
             v-model="selectedTags"
@@ -750,7 +750,7 @@ const loadAliases = async (objectId) => {
         .filter(id => id && id.info_from_header === false)
         .map(id => ({ pk: id.pk || id.id, name: id.name, href: id.href }))
     } else {
-      aliases.value = []
+    aliases.value = []
     }
   } catch (error) {
     console.error('Error loading aliases:', error)
@@ -797,11 +797,11 @@ const loadAvailableTags = async () => {
 }
 
 const initializeAladinLite = () => {
-  // Wait for both jQuery and Aladin to be available
+  // Wait for Aladin v3 script (no jQuery dependency)
   const checkAndInitialize = () => {
-    if (window.jQuery && window.A && object.value?.ra && object.value?.dec) {
+    if (window.A && object.value?.ra && object.value?.dec) {
       try {
-        const aladin = window.A.aladin('#aladin-lite-div', {
+        window.A.aladin('#aladin-lite-div', {
           survey: 'P/DSS2/color',
           fov: 0.5,
           target: `${object.value.ra} ${object.value.dec}`,
@@ -812,7 +812,6 @@ const initializeAladinLite = () => {
         })
       } catch (error) {
         console.error('Error initializing Aladin Lite:', error)
-        // Fallback: show coordinates as text
         const aladinDiv = document.getElementById('aladin-lite-div')
         if (aladinDiv) {
           aladinDiv.innerHTML = `
@@ -823,8 +822,7 @@ const initializeAladinLite = () => {
           `
         }
       }
-    } else if (window.jQuery && window.A) {
-      // Aladin is loaded but no coordinates, show message
+    } else if (window.A) {
       const aladinDiv = document.getElementById('aladin-lite-div')
       if (aladinDiv) {
         aladinDiv.innerHTML = `
@@ -834,11 +832,10 @@ const initializeAladinLite = () => {
         `
       }
     } else {
-      // Retry after a short delay
       setTimeout(checkAndInitialize, 100)
     }
   }
-  
+
   checkAndInitialize()
 }
 
@@ -1270,7 +1267,7 @@ watch(object, (val) => {
 }
 
 .uniform-height {
-  height: 325px;
+  height: 340px;
   display: flex;
   flex-direction: column;
 }

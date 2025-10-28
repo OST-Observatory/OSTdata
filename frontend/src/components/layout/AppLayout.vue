@@ -35,17 +35,6 @@
       </v-breadcrumbs>
       <v-spacer></v-spacer>
       
-      <!-- Debug Button -->
-      <!-- <v-btn
-        v-if="isDevelopment"
-        @click="showThemeVariables"
-        class="me-2"
-        color="primary"
-        variant="text"
-      >
-        Debug Theme
-      </v-btn> -->
-      
       <nav v-if="!isMobile" class="primary-nav" aria-label="Primary">
       <v-btn icon to="/" aria-label="Home" class="on-secondary nav-btn nav-gap" :class="{ 'nav-active': route.path === '/' }" :aria-current="route.path === '/' ? 'page' : undefined" @mouseenter="prefetchRoute('/dashboard')">
         <v-icon>mdi-home</v-icon>
@@ -389,35 +378,6 @@ onUnmounted(() => {
   window.removeEventListener('scroll', checkScroll)
 })
 
-// const showThemeVariables = () => {
-//   const root = document.documentElement
-//   const styles = getComputedStyle(root)
-  
-//   console.log('Theme Variables:')
-//   // Check all available theme variables
-//   const themeVars = Array.from(styles)
-//     .filter(prop => prop.startsWith('--v-theme-'))
-//     .map(prop => `${prop}: ${styles.getPropertyValue(prop)}`)
-  
-//   console.log('All theme variables:')
-//   themeVars.forEach(v => console.log(v))
-  
-//   // Check specific variables we're interested in
-//   console.log('\nSpecific variables:')
-//   console.log('--v-theme-primary:', styles.getPropertyValue('--v-theme-primary'))
-//   console.log('--v-theme-primary-light:', styles.getPropertyValue('--v-theme-primary-light'))
-//   console.log('--v-theme-border-card', styles.getPropertyValue('--v-theme-border-card'))
-  
-//   const appBar = document.querySelector('.app-bar')
-//   if (appBar) {
-//     const appBarStyles = getComputedStyle(appBar)
-//     console.log('\nApp Bar Styles:')
-//     console.log('background-color:', appBarStyles.backgroundColor)
-//     console.log('color:', appBarStyles.color)
-//     console.log('Computed background-color:', window.getComputedStyle(appBar).backgroundColor)
-//   }
-// }
-
 const logout = async () => {
   await authStore.logout()
   try { notify.info('Logged out') } catch {}
@@ -499,9 +459,10 @@ const isActive = (base: string) => {
 
 /* Subtle background for nav buttons to make them visible even without hover */
 .nav-btn {
-  background-color: rgba(255, 255, 255, 0.06) !important;
+  background-color: rgba(var(--v-theme-on-secondary), 0.08) !important;
+  border: 1px solid rgba(var(--v-theme-on-secondary), 0.18) !important;
   border-radius: 50% !important;
-  transition: background-color 0.2s ease, box-shadow 0.2s ease, transform 0.1s ease !important;
+  transition: background-color 0.2s ease, box-shadow 0.2s ease, transform 0.1s ease, border-color 0.2s ease !important;
 }
 
 /* Consistent spacing between buttons */
@@ -512,8 +473,9 @@ const isActive = (base: string) => {
 /* Pronounced ring hover/focus effect to improve discoverability */
 .nav-btn:hover,
 .nav-btn:focus-visible {
-  background-color: rgba(255, 255, 255, 0.12) !important;
-  box-shadow: 0 0 0 2px rgba(var(--v-theme-on-secondary), 0.6) inset, 0 2px 6px rgba(0, 0, 0, 0.2) !important;
+  background-color: rgba(var(--v-theme-on-secondary), 0.16) !important;
+  border-color: rgba(var(--v-theme-on-secondary), 0.36) !important;
+  box-shadow: 0 0 0 2px rgba(var(--v-theme-primary), 0.6) inset, 0 2px 6px rgba(0, 0, 0, 0.25) !important;
 }
 
 /* Slight press feedback */
@@ -523,8 +485,9 @@ const isActive = (base: string) => {
 
 /* Active tab indicator */
 .nav-active {
-  box-shadow: 0 0 0 2px rgba(var(--v-theme-on-secondary), 0.9) inset !important;
-  background-color: rgba(255, 255, 255, 0.18) !important;
+  box-shadow: 0 0 0 2px rgba(var(--v-theme-primary), 0.85) inset !important;
+  background-color: rgba(var(--v-theme-primary), 0.22) !important;
+  border-color: rgba(var(--v-theme-primary), 0.5) !important;
 }
 
 a {

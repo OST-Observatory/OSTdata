@@ -542,6 +542,16 @@ def get_time_distribution(request):
     except Exception as e:
         return Response({'error': str(e)}, status=400)
 
+
+@api_view(['GET'])
+def get_bokeh_version(request):
+    """Return the installed Python Bokeh version so the frontend can load the matching JS."""
+    try:
+        import bokeh
+        return Response({ 'version': getattr(bokeh, '__version__', '') })
+    except Exception as e:
+        return Response({ 'version': '', 'error': str(e) }, status=200)
+
 # ===============================================================
 #   DATA FILE
 # ===============================================================
