@@ -165,7 +165,7 @@
       <v-row justify="center" no-gutters>
         <v-col class="text-center" cols="12">
           <div class="text-caption footer-text">
-            <span class="me-2">contact: ostdata (at) astro.physik.uni-potsdam.de</span>
+            <span class="me-2">contact: ost-observatory (at) astro.physik.uni-potsdam.de</span>
             <span class="mx-2">•</span>
             <a href="https://github.com/OST-Observatory/ostdata" target="_blank" rel="noopener noreferrer" class="footer-link">
               source code
