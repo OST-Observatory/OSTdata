@@ -438,23 +438,23 @@ ProxyPreserveHost On
 
 # 1) Keep Django static served directly
 ProxyPass /data_archive/static/ !
-Alias "/data_archive/static" "/path_to_home_directory/ostdata/OSTdata/static"
-<Directory "/path_to_home_directory/ostdata/OSTdata/static">
+Alias "/data_archive/static" "/path_to_home_directory/ost_data/OSTdata/static"
+<Directory "/path_to_home_directory/ost_data/OSTdata/static">
   Require all granted
   Options -Indexes
   AllowOverride None
 </Directory>
 
 # 2) Serve the new SPA (Vite build) directly
-Alias "/data_archive/" "/path_to_home_directory/ostdata/OSTdata/frontend/dist/"
-<Directory "/path_to_home_directory/ostdata/OSTdata/frontend/dist">
+Alias "/data_archive/" "/path_to_home_directory/ost_data/OSTdata/frontend/dist/"
+<Directory "/path_to_home_directory/ost_data/OSTdata/frontend/dist">
   Require all granted
   Options -Indexes
   AllowOverride None
 </Directory>
 
 # 3) Proxy API only to Django (Gunicorn)
-Define SOCKET_NAME /path_to_home_directory/ostdata/run/gunicorn.sock
+Define SOCKET_NAME /path_to_home_directory/ost_data/run/gunicorn.sock
 ProxyPass        /data_archive/api unix://${SOCKET_NAME}|http://%{HTTP_HOST}/data_archive/api
 ProxyPassReverse /data_archive/api unix://${SOCKET_NAME}|http://%{HTTP_HOST}/data_archive/api
 
