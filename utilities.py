@@ -74,7 +74,7 @@ def _query_object_variants(name: str):
         custom.ROW_LIMIT = 1
     except Exception:
         pass
-    _try_add_fields(custom, ('maintype','alltypes','ids','flux(V)'))
+    _try_add_fields(custom, ('otype','alltypes','ids'))
     for v in variants:
         try:
             _simbad_rate_limit()
@@ -96,7 +96,7 @@ def _query_region_safe(ra_deg: float, dec_deg: float, radius_str: str = '0d5m0s'
             sim.ROW_LIMIT = 10
         except Exception:
             pass
-        if not _try_add_fields(sim, ('maintype','alltypes','ids','flux(V)')):
+        if not _try_add_fields(sim, ('otype','alltypes','ids','V')):
             return None
         _simbad_rate_limit()
         with warnings.catch_warnings():
