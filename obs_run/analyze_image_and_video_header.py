@@ -86,18 +86,21 @@ def analyze_ser(datafile):
         datafile        : `obs_run.models.DataFile` object
             DataFile instance
     '''
-    #   Get .ser-Header
-    header = SERParser(
+    #   Get .ser-Header only; avoid dynamic-range probing that reads frames
+    parser = SERParser(
         datafile.datafile,
-        SER_16bit_shift_correction=True,
-        ).header
+        SER_16bit_shift_correction=False,
+    )
+    header = parser.header
 
-    #   Get observation time and date
-    obs_date = header['DateTime_UTC_Decoded'].strftime("%Y-%m-%d %H:%M:%S")
-
-    #   Calculate JD
-    jd = Time(obs_date, format='iso', scale='utc').jd
-
+    #   Get observation time and date (fallbacks)
+    dt = header.get('DateTime_UTC_Decoded') or header.get('DateTime_Decoded')
+    if dt is not None:
+        obs_date = dt.strftime("%Y-%m-%d %H:%M:%S")
+        jd = Time(obs_date, format='iso', scale='utc').jd
+    else:
+        obs_date = '2000-01-01 00:00:00'
+        jd = Time(obs_date, format='iso', scale='utc').jd
 
     #   Image size
     naxis1 = float(header['ImageWidth'])
