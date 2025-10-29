@@ -1,12 +1,14 @@
-import { defineConfig } from 'vite'
+import { defineConfig, loadEnv } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import vuetify from 'vite-plugin-vuetify'
 import path from 'path'
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
-  // Set VITE_BASE="/data_archive/" at build time for sub-path deployments
-  const base = process.env.VITE_BASE || '/'
+  // Load env (supports .env, .env.production, etc.). Only VITE_* are exposed.
+  const env = loadEnv(mode, process.cwd(), '')
+  // Prefer VITE_BASE (e.g., "/data_archive/") else fallback to root
+  const base = env.VITE_BASE || '/'
   return {
     base,
     plugins: [
