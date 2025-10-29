@@ -28,6 +28,87 @@ from objects.models import Object
 from obs_run.models import ObservationRun, DataFile
 logger = logging.getLogger(__name__)
 
+import time
+import warnings
+
+# Simple in-process SIMBAD safeguards: rate limit and negative cache
+_SIMBAD_NEGATIVE_CACHE = set()
+_LAST_SIMBAD_TS = 0.0
+_SIMBAD_MIN_INTERVAL = float(os.environ.get('SIMBAD_MIN_INTERVAL', '0.3'))
+
+def _simbad_rate_limit():
+    global _LAST_SIMBAD_TS
+    now = time.time()
+    wait = _SIMBAD_MIN_INTERVAL - (now - _LAST_SIMBAD_TS)
+    if wait > 0:
+        time.sleep(wait)
+    _LAST_SIMBAD_TS = time.time()
+
+def _in_neg_cache(name: str) -> bool:
+    return bool(name) and (str(name).strip().lower() in _SIMBAD_NEGATIVE_CACHE)
+
+def _add_neg_cache(name: str):
+    if name:
+        _SIMBAD_NEGATIVE_CACHE.add(str(name).strip().lower())
+
+def _try_add_fields(simbad: Simbad, fields: tuple[str, ...]) -> bool:
+    try:
+        _simbad_rate_limit()
+        simbad.add_votable_fields(*fields)
+        return True
+    except Exception as e:
+        logger.warning("SIMBAD add_votable_fields failed: %s", e)
+        return False
+
+def _query_object_variants(name: str):
+    if _in_neg_cache(name):
+        return None
+    base = " ".join(str(name).strip().split())
+    variants = {base}
+    m = re.match(r"^(M|NGC|IC|UGC|PGC)\s*0*([0-9]+)$", base, re.IGNORECASE)
+    if m:
+        variants.add(f"{m.group(1).upper()} {int(m.group(2))}")
+        variants.add(f"{m.group(1).upper()}{int(m.group(2))}")
+    custom = Simbad()
+    try:
+        custom.ROW_LIMIT = 1
+    except Exception:
+        pass
+    _try_add_fields(custom, ('maintype','alltypes','ids','flux(V)'))
+    for v in variants:
+        try:
+            _simbad_rate_limit()
+            with warnings.catch_warnings():
+                warnings.simplefilter('ignore')
+                tbl = custom.query_object(v)
+            if tbl is not None and len(tbl) > 0:
+                return tbl
+        except Exception as e:
+            logger.warning("SIMBAD query_object error for %s: %s", v, e)
+            break
+    _add_neg_cache(name)
+    return None
+
+def _query_region_safe(ra_deg: float, dec_deg: float, radius_str: str = '0d5m0s'):
+    try:
+        sim = Simbad()
+        try:
+            sim.ROW_LIMIT = 10
+        except Exception:
+            pass
+        if not _try_add_fields(sim, ('maintype','alltypes','ids','flux(V)')):
+            return None
+        _simbad_rate_limit()
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            return sim.query_region(
+                SkyCoord(ra_deg * u.deg, dec_deg * u.deg, frame='icrs'),
+                radius=radius_str,
+            )
+    except Exception as e:
+        logger.warning("SIMBAD query_region failed: %s", e)
+        return None
+
 def compute_file_hash(path: Path, chunk_size: int = 1024 * 1024) -> str:
     hasher = hashlib.sha256()
     with open(path, 'rb') as f:
@@ -375,17 +456,8 @@ def evaluate_data_file(data_file, observation_run, print_to_terminal=False):
             object_simbad_resolved = False
             object_name = target
 
-            #   Query Simbad for object name
-            custom_simbad = Simbad()
-            # print(custom_simbad.list_votable_fields().pprint(max_lines=-1, max_width=-1))
-            custom_simbad.add_votable_fields(
-                # 'otypes',
-                # 'maintype',
-                'otype',
-                'alltypes',
-                'ids',
-            )
-            simbad_tbl = custom_simbad.query_object(target)
+            #   Query Simbad for object name (safe, with variants and rate-limit)
+            simbad_tbl = _query_object_variants(target)
 
             #   Get Simbad coordinates
             if simbad_tbl is not None and len(simbad_tbl) > 0:
@@ -415,23 +487,7 @@ def evaluate_data_file(data_file, observation_run, print_to_terminal=False):
 
             #   Search Simbad based on coordinates
             if not object_simbad_resolved:
-                simbad_region_query = Simbad()
-                simbad_region_query.add_votable_fields(
-                    # 'otypes',
-                    # 'maintype',
-                    'otype',
-                    'alltypes',
-                    'ids',
-                    'V',
-                )
-                result_table = simbad_region_query.query_region(
-                    SkyCoord(
-                        data_file.ra * u.deg,
-                        data_file.dec * u.deg,
-                        frame='icrs',
-                    ),
-                    radius='0d5m0s',
-                )
+                result_table = _query_region_safe(data_file.ra, data_file.dec, '0d5m0s')
 
                 if (result_table is not None and
                         len(result_table) > 0):

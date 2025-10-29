@@ -644,12 +644,30 @@ Frontend behavior (Data Files tables):
        - `bind 127.0.0.1 ::1` (or at least `127.0.0.1`)
        - `protected-mode yes`
      - Restart Redis: `sudo systemctl restart redis-server`
-  5. Django/Celery environment (e.g. in `/etc/environment` or your service unit):
-     - `CELERY_TASK_ALWAYS_EAGER=0`
-     - `CELERY_BROKER_URL=redis://127.0.0.1:6379/0`
-     - `CELERY_RESULT_BACKEND=redis://127.0.0.1:6379/1`
-  6. Apply migrations (includes result backend tables):
+  5. Django/Celery environment (production):
+     - Prefer defining environment in the systemd units (Environment or EnvironmentFile). Services do not read `/etc/environment` by default.
+     - Minimal variables (either in an EnvironmentFile or inline in the unit):
+       - `CELERY_TASK_ALWAYS_EAGER=0`
+       - `CELERY_BROKER_URL=redis://127.0.0.1:6379/0`
+       - `CELERY_RESULT_BACKEND=redis://127.0.0.1:6379/1`
+     - Example EnvironmentFile:
+       ```ini
+       # /etc/ostdata/celery.env
+       CELERY_TASK_ALWAYS_EAGER=0
+       CELERY_BROKER_URL=redis://127.0.0.1:6379/0
+       CELERY_RESULT_BACKEND=redis://127.0.0.1:6379/1
+       # Optional app vars also used by gunicorn
+       DJANGO_SETTINGS_MODULE=ostdata.settings
+       SECRET_KEY=...  
+       ```
+       And in the unit:
+       ```ini
+       EnvironmentFile=/etc/ostdata/celery.env
+       ```
+     - About `.env` vs systemd variables: `settings.py` loads `.env`, but values provided by the process environment (systemd Environment/EnvironmentFile) take precedence. You can keep `.env` for defaults and override in systemd as needed.
+  6. Apply migrations (only needed once per DB after enabling the results backend):
      - From your project directory: `python manage.py migrate`
+     - If you already ran migrations after adding `django_celery_results`, you can skip this step.
 
 - Workers (systemd services):
   - Run Celery under systemd so it starts on boot and is supervised.
