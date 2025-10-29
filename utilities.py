@@ -380,10 +380,10 @@ def evaluate_data_file(data_file, observation_run, print_to_terminal=False):
             # print(custom_simbad.list_votable_fields().pprint(max_lines=-1, max_width=-1))
             custom_simbad.add_votable_fields(
                 # 'otypes',
-                'maintype',
+                # 'maintype',
+                'otype',
                 'alltypes',
                 'ids',
-                'flux(V)',
             )
             simbad_tbl = custom_simbad.query_object(target)
 
@@ -418,10 +418,11 @@ def evaluate_data_file(data_file, observation_run, print_to_terminal=False):
                 simbad_region_query = Simbad()
                 simbad_region_query.add_votable_fields(
                     # 'otypes',
-                    'maintype',
+                    # 'maintype',
+                    'otype',
                     'alltypes',
                     'ids',
-                    'flux(V)',
+                    'V',
                 )
                 result_table = simbad_region_query.query_region(
                     SkyCoord(
