@@ -290,6 +290,11 @@ class SERParser(object):
         :return: -
         """
 
+        # If there are no frames, do nothing.
+        if self.frame_count <= 0:
+            self.shift_pixels = 0
+            return
+
         # If more than two frames are in the video, take a sample of three frames.
         if self.frame_count > 2:
             frame_ids = [0, int(self.frame_count / 2), self.frame_count-1]
