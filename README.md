@@ -686,7 +686,7 @@ Frontend behavior (Data Files tables):
     Environment=CELERY_TASK_ALWAYS_EAGER=0
     Environment=CELERY_BROKER_URL=redis://127.0.0.1:6379/0
     Environment=CELERY_RESULT_BACKEND=redis://127.0.0.1:6379/1
-    ExecStart=/path/to/venv/bin/celery -A ostdata worker -l info -Q default -O fair
+    ExecStart=/path/to/venv/bin/celery -A ostdata worker -l info -O fair
     Restart=always
     RestartSec=5
 
@@ -723,9 +723,15 @@ Frontend behavior (Data Files tables):
 
 - Storage and cleanup:
   - Ensure the worker user has read access to data files and write access to a temp directory for ZIPs.
-  - Plan for cleanup of old ZIPs. Options:
-    - Cron job that deletes ZIPs older than N days in your temp directory.
-    - A Celery Beat periodic task that queries `DownloadJob` and removes files past `expires_at`.
+  - Cleanup of old ZIPs:
+    - Built-in option (recommended): enable the Celery Beat task that deletes ZIPs for jobs past `expires_at` and marks them `expired`.
+      - In `ostdata/.env`:
+        ```
+        ENABLE_DOWNLOAD_CLEANUP=true
+        DOWNLOAD_JOB_TTL_HOURS=72
+        ```
+      - Ensure Celery Beat is running (see service example above). Jobs completed by the worker are given an expiry based on `DOWNLOAD_JOB_TTL_HOURS`.
+    - Alternative: a cron job that deletes ZIPs older than N days in your temp directory.
 
 - Security:
   - Keep Redis bound to `127.0.0.1` unless you explicitly need remote access; otherwise firewall the port.

@@ -194,6 +194,9 @@ CELERY_BROKER_URL = env('CELERY_BROKER_URL', default='redis://localhost:6379/0')
 CELERY_RESULT_BACKEND = env('CELERY_RESULT_BACKEND', default='redis://localhost:6379/1')
 CELERY_RESULT_EXTENDED = True
 
+# TTL for completed download jobs (hours) before ZIPs are cleaned up
+DOWNLOAD_JOB_TTL_HOURS = env.int('DOWNLOAD_JOB_TTL_HOURS', default=72)
+
 # CORS settings for frontend communication
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",  # Vite dev server
@@ -221,5 +224,11 @@ if env.bool('ENABLE_FS_RECONCILE', default=False):
     CELERY_BEAT_SCHEDULE['reconcile_filesystem'] = {
         'task': 'obs_run.tasks.reconcile_filesystem',
         'schedule': crontab(minute='*/30'),  # every 30 minutes
+        'args': (),
+    }
+if env.bool('ENABLE_DOWNLOAD_CLEANUP', default=False):
+    CELERY_BEAT_SCHEDULE['cleanup_expired_downloads'] = {
+        'task': 'obs_run.tasks.cleanup_expired_downloads',
+        'schedule': crontab(minute='15', hour='*/1'),  # every hour at :15
         'args': (),
     }
