@@ -223,7 +223,7 @@ CELERY_BEAT_SCHEDULE = {}
 if env.bool('ENABLE_FS_RECONCILE', default=False):
     CELERY_BEAT_SCHEDULE['reconcile_filesystem'] = {
         'task': 'obs_run.tasks.reconcile_filesystem',
-        'schedule': crontab(minute='*/30'),  # every 30 minutes
+        'schedule': crontab(minute=0, hour='3'),  # daily at 03:00
         'args': (),
     }
 if env.bool('ENABLE_DOWNLOAD_CLEANUP', default=False):

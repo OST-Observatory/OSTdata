@@ -569,6 +569,7 @@ ENABLE_FS_RECONCILE=true
 ```
 
 Ensure Celery Beat is running (see Celery section). The task runs every 30 minutes by default and logs a summary.
+Ensure Celery Beat is running (see Celery section). The task runs daily at 03:00 by default and logs a summary.
 
 ## Async Download Jobs (Celery)
 
