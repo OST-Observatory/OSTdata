@@ -9,6 +9,8 @@ from celery import shared_task
 import os
 import logging
 from django.utils import timezone
+from django.conf import settings
+from datetime import timedelta
 
 from obs_run.models import DownloadJob, DataFile, ObservationRun
 
@@ -121,7 +123,13 @@ def build_zip_task(self, job_id: int):
         job.progress = 100
         job.bytes_done = done
         job.finished_at = timezone.now()
-        job.save(update_fields=['status', 'progress', 'bytes_done', 'finished_at'])
+        # Set expiry time for cleanup
+        try:
+            ttl_hours = int(getattr(settings, 'DOWNLOAD_JOB_TTL_HOURS', 72))
+        except Exception:
+            ttl_hours = 72
+        job.expires_at = job.finished_at + timedelta(hours=ttl_hours)
+        job.save(update_fields=['status', 'progress', 'bytes_done', 'finished_at', 'expires_at'])
     except Exception as e:
         DownloadJob.objects.filter(pk=job.pk).update(status='failed', error=str(e), finished_at=timezone.now())
 
@@ -227,3 +235,34 @@ def reconcile_filesystem(self, dry_run: bool = False):
 
 
 
+
+@shared_task(bind=True)
+def cleanup_expired_downloads(self):
+    """Delete ZIP files for expired DownloadJobs and mark them as expired.
+
+    A job is eligible when `expires_at` is set and is in the past.
+    The task removes the file at `file_path` (if it exists), clears `file_path`,
+    and sets `status='expired'` when not already set.
+    """
+    now = timezone.now()
+    qs = DownloadJob.objects.filter(expires_at__isnull=False, expires_at__lte=now)
+    cleaned = 0
+    for job in qs.only('pk', 'file_path', 'status'):
+        try:
+            if job.file_path:
+                p = Path(job.file_path)
+                try:
+                    if p.exists():
+                        p.unlink()
+                except Exception as e:
+                    logger.warning("Cleanup: failed to delete %s for job #%s: %s", job.file_path, job.pk, e)
+            job.file_path = ''
+            if job.status != 'expired':
+                job.status = 'expired'
+            job.save(update_fields=['file_path', 'status'])
+            cleaned += 1
+        except Exception as e:
+            logger.error("Cleanup: error processing job #%s: %s", getattr(job, 'pk', '?'), e)
+
+    logger.info("Cleanup expired downloads complete. cleaned=%d", cleaned)
+    return {'cleaned': cleaned}
