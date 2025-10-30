@@ -199,8 +199,8 @@ class Handler(FileSystemEventHandler):
             # Only treat brand-new top-level run directories as runs
             parts = self._rel_parts(event.src_path)
             if len(parts) == 1:
-            #   Add new observation run
-            add_new_observation_run_wrapper(Path(event.src_path))
+                #   Add new observation run
+                add_new_observation_run_wrapper(Path(event.src_path))
             # p = mp.Process(
             #     target=add_new_observation_run_wrapper,
             #     args=(Path(event.src_path),),
@@ -233,7 +233,7 @@ class Handler(FileSystemEventHandler):
                 run_name = parts[0]
                 try:
                     observation_run = ObservationRun.objects.get(name=run_name)
-            observation_run.delete()
+                    observation_run.delete()
                 except ObservationRun.DoesNotExist:
                     logger.warning(f"Run not found for deletion: {run_name}")
 
