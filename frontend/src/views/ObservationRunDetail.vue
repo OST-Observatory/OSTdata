@@ -1385,8 +1385,14 @@ const triggerAsyncDownload = async (ids = [], filters = {}) => {
     const jobId = res?.job_id
     if (!jobId) throw new Error('Job not created')
     try { notify.success('Preparing download...') } catch {}
-    const status = await pollJobUntilReady(jobId)
-    await api.downloadJobFile(jobId)
+    try {
+      const status = await pollJobUntilReady(jobId)
+      await api.downloadJobFile(jobId)
+    } catch (e) {
+      // Show a clearer message to the user (e.g., cancelled by admin) rather than a generic uncaught error
+      try { notify.error(e?.message || 'Download job failed') } catch {}
+      return
+    }
   } finally {
     downloadingAll.value = false
   }

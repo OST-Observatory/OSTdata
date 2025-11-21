@@ -3,6 +3,29 @@
       <!-- Header with title -->
       <div class="d-flex align-center justify-space-between mb-4">
         <h1 class="text-h4">Objects</h1>
+        <div class="d-flex align-center" style="gap: 8px" v-if="canAdmin">
+          <v-btn
+            variant="outlined"
+            color="primary"
+            prepend-icon="mdi-eye"
+            :disabled="!selected.length"
+            @click="bulkPublishObjects(true)"
+          >Publish ({{ selected.length }})</v-btn>
+          <v-btn
+            variant="outlined"
+            color="secondary"
+            prepend-icon="mdi-eye-off"
+            :disabled="!selected.length"
+            @click="bulkPublishObjects(false)"
+          >Unpublish ({{ selected.length }})</v-btn>
+          <v-btn
+            variant="outlined"
+            color="warning"
+            prepend-icon="mdi-merge"
+            :disabled="selected.length < 2"
+            @click="openMergeDialog"
+          >Merge ({{ selected.length }})</v-btn>
+        </div>
       </div>
 
       <!-- Search and filter bar -->
@@ -225,6 +248,18 @@
           :sort-by="[{ key: sortBy.replace('-', ''), order: sortBy.startsWith('-') ? 'desc' : 'asc' }]"
           @update:sort-by="handleSort"
           hide-default-footer
+          show-select
+          select-strategy="page"
+          return-object
+          item-key="pk"
+          item-value="pk"
+          v-model="selected"
+          v-model:selected="selected"
+          v-model:selection="selected"
+          @update:selected="onObjectsSelected"
+          @update:modelValue="onObjectsSelected"
+          @update:selection="onObjectsSelected"
+          @click="onObjectsTableClick"
           class="custom-table"
         >
           <template #loading>
@@ -318,6 +353,31 @@
               </v-chip>
             </div>
           </template>
+
+          <template v-slot:item.actions="{ item }">
+            <v-btn
+              v-if="canAdmin"
+              icon
+              variant="text"
+              color="primary"
+              class="action-btn"
+              @click="openEditDialog(item)"
+              :aria-label="`Edit object ${item.name}`"
+            >
+              <v-icon>mdi-pencil</v-icon>
+            </v-btn>
+            <v-btn
+              v-if="canAdmin"
+              icon
+              variant="text"
+              color="error"
+              class="action-btn"
+              @click="removeObject(item)"
+              :aria-label="`Delete object ${item.name}`"
+            >
+              <v-icon>mdi-delete</v-icon>
+            </v-btn>
+          </template>
         </v-data-table>
 
         <!-- Custom pagination controls -->
@@ -388,6 +448,107 @@
           </div>
         </v-card-actions>
       </v-card>
+      <!-- Merge dialog -->
+      <v-dialog v-model="mergeOpen" max-width="520">
+        <v-card>
+          <v-card-title class="text-h6">Merge Objects</v-card-title>
+          <v-card-text>
+            <div class="mb-2">Select the target object to keep:</div>
+            <v-radio-group v-model="mergeTargetId" density="comfortable">
+              <v-radio
+                v-for="it in selected"
+                :key="it.pk"
+                :label="`${it.name} (#${it.pk})`"
+                :value="it.pk"
+              />
+            </v-radio-group>
+            <v-checkbox
+              v-model="mergeCombineTags"
+              label="Combine tags"
+              density="comfortable"
+              hide-details
+            />
+          </v-card-text>
+          <v-card-actions>
+            <v-spacer />
+            <v-btn variant="text" @click="mergeOpen = false">Cancel</v-btn>
+            <v-btn color="primary" @click="confirmMerge" :disabled="!mergeTargetId">Merge</v-btn>
+          </v-card-actions>
+        </v-card>
+      </v-dialog>
+      <!-- Edit dialog -->
+      <v-dialog v-model="editOpen" max-width="720">
+        <v-card>
+          <v-card-title class="text-h6">Edit Object</v-card-title>
+          <v-card-text>
+            <v-row dense class="mb-2">
+              <v-col cols="12" sm="6">
+                <v-text-field v-model="editForm.name" label="Name" density="comfortable" variant="outlined" hide-details />
+              </v-col>
+              <v-col cols="12" sm="6">
+                <v-select
+                  v-model="editForm.object_type"
+                  :items="objectTypeItems"
+                  item-title="title"
+                  item-value="value"
+                  label="Object Type"
+                  density="comfortable"
+                  variant="outlined"
+                  hide-details
+                  clearable
+                />
+              </v-col>
+            </v-row>
+            <v-row dense class="mb-2">
+              <v-col cols="12" sm="6">
+                <v-text-field v-model.number="editForm.ra" type="number" step="0.0001" label="RA (deg)" density="comfortable" variant="outlined" hide-details />
+              </v-col>
+              <v-col cols="12" sm="6">
+                <v-text-field v-model.number="editForm.dec" type="number" step="0.0001" label="Dec (deg)" density="comfortable" variant="outlined" hide-details />
+              </v-col>
+            </v-row>
+            <v-row dense class="mb-2">
+              <v-col cols="12" sm="6">
+                <v-switch class="hi-contrast-switch" v-model="editForm.is_public" inset hide-details color="primary" :label="`Public`" />
+              </v-col>
+              <v-col cols="12" sm="6">
+                <v-switch class="hi-contrast-switch" v-model="editForm.is_main" inset hide-details color="primary" :label="`Main target`" />
+              </v-col>
+              <v-col cols="12" sm="6">
+                <v-switch class="hi-contrast-switch" v-model="editForm.photometry" inset hide-details color="primary" :label="`Photometry`" />
+              </v-col>
+              <v-col cols="12" sm="6">
+                <v-switch class="hi-contrast-switch" v-model="editForm.spectroscopy" inset hide-details color="primary" :label="`Spectroscopy`" />
+              </v-col>
+            </v-row>
+            <v-row dense>
+              <v-col cols="12">
+                <v-textarea v-model="editForm.note" label="Note" rows="3" auto-grow density="comfortable" variant="outlined" hide-details />
+              </v-col>
+              <v-col cols="12">
+                <v-autocomplete
+                  v-model="editForm.tag_ids"
+                  :items="allTags"
+                  item-title="name"
+                  item-value="id"
+                  label="Tags"
+                  multiple
+                  chips
+                  closable-chips
+                  density="comfortable"
+                  variant="outlined"
+                  hide-details
+                />
+              </v-col>
+            </v-row>
+          </v-card-text>
+          <v-card-actions>
+            <v-spacer />
+            <v-btn variant="text" @click="editOpen = false">Cancel</v-btn>
+            <v-btn color="primary" variant="elevated" @click="saveEdit" :loading="editSaving">Save</v-btn>
+          </v-card-actions>
+        </v-card>
+      </v-dialog>
   </v-container>
 </template>
 
@@ -396,6 +557,7 @@ import { ref, onMounted, watch, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useQuerySync } from '@/composables/useQuerySync'
 import { api } from '@/services/api'
+import { useAuthStore } from '@/store/auth'
 import { debounce } from 'lodash'
 import { formatDateTime } from '@/utils/datetime'
 import { useNotifyStore } from '@/store/notify'
@@ -411,6 +573,7 @@ const currentPage = ref(1)
 const itemsPerPage = ref(10)
 const totalItems = ref(0)
 const objects = ref([])
+const selected = ref([])
 const loading = ref(false)
 const objectsError = ref('')
 const search = ref('')
@@ -429,6 +592,8 @@ const dec = ref('')
 const radius = ref('')
 const radiusUnit = ref('arcsec')
 const notify = useNotifyStore()
+const authStore = useAuthStore()
+const canAdmin = computed(() => authStore.isAdmin)
 const boolFilterItems = [
   { title: 'Not selected', value: null },
   { title: 'Yes', value: true },
@@ -500,7 +665,8 @@ const headers = [
   { title: 'Photometry', key: 'photometry', sortable: false },
   { title: 'Spectroscopy', key: 'spectroscopy', sortable: false },
   { title: 'Tags', key: 'tags', sortable: false },
-  { title: 'Observation Runs', key: 'observation_runs', sortable: false }
+  { title: 'Observation Runs', key: 'observation_runs', sortable: false },
+  { title: 'Actions', key: 'actions', sortable: false }
 ]
 
 // Object types for the filter
@@ -612,8 +778,10 @@ const fetchObjects = async () => {
     }
     
     const response = await api.getObjectsVuetify(params)
-    objects.value = response.items
-    totalItems.value = response.total
+    const items = Array.isArray(response?.items) ? response.items : []
+    // Normalize primary key for selection handling
+    objects.value = items.map(it => ({ ...it, pk: it.pk ?? it.id }))
+    totalItems.value = response.total || objects.value.length
   } catch (error) {
     console.error('Error fetching objects:', error)
     objects.value = []
@@ -721,6 +889,60 @@ const copyShareLink = async () => {
   }
 }
 
+const removeObject = async (item) => {
+  if (!canAdmin.value || !item?.pk) return
+  if (!confirm(`Delete object ${item.name}? This cannot be undone.`)) return
+  try {
+    await api.deleteObject(item.pk)
+    notify.success('Object deleted')
+    await fetchObjects()
+  } catch (e) {
+    console.error(e)
+    notify.error('Delete failed')
+  }
+}
+
+const bulkPublishObjects = async (makePublic) => {
+  if (!canAdmin.value || !selected.value.length) return
+  const ids = selected.value.map(x => x.pk).filter(Boolean)
+  try {
+    await Promise.all(ids.map(id => api.updateObject(id, { is_public: !!makePublic })))
+    notify.success(`${makePublic ? 'Published' : 'Unpublished'} ${ids.length} object(s)`) 
+    selected.value = []
+    await fetchObjects()
+  } catch (e) {
+    notify.error('Bulk update failed')
+  }
+}
+
+const mergeOpen = ref(false)
+const mergeTargetId = ref(null)
+const mergeCombineTags = ref(true)
+const openMergeDialog = () => {
+  if (!selected.value.length) return
+  mergeTargetId.value = selected.value[0]?.pk || null
+  mergeCombineTags.value = true
+  mergeOpen.value = true
+}
+const confirmMerge = async () => {
+  const ids = selected.value.map(x => x.pk).filter(Boolean)
+  const tgt = mergeTargetId.value
+  if (!tgt || ids.length < 2) {
+    mergeOpen.value = false
+    return
+  }
+  const sources = ids.filter(id => id !== tgt)
+  if (!confirm(`Merge ${sources.length} object(s) into #${tgt}? This will move relations and delete sources.`)) return
+  try {
+    await api.mergeObjects(tgt, sources, mergeCombineTags.value)
+    notify.success(`Merged ${sources.length} object(s) into #${tgt}`)
+    mergeOpen.value = false
+    selected.value = []
+    await fetchObjects()
+  } catch (e) {
+    notify.error('Merge failed')
+  }
+}
 const safeConvertRA = (value) => {
   if (!value || typeof value !== 'string') return null
   const m = value.trim().match(/^([0-1]?\d|2[0-3]):([0-5]?\d):([0-5]?\d(?:\.\d+)?)$/)
@@ -781,15 +1003,162 @@ const radiusRules = [
 ]
 
 onMounted(() => {
+  console.log('[Objects] component mounted')
   applyQuerySync()
   fetchObjects()
   fetchObservationRuns()
 })
+
+// Debug: observe selection changes
+watch(selected, (val) => {
+  try {
+    console.log('[Objects] selected (watch):', Array.isArray(val) ? val.map(v => v?.pk || v?.id) : val)
+  } catch (e) {}
+}, { deep: true })
+
+// Debug: listen to table's update event
+const onObjectsSelected = (val) => {
+  try {
+    console.log('[Objects] update:selected event:', Array.isArray(val) ? val.map(v => v?.pk || v?.id || v) : val)
+  } catch (e) {}
+}
+
+// Debug: table click events
+const onObjectsTableClick = (e) => {
+  try {
+    console.log('[Objects] table click', e?.target?.tagName, e?.target?.className)
+  } catch (e) {}
+}
+
+// Debug: observe data loading
+watch(objects, (val) => {
+  try {
+    console.log('[Objects] items loaded:', Array.isArray(val) ? val.length : 0, 'first:', val?.[0] ? Object.keys(val[0]) : null)
+  } catch (e) {}
+})
+
+// Edit meta
+const editOpen = ref(false)
+const editSaving = ref(false)
+const editForm = ref({
+  pk: null,
+  name: '',
+  object_type: '',
+  ra: null,
+  dec: null,
+  is_public: true,
+  is_main: true,
+  photometry: false,
+  spectroscopy: false,
+  note: '',
+  tag_ids: [],
+})
+const objectTypeItems = [
+  { title: 'Galaxy', value: 'GA' },
+  { title: 'Star Cluster', value: 'SC' },
+  { title: 'Nebula', value: 'NE' },
+  { title: 'Star', value: 'ST' },
+  { title: 'Solar System', value: 'SO' },
+  { title: 'Other', value: 'OT' },
+  { title: 'Unknown', value: 'UK' },
+]
+const allTags = ref([])
+const loadTagsIfNeeded = async () => {
+  if (allTags.value.length) return
+  try {
+    const res = await api.getTags({ limit: 1000 })
+    const items = Array.isArray(res?.results) ? res.results : (Array.isArray(res?.items) ? res.items : (Array.isArray(res) ? res : []))
+    allTags.value = items.map(t => ({ id: t.id ?? t.pk, name: t.name }))
+  } catch (e) {
+    allTags.value = []
+  }
+}
+const openEditDialog = async (item) => {
+  await loadTagsIfNeeded()
+  editForm.value = {
+    pk: item.pk,
+    name: item.name || '',
+    object_type: item.object_type || null,
+    ra: item.ra ?? null,
+    dec: item.dec ?? null,
+    is_public: item.is_public ?? true,
+    is_main: item.is_main ?? true,
+    photometry: item.photometry ?? false,
+    spectroscopy: item.spectroscopy ?? false,
+    note: item.note || '',
+    tag_ids: Array.isArray(item.tag_ids) ? item.tag_ids.map(x => (x?.id ?? x)) : [],
+  }
+  editOpen.value = true
+}
+const saveEdit = async () => {
+  const id = editForm.value.pk
+  if (!id) { editOpen.value = false; return }
+  editSaving.value = true
+  try {
+    const payload = {
+      name: editForm.value.name,
+      object_type: editForm.value.object_type,
+      ra: editForm.value.ra,
+      dec: editForm.value.dec,
+      is_public: !!editForm.value.is_public,
+      is_main: !!editForm.value.is_main,
+      photometry: !!editForm.value.photometry,
+      spectroscopy: !!editForm.value.spectroscopy,
+      note: editForm.value.note || '',
+      tag_ids: editForm.value.tag_ids || [],
+    }
+    await api.updateObject(id, payload)
+    notify.success('Object updated')
+    editOpen.value = false
+    await fetchObjects()
+  } catch (e) {
+    notify.error('Update failed')
+  } finally {
+    editSaving.value = false
+  }
+}
 </script>
 
 <style scoped>
 .objects {
   padding: 20px 0;
+}
+
+.hi-contrast-switch:not(.v-selection-control--dirty) :deep(.v-switch__track) {
+  background-color: rgba(var(--v-theme-on-surface), 0.20) !important;
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.35) !important;
+}
+.hi-contrast-switch:not(.v-selection-control--dirty) :deep(.v-switch__thumb) {
+  background-color: rgb(var(--v-theme-surface)) !important;
+  border: 2px solid rgba(var(--v-theme-on-surface), 0.55) !important;
+}
+.hi-contrast-switch.v-selection-control--dirty :deep(.v-switch__track) {
+  background-color: rgb(var(--v-theme-primary)) !important;
+  border-color: rgb(var(--v-theme-primary)) !important;
+  opacity: 1 !important;
+}
+.hi-contrast-switch.v-selection-control--dirty :deep(.v-switch__thumb) {
+  background-color: #ffffff !important;
+  border: 2px solid rgb(var(--v-theme-primary)) !important;
+}
+.hi-contrast-switch :deep(input:checked ~ .v-selection-control__wrapper .v-switch__track) {
+  background-color: rgb(var(--v-theme-primary)) !important;
+  border-color: rgb(var(--v-theme-primary)) !important;
+  opacity: 1 !important;
+}
+.hi-contrast-switch :deep(input:checked ~ .v-selection-control__wrapper .v-switch__thumb) {
+  background-color: #ffffff !important;
+  border: 2px solid rgb(var(--v-theme-primary)) !important;
+}
+.hi-contrast-switch :deep(.v-label) {
+  color: rgba(var(--v-theme-on-surface), 0.85) !important;
+  font-weight: 500;
+}
+/* Ensure ON state is visibly blue even when Vuetify applies bg-primary on the track */
+.hi-contrast-switch :deep(.v-switch__track.bg-primary) {
+  background-color: rgb(var(--v-theme-primary)) !important;
+  border-color: rgb(var(--v-theme-primary)) !important;
+  opacity: 1 !important;
 }
 
 .v-data-table {

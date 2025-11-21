@@ -1149,8 +1149,13 @@ const triggerAsyncBulkDownload = async (ids = [], filters = {}) => {
     const res = await api.createBulkDownloadJob(ids, filters)
     const jobId = res?.job_id
     if (!jobId) throw new Error('Job not created')
-    const status = await pollJobUntilReady(jobId)
-    await api.downloadJobFile(jobId)
+    try {
+      const status = await pollJobUntilReady(jobId)
+      await api.downloadJobFile(jobId)
+    } catch (e) {
+      try { notify.error(e?.message || 'Download job failed') } catch {}
+      return
+    }
   } finally {
     downloadingAll.value = false
   }

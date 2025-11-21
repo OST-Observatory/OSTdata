@@ -1,4 +1,5 @@
-from django.urls import path
+from django.urls import path, include
+from rest_framework.routers import DefaultRouter
 from . import views
 
 app_name = 'users-api'
@@ -9,3 +10,12 @@ urlpatterns = [
     path('auth/user/', views.user_info, name='user_info'),
     path('auth/change-password/', views.change_password, name='change_password'),
 ] 
+
+# Admin router (admin-only user management)
+router = DefaultRouter()
+router.register(r'users', views.UserAdminViewSet, basename='admin-users')
+
+urlpatterns += [
+    path('admin/', include(router.urls)),
+    path('admin/ldap/test/', views.admin_ldap_test, name='admin_ldap_test'),
+]

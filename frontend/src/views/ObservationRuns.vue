@@ -2,6 +2,22 @@
   <v-container fluid class="runs">
       <div class="d-flex align-center justify-space-between mb-4">
         <h1 class="text-h4">Observation Runs</h1>
+        <div class="d-flex align-center" style="gap: 8px" v-if="canAdmin">
+          <v-btn
+            variant="outlined"
+            color="primary"
+            prepend-icon="mdi-eye"
+            :disabled="!selected.length"
+            @click="bulkPublish(true)"
+          >Publish ({{ selected.length }})</v-btn>
+          <v-btn
+            variant="outlined"
+            color="secondary"
+            prepend-icon="mdi-eye-off"
+            :disabled="!selected.length"
+            @click="bulkPublish(false)"
+          >Unpublish ({{ selected.length }})</v-btn>
+        </div>
       </div>
 
       <!-- Filters -->
@@ -109,6 +125,18 @@
           :sort-by="[{ key: sortKey.replace('-', ''), order: sortKey.startsWith('-') ? 'desc' : 'asc' }]"
           @update:sort-by="handleSort"
           hide-default-footer
+          show-select
+          select-strategy="page"
+          return-object
+          item-key="pk"
+          item-value="pk"
+          v-model="selected"
+          v-model:selected="selected"
+          v-model:selection="selected"
+          @update:selected="onRunsSelected"
+          @update:modelValue="onRunsSelected"
+          @update:selection="onRunsSelected"
+          @click="onRunsTableClick"
           class="custom-table"
         >
           <template #loading>
@@ -191,6 +219,31 @@
               {{ item.status || item.reduction_status || 'n/a' }}
             </v-chip>
           </template>
+
+          <template v-slot:item.actions="{ item }">
+            <v-btn
+              v-if="canAdmin"
+              icon
+              variant="text"
+              color="primary"
+              class="action-btn"
+              @click="openRunEdit(item)"
+              :aria-label="`Edit run ${item.name}`"
+            >
+              <v-icon>mdi-pencil</v-icon>
+            </v-btn>
+            <v-btn
+              v-if="canAdmin"
+              icon
+              variant="text"
+              color="error"
+              class="action-btn"
+              @click="removeRun(item)"
+              :aria-label="`Delete run ${item.name}`"
+            >
+              <v-icon>mdi-delete</v-icon>
+            </v-btn>
+          </template>
         </v-data-table>
 
         <!-- Custom pagination controls -->
@@ -261,6 +314,52 @@
           </div>
         </v-card-actions>
       </v-card>
+      <!-- Edit Run dialog -->
+      <v-dialog v-model="runEditOpen" max-width="720">
+        <v-card>
+          <v-card-title class="text-h6">Edit Observation Run</v-card-title>
+          <v-card-text>
+            <v-row dense class="mb-2">
+              <v-col cols="12" sm="6">
+                <v-text-field v-model="runEditForm.name" label="Name" density="comfortable" variant="outlined" hide-details />
+              </v-col>
+              <v-col cols="12" sm="6">
+                <v-select
+                  v-model="runEditForm.reduction_status"
+                  :items="runStatusOptions"
+                  item-title="title"
+                  item-value="value"
+                  label="Reduction status"
+                  density="comfortable"
+                  variant="outlined"
+                  hide-details
+                />
+              </v-col>
+            </v-row>
+            <v-row dense class="mb-2">
+              <v-col cols="12" sm="4">
+                <v-switch class="hi-contrast-switch" v-model="runEditForm.is_public" inset hide-details color="primary" :label="`Public`" />
+              </v-col>
+              <v-col cols="12" sm="4">
+                <v-switch class="hi-contrast-switch" v-model="runEditForm.photometry" inset hide-details color="primary" :label="`Photometry`" />
+              </v-col>
+              <v-col cols="12" sm="4">
+                <v-switch class="hi-contrast-switch" v-model="runEditForm.spectroscopy" inset hide-details color="primary" :label="`Spectroscopy`" />
+              </v-col>
+            </v-row>
+            <v-row dense>
+              <v-col cols="12">
+                <v-textarea v-model="runEditForm.note" label="Note" rows="3" auto-grow density="comfortable" variant="outlined" hide-details />
+              </v-col>
+            </v-row>
+          </v-card-text>
+          <v-card-actions>
+            <v-spacer />
+            <v-btn variant="text" @click="runEditOpen = false">Cancel</v-btn>
+            <v-btn color="primary" variant="elevated" @click="saveRunEdit" :loading="runEditSaving">Save</v-btn>
+          </v-card-actions>
+        </v-card>
+      </v-dialog>
   </v-container>
 </template>
 
@@ -271,11 +370,13 @@ import { formatDateTime } from '@/utils/datetime'
 import { getStatusColor } from '@/utils/status'
 import { useQuerySync } from '@/composables/useQuerySync'
 import { useNotifyStore } from '@/store/notify'
+import { useAuthStore } from '@/store/auth'
 import EmptyState from '@/components/ui/EmptyState.vue'
 import ErrorState from '@/components/ui/ErrorState.vue'
 import LoadingState from '@/components/ui/LoadingState.vue'
 
 const runs = ref([])
+const selected = ref([])
 const loading = ref(false)
 const error = ref(null)
 const currentPage = ref(1)
@@ -288,6 +389,8 @@ const selectedStatus = ref(null)
 const photometryFilter = ref(null)
 const spectroscopyFilter = ref(null)
 const notify = useNotifyStore()
+const authStore = useAuthStore()
+const canAdmin = computed(() => authStore.isAdmin)
 
 const headers = [
   { title: 'Name', key: 'name', sortable: true },
@@ -300,6 +403,7 @@ const headers = [
   { title: 'Darks', key: 'n_dark', sortable: true },
   { title: 'Tags', key: 'tags', sortable: false },
   { title: 'Status', key: 'status', sortable: false },
+  { title: 'Actions', key: 'actions', sortable: false },
 ]
 
 const statusItems = [
@@ -361,7 +465,8 @@ const fetchRuns = async () => {
         bulkParams.page_size = Math.max(1000, targetSize)
         bulkParams.limit = Math.max(1000, targetSize)
         const bulk = await api.getObservationRuns(bulkParams)
-        const all = Array.isArray(bulk.results) ? bulk.results : (Array.isArray(bulk.items) ? bulk.items : (Array.isArray(bulk) ? bulk : []))
+        const allRaw = Array.isArray(bulk.results) ? bulk.results : (Array.isArray(bulk.items) ? bulk.items : (Array.isArray(bulk) ? bulk : []))
+        const all = allRaw.map(it => ({ ...it, pk: it.pk ?? it.id }))
         if (itemsPerPage.value === -1) {
           runs.value = all
         } else {
@@ -369,13 +474,13 @@ const fetchRuns = async () => {
           runs.value = all.slice(start, start + itemsPerPage.value)
         }
       } else {
-        runs.value = serverItems
+        runs.value = serverItems.map(it => ({ ...it, pk: it.pk ?? it.id }))
       }
     } else if (Array.isArray(response.items)) {
-      runs.value = response.items
+      runs.value = response.items.map(it => ({ ...it, pk: it.pk ?? it.id }))
       totalItems.value = response.total || response.items.length
     } else if (Array.isArray(response)) {
-      runs.value = response
+      runs.value = response.map(it => ({ ...it, pk: it.pk ?? it.id }))
       totalItems.value = response.length
     } else {
       runs.value = []
@@ -453,7 +558,87 @@ const copyShareLink = async () => {
   }
 }
 
-// Helpers to normalize data across possible API shapes
+const removeRun = async (item) => {
+  if (!canAdmin.value || !(item?.pk || item?.id)) return
+  const id = item.pk || item.id
+  if (!confirm(`Delete observation run ${item.name}? This cannot be undone.`)) return
+  try {
+    await api.deleteObservationRun(id)
+    notify.success('Run deleted')
+    await fetchRuns()
+  } catch (e) {
+    console.error(e)
+    notify.error('Delete failed')
+  }
+}
+
+const bulkPublish = async (makePublic) => {
+  if (!canAdmin.value || !selected.value.length) return
+  const ids = selected.value.map(x => x.pk || x.id).filter(Boolean)
+  try {
+    await Promise.all(ids.map(id => api.updateObservationRun(id, { is_public: !!makePublic })))
+    notify.success(`${makePublic ? 'Published' : 'Unpublished'} ${ids.length} run(s)`) 
+    selected.value = []
+    await fetchRuns()
+  } catch (e) {
+    notify.error('Bulk update failed')
+  }
+}
+
+// Edit run
+const runEditOpen = ref(false)
+const runEditSaving = ref(false)
+const runEditForm = ref({
+  pk: null,
+  name: '',
+  reduction_status: 'NE',
+  is_public: true,
+  photometry: false,
+  spectroscopy: false,
+  note: '',
+})
+const runStatusOptions = [
+  { title: 'New', value: 'NE' },
+  { title: 'Partly reduced', value: 'PR' },
+  { title: 'Fully reduced', value: 'FR' },
+  { title: 'Reduction error', value: 'ER' },
+]
+const openRunEdit = (item) => {
+  runEditForm.value = {
+    pk: item.pk || item.id,
+    name: item.name || '',
+    reduction_status: item.reduction_status || 'NE',
+    is_public: item.is_public ?? true,
+    photometry: item.photometry ?? false,
+    spectroscopy: item.spectroscopy ?? false,
+    note: item.note || '',
+  }
+  runEditOpen.value = true
+}
+const saveRunEdit = async () => {
+  const id = runEditForm.value.pk
+  if (!id) { runEditOpen.value = false; return }
+  runEditSaving.value = true
+  try {
+    const payload = {
+      name: runEditForm.value.name,
+      reduction_status: runEditForm.value.reduction_status,
+      is_public: !!runEditForm.value.is_public,
+      photometry: !!runEditForm.value.photometry,
+      spectroscopy: !!runEditForm.value.spectroscopy,
+      note: runEditForm.value.note || '',
+    }
+    await api.updateObservationRun(id, payload)
+    notify.success('Run updated')
+    runEditOpen.value = false
+    await fetchRuns()
+  } catch (e) {
+    notify.error('Update failed')
+  } finally {
+    runEditSaving.value = false
+  }
+}
+
 const getMainTargets = (item) => {
   // prefer item.main_targets (array of names or objects), or build from nested objects
   if (Array.isArray(item?.main_targets)) {
@@ -515,14 +700,80 @@ const { applyQuery, syncQueryAndFetch } = useQuerySync(
 )
 
 onMounted(() => {
+  console.log('[Runs] component mounted')
   applyQuery()
   fetchRuns()
+})
+
+// Debug: observe selection changes
+watch(selected, (val) => {
+  try {
+    console.log('[Runs] selected (watch):', Array.isArray(val) ? val.map(v => v?.pk || v?.id) : val)
+  } catch (e) {}
+}, { deep: true })
+
+// Debug: listen to table's update event
+const onRunsSelected = (val) => {
+  try {
+    console.log('[Runs] update:selected event:', Array.isArray(val) ? val.map(v => v?.pk || v?.id || v) : val)
+  } catch (e) {}
+}
+
+// Debug: table click events
+const onRunsTableClick = (e) => {
+  try {
+    console.log('[Runs] table click', e?.target?.tagName, e?.target?.className)
+  } catch (e) {}
+}
+
+// Debug: observe data loading
+watch(runs, (val) => {
+  try {
+    console.log('[Runs] items loaded:', Array.isArray(val) ? val.length : 0, 'first:', val?.[0] ? Object.keys(val[0]) : null)
+  } catch (e) {}
 })
 </script>
 
 <style scoped>
 .runs {
   padding: 20px 0;
+}
+
+.hi-contrast-switch:not(.v-selection-control--dirty) :deep(.v-switch__track) {
+  background-color: rgba(var(--v-theme-on-surface), 0.20) !important;
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.35) !important;
+}
+.hi-contrast-switch:not(.v-selection-control--dirty) :deep(.v-switch__thumb) {
+  background-color: rgb(var(--v-theme-surface)) !important;
+  border: 2px solid rgba(var(--v-theme-on-surface), 0.55) !important;
+}
+.hi-contrast-switch.v-selection-control--dirty :deep(.v-switch__track) {
+  background-color: rgb(var(--v-theme-primary)) !important;
+  border-color: rgb(var(--v-theme-primary)) !important;
+  opacity: 1 !important;
+}
+.hi-contrast-switch.v-selection-control--dirty :deep(.v-switch__thumb) {
+  background-color: #ffffff !important;
+  border: 2px solid rgb(var(--v-theme-primary)) !important;
+}
+.hi-contrast-switch :deep(input:checked ~ .v-selection-control__wrapper .v-switch__track) {
+  background-color: rgb(var(--v-theme-primary)) !important;
+  border-color: rgb(var(--v-theme-primary)) !important;
+  opacity: 1 !important;
+}
+.hi-contrast-switch :deep(input:checked ~ .v-selection-control__wrapper .v-switch__thumb) {
+  background-color: #ffffff !important;
+  border: 2px solid rgb(var(--v-theme-primary)) !important;
+}
+.hi-contrast-switch :deep(.v-label) {
+  color: rgba(var(--v-theme-on-surface), 0.85) !important;
+  font-weight: 500;
+}
+/* Ensure ON state is visibly blue even when Vuetify applies bg-primary on the track */
+.hi-contrast-switch :deep(.v-switch__track.bg-primary) {
+  background-color: rgb(var(--v-theme-primary)) !important;
+  border-color: rgb(var(--v-theme-primary)) !important;
+  opacity: 1 !important;
 }
 
 .items-per-page-select {

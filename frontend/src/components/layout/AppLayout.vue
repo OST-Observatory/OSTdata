@@ -60,6 +60,11 @@
         <v-tooltip activator="parent" location="bottom">Tags</v-tooltip>
       </v-btn>
 
+      <v-btn v-if="isAdmin" icon to="/admin" aria-label="Open Admin" class="on-secondary nav-btn nav-gap" :class="{ 'nav-active': isActive('/admin') }" :aria-current="isActive('/admin') ? 'page' : undefined">
+        <v-icon>mdi-shield-account</v-icon>
+        <v-tooltip activator="parent" location="bottom">Admin</v-tooltip>
+      </v-btn>
+
       <v-btn
         icon
         class="on-secondary nav-btn nav-gap"
@@ -117,6 +122,9 @@
           <v-list-item to="/observation-runs" :aria-current="isActive('/observation-runs') ? 'page' : undefined"><v-list-item-title>Observation runs</v-list-item-title></v-list-item>
           <v-list-item to="/objects" :aria-current="isActive('/objects') ? 'page' : undefined"><v-list-item-title>Objects</v-list-item-title></v-list-item>
           <v-list-item to="/tags" :aria-current="isActive('/tags') ? 'page' : undefined"><v-list-item-title>Tags</v-list-item-title></v-list-item>
+          <template v-if="isAdmin">
+            <v-list-item to="/admin" :aria-current="isActive('/admin') ? 'page' : undefined"><v-list-item-title>Admin</v-list-item-title></v-list-item>
+          </template>
           <v-divider></v-divider>
           <v-list-item @click="toggleTheme"><v-list-item-title>{{ isDark ? 'Light theme' : 'Dark theme' }}</v-list-item-title></v-list-item>
           <v-divider></v-divider>
@@ -134,6 +142,14 @@
 
     <v-main class="main-content" id="main-content" tabindex="-1">
       <v-container>
+        <v-alert
+          v-if="banner.enabled && banner.message"
+          :type="banner.level"
+          class="mb-4"
+          variant="tonal"
+        >
+          {{ banner.message }}
+        </v-alert>
         <v-breadcrumbs :items="breadcrumbsDisplayMobile" class="mb-2" v-if="breadcrumbsDisplayMobile.length && isMobile" aria-label="Breadcrumbs">
           <template #item="{ item }">
             <v-tooltip location="bottom" :text="(item as any).full">
@@ -211,6 +227,7 @@ import { api } from '@/services/api'
 const authStore = useAuthStore()
 const isAuthenticated = computed(() => authStore.isAuthenticated)
 const username = computed(() => authStore.username)
+const isAdmin = computed(() => authStore.isAdmin)
 type UiMessage = { id: string | number; type: 'info' | 'success' | 'warning' | 'error'; text: string }
 const messages = ref<UiMessage[]>([])
 const isFooterVisible = ref(false)
@@ -232,6 +249,8 @@ const prefetchRoute = async (path: string) => {
       await import('../../views/ObservationRuns.vue')
     } else if (path === '/tags') {
       await import('../../views/Tags.vue')
+    } else if (path === '/admin') {
+      await import('../../views/Admin.vue')
     }
   } catch {}
 }
@@ -242,6 +261,21 @@ const toggleTheme = () => {
 }
 const display = useDisplay()
 const isMobile = computed(() => display.smAndDown.value)
+
+// Site-wide banner (public)
+type Banner = { enabled: boolean; message: string; level: 'info' | 'success' | 'warning' | 'error' }
+const banner = ref<Banner>({ enabled: false, message: '', level: 'warning' })
+let bannerInterval: any = null
+const fetchBanner = async () => {
+  try {
+    const b = await api.getBanner()
+    banner.value = {
+      enabled: !!b?.enabled,
+      message: String(b?.message || ''),
+      level: (['info','success','warning','error'].includes(b?.level) ? b.level : 'warning') as Banner['level'],
+    }
+  } catch {}
+}
 
 // Dynamic titles for detail routes
 const dynamicDetailTitle = ref<string>('')
@@ -372,10 +406,17 @@ onMounted(async () => {
   
   // Check authentication status on mount
   await authStore.checkAuth()
+  // Fetch banner and schedule refresh
+  fetchBanner()
+  bannerInterval = setInterval(fetchBanner, 60000)
 })
 
 onUnmounted(() => {
   window.removeEventListener('scroll', checkScroll)
+  if (bannerInterval) {
+    clearInterval(bannerInterval)
+    bannerInterval = null
+  }
 })
 
 const logout = async () => {

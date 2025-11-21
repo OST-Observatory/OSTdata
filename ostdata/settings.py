@@ -217,6 +217,104 @@ CORS_ALLOWED_HEADERS = [
     'x-requested-with',
 ]
 
+# Optional LDAP settings (scaffold, disabled by default)
+# To enable, install django-auth-ldap and set LDAP_SERVER_URI (and others) in ENV.
+AUTH_LDAP_SERVER_URI = env.str('LDAP_SERVER_URI', default='')
+AUTH_LDAP_START_TLS = env.bool('LDAP_START_TLS', default=False)
+AUTH_LDAP_BIND_DN = env.str('LDAP_BIND_DN', default='')
+AUTH_LDAP_BIND_PASSWORD = env.str('LDAP_BIND_PASSWORD', default='')
+AUTH_LDAP_USER_SEARCH_BASE = env.str('LDAP_USER_SEARCH_BASE', default='')
+AUTH_LDAP_GROUP_SEARCH_BASE = env.str('LDAP_GROUP_SEARCH_BASE', default='')
+AUTH_LDAP_CONNECT_TIMEOUT = env.int('LDAP_CONNECT_TIMEOUT', default=5)
+AUTH_LDAP_USER_FILTER = env.str('LDAP_USER_FILTER', default='(uid=%(user)s)')
+
+# Optional group DNs for role mapping
+LDAP_GROUP_STAFF_DN = env.str('LDAP_GROUP_STAFF_DN', default='')
+LDAP_GROUP_SUPERUSER_DN = env.str('LDAP_GROUP_SUPERUSER_DN', default='')
+LDAP_GROUP_SUPERVISOR_DN = env.str('LDAP_GROUP_SUPERVISOR_DN', default='')
+LDAP_GROUP_STUDENT_DN = env.str('LDAP_GROUP_STUDENT_DN', default='')
+
+# If AUTH_LDAP_SERVER_URI is set, the project can be configured to try LDAP first
+# in the login view; otherwise it will use local authentication only.
+
+# Conditional django-auth-ldap configuration
+try:
+    if AUTH_LDAP_SERVER_URI:
+        import ldap  # provided by python-ldap
+        from django_auth_ldap.config import LDAPSearch
+
+        # Put LDAP first so authenticate() tries it before ModelBackend
+        AUTHENTICATION_BACKENDS = (
+            'django_auth_ldap.backend.LDAPBackend',
+            'django.contrib.auth.backends.ModelBackend',
+        )
+
+        # Connection options
+        AUTH_LDAP_CONNECTION_OPTIONS = {
+            ldap.OPT_NETWORK_TIMEOUT: AUTH_LDAP_CONNECT_TIMEOUT,
+        }
+
+        # Service account bind (optional)
+        if AUTH_LDAP_BIND_DN:
+            AUTH_LDAP_BIND_DN = AUTH_LDAP_BIND_DN
+            AUTH_LDAP_BIND_PASSWORD = AUTH_LDAP_BIND_PASSWORD
+
+        AUTH_LDAP_ALWAYS_UPDATE_USER = True
+
+        # User search (e.g. by uid)
+        if AUTH_LDAP_USER_SEARCH_BASE:
+            AUTH_LDAP_USER_SEARCH = LDAPSearch(
+                AUTH_LDAP_USER_SEARCH_BASE,
+                ldap.SCOPE_SUBTREE,
+                AUTH_LDAP_USER_FILTER,
+            )
+
+        # Attribute mapping
+        AUTH_LDAP_USER_ATTR_MAP = {
+            'first_name': 'givenName',
+            'last_name': 'sn',
+            'email': 'mail',
+        }
+
+        # Map groups to Django flags where possible
+        AUTH_LDAP_USER_FLAGS_BY_GROUP = {}
+        if LDAP_GROUP_STAFF_DN:
+            AUTH_LDAP_USER_FLAGS_BY_GROUP['is_staff'] = LDAP_GROUP_STAFF_DN
+        if LDAP_GROUP_SUPERUSER_DN:
+            AUTH_LDAP_USER_FLAGS_BY_GROUP['is_superuser'] = LDAP_GROUP_SUPERUSER_DN
+
+        # Optional: set custom flags (is_supervisor, is_student) from group DNs via signal
+        if LDAP_GROUP_SUPERVISOR_DN or LDAP_GROUP_STUDENT_DN:
+            from django_auth_ldap.backend import populate_user
+
+            def _ldap_sync_custom_flags(sender, user=None, ldap_user=None, **kwargs):
+                try:
+                    dns = set((ldap_user.group_dns or []))
+                    dirty = False
+                    if LDAP_GROUP_SUPERVISOR_DN:
+                        new_val = any(d.lower() == LDAP_GROUP_SUPERVISOR_DN.lower() for d in dns)
+                        if getattr(user, 'is_supervisor', False) != new_val:
+                            user.is_supervisor = new_val
+                            dirty = True
+                    if LDAP_GROUP_STUDENT_DN:
+                        new_val = any(d.lower() == LDAP_GROUP_STUDENT_DN.lower() for d in dns)
+                        if getattr(user, 'is_student', False) != new_val:
+                            user.is_student = new_val
+                            dirty = True
+                    if dirty:
+                        try:
+                            user.save(update_fields=['is_supervisor', 'is_student'])
+                        except Exception:
+                            pass
+                except Exception:
+                    # Do not fail login on sync issues
+                    pass
+
+            populate_user.connect(_ldap_sync_custom_flags)
+except Exception:
+    # django-auth-ldap not installed or misconfigured; ignore and use local auth only
+    pass
+
 # Optional: schedule periodic reconcile of filesystem vs DB (disabled by default)
 from celery.schedules import crontab
 CELERY_BEAT_SCHEDULE = {}

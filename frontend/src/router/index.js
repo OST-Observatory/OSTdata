@@ -44,6 +44,36 @@ const routes = [
     meta: { requiresAuth: false, title: 'Tags', description: 'View and manage tags used to organize objects and files.' }
   },
   {
+    path: '/admin',
+    name: 'admin',
+    component: () => import('@/views/Admin.vue'),
+    meta: { requiresAuth: true, requiresAdmin: true, title: 'Admin', description: 'Administration panel.' }
+  },
+  {
+    path: '/admin/users',
+    name: 'admin-users',
+    component: () => import('@/views/admin/AdminUsers.vue'),
+    meta: { requiresAuth: true, requiresAdmin: true, title: 'Admin – Users', description: 'Manage users and roles.' }
+  },
+  {
+    path: '/admin/jobs',
+    name: 'admin-jobs',
+    component: () => import('@/views/admin/AdminJobs.vue'),
+    meta: { requiresAuth: true, requiresAdmin: true, title: 'Admin – Jobs', description: 'Monitor and control background jobs.' }
+  },
+  {
+    path: '/admin/health',
+    name: 'admin-health',
+    component: () => import('@/views/admin/AdminHealth.vue'),
+    meta: { requiresAuth: true, requiresAdmin: true, title: 'Admin – Health', description: 'System health and diagnostics.' }
+  },
+  {
+    path: '/admin/maintenance',
+    name: 'admin-maintenance',
+    component: () => import('@/views/admin/AdminMaintenance.vue'),
+    meta: { requiresAuth: true, requiresAdmin: true, title: 'Admin – Maintenance', description: 'Data maintenance tools.' }
+  },
+  {
     path: '/login',
     name: 'login',
     component: () => import('../views/Login.vue'),
@@ -71,13 +101,17 @@ const router = createRouter({
 // Global auth guard
 router.beforeEach(async (to) => {
   const auth = useAuthStore()
-  // Ensure we know current auth state
-  if (!auth.isAuthenticated) {
+  // Ensure we know current auth/admin state (force-check for admin routes)
+  if (!auth.isAuthenticated || (to.meta?.requiresAdmin === true)) {
     await auth.checkAuth()
   }
 
   if (to.meta?.requiresAuth && !auth.isAuthenticated) {
     return { path: '/login', query: { next: to.fullPath } }
+  }
+
+  if (to.meta?.requiresAdmin && !(auth.isAdmin)) {
+    return { path: '/' }
   }
 })
 

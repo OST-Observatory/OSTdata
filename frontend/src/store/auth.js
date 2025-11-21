@@ -9,6 +9,10 @@ export const useAuthStore = defineStore('auth', () => {
 
   const isAuthenticated = computed(() => !!token.value)
   const username = computed(() => user.value?.username)
+  const isAdmin = computed(() => {
+    const u = user.value
+    return !!(u && (u.is_staff || u.is_superuser))
+  })
 
   async function login(credentials) {
     try {
@@ -89,6 +93,7 @@ export const useAuthStore = defineStore('auth', () => {
     token,
     isAuthenticated,
     username,
+    isAdmin,
     login,
     logout,
     checkAuth,

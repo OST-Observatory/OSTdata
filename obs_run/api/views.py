@@ -1,9 +1,9 @@
 from rest_framework import viewsets
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.filters import OrderingFilter
-from rest_framework.decorators import api_view
+from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticatedOrReadOnly
+from rest_framework.permissions import IsAuthenticatedOrReadOnly, IsAdminUser, IsAuthenticated
 
 from django_filters.rest_framework import DjangoFilterBackend
 
@@ -45,6 +45,33 @@ from django.utils import timezone
 from django.db import transaction
 from obs_run.models import DownloadJob
 from obs_run.tasks import build_zip_task
+from obs_run.tasks import cleanup_expired_downloads, reconcile_filesystem
+from obs_run.tasks import cleanup_orphans_and_hashcheck
+from django.db import connection
+import platform
+import sys
+import time as _time
+import json
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAdminUser, AllowAny
+try:
+    import redis as _redis
+except Exception:
+    _redis = None
+try:
+    import django
+    _django_version = getattr(django, 'get_version', lambda: '')()
+except Exception:
+    _django_version = ''
+try:
+    import ldap as _ldap
+except Exception:
+    _ldap = None
+try:
+    # Import Celery app to ping workers
+    from ostdata.celery import app as celery_app
+except Exception:
+    celery_app = None
 
 
 # ===============================================================
@@ -85,6 +112,12 @@ class RunViewSet(viewsets.ModelViewSet):
     filterset_class = RunFilter
     ordering_fields = ['name', 'mid_observation_jd', 'reduction_status']
     ordering = ['mid_observation_jd']
+
+    def get_permissions(self):
+        # Admin only for unsafe methods
+        if self.request.method not in ('GET', 'HEAD', 'OPTIONS'):
+            return [IsAdminUser()]
+        return [IsAuthenticatedOrReadOnly()]
 
     def get_queryset(self):
         queryset = ObservationRun.objects.all()
@@ -669,7 +702,7 @@ def getDashboardStats(request):
     # Get storage usage
     env = environ.Env()
     environ.Env.read_env()
-    data_path = env("DATA_PATH", default='/archive/ftp/')
+    data_path = env("DATA_DIRECTORY", default='/archive/ftp/')
     stats['files']['storage_size'] = get_size_dir(data_path) * pow(1000, -4)  # Convert to TB
 
     return Response(stats)
@@ -738,20 +771,226 @@ def download_job_status(request, job_id):
     })
 
 
+@api_view(['GET'])
+def list_download_jobs(request):
+    """List download jobs. Admins see all; authenticated users see their own; anonymous see none."""
+    qs = DownloadJob.objects.all().order_by('-created_at')
+    if request.user.is_authenticated and request.user.is_staff:
+        pass
+    elif request.user.is_authenticated:
+        qs = qs.filter(user_id=request.user.pk)
+    else:
+        qs = qs.none()
+
+    # Optional filters: status, run, user
+    status_param = request.query_params.get('status')
+    if status_param:
+        qs = qs.filter(status=status_param)
+    run_param = request.query_params.get('run')
+    if run_param:
+        try:
+            qs = qs.filter(run_id=int(run_param))
+        except Exception:
+            pass
+    user_param = request.query_params.get('user')
+    if user_param and request.user.is_authenticated and request.user.is_staff:
+        try:
+            qs = qs.filter(user_id=int(user_param))
+        except Exception:
+            pass
+
+    # Simple serialization
+    items = []
+    for j in qs[:200]:
+        items.append({
+            'id': j.pk,
+            'status': j.status,
+            'progress': j.progress,
+            'bytes_total': j.bytes_total,
+            'bytes_done': j.bytes_done,
+            'run': j.run_id,
+            'user': j.user_id,
+            'created_at': j.created_at,
+            'started_at': j.started_at,
+            'finished_at': j.finished_at,
+            'expires_at': j.expires_at,
+            'error': j.error or '',
+        })
+    return Response({'items': items, 'total': qs.count()})
+
+
 @api_view(['POST'])
 def cancel_download_job(request, job_id):
     try:
         job = DownloadJob.objects.get(pk=job_id)
     except DownloadJob.DoesNotExist:
         return Response({'detail': 'Not found'}, status=404)
-    if job.user_id and (not request.user.is_authenticated or request.user.pk != job.user_id):
+    # Owners can cancel their own jobs; admins can cancel any
+    is_admin = bool(getattr(request.user, 'is_staff', False) or getattr(request.user, 'is_superuser', False))
+    if job.user_id and (not request.user.is_authenticated or (request.user.pk != job.user_id and not is_admin)):
         return Response({'detail': 'Not found'}, status=404)
     if job.status in ('done', 'failed', 'cancelled', 'expired'):
-        return Response({'status': job.status})
+        return Response({'status': job.status, 'error': job.error or ''})
     job.status = 'cancelled'
     job.finished_at = timezone.now()
-    job.save(update_fields=['status', 'finished_at'])
-    return Response({'status': job.status})
+    # Provide a human-readable reason for consumers polling status and set expiry
+    try:
+        actor = 'administrator' if getattr(request.user, 'is_staff', False) or getattr(request.user, 'is_superuser', False) else 'user'
+        msg = f'Cancelled by {actor}'
+        # Set expiry similar to 'done' so cleanup can run uniformly
+        try:
+            from datetime import timedelta
+            from django.conf import settings
+            ttl_hours = int(getattr(settings, 'DOWNLOAD_JOB_TTL_HOURS', 72))
+        except Exception:
+            ttl_hours = 72
+        job.expires_at = job.finished_at + timedelta(hours=ttl_hours)
+        # Only overwrite if no prior error set
+        if not job.error:
+            job.error = msg
+        else:
+            # Preserve prior error but append cancel note for clarity
+            job.error = f'{job.error} (cancelled by {actor})'
+        job.save(update_fields=['status', 'finished_at', 'expires_at', 'error'])
+    except Exception:
+        job.save(update_fields=['status', 'finished_at'])
+    # Signal cancel to workers via Redis key (optional fast path)
+    try:
+        broker = getattr(settings, 'CELERY_BROKER_URL', '') or os.environ.get('CELERY_BROKER_URL', '')
+        if broker.startswith('redis') and _redis:
+            from urllib.parse import urlparse
+            u = urlparse(broker)
+            host = u.hostname or '127.0.0.1'
+            port = int(u.port or 6379)
+            db = int((u.path or '/0').lstrip('/') or 0)
+            password = u.password
+            client = _redis.Redis(host=host, port=port, db=db, password=password, socket_timeout=1.0)
+            client.setex(f'job_cancel:{job.pk}', 24 * 3600, '1')
+    except Exception:
+        pass
+    return Response({'status': job.status, 'error': job.error or ''})
+
+
+@api_view(['POST'])
+@permission_classes([IsAdminUser])
+def batch_cancel_download_jobs(request):
+    """Admin: cancel multiple jobs by ids."""
+    ids = request.data.get('ids') or []
+    try:
+        ids = [int(x) for x in ids if str(x).strip().isdigit()]
+    except Exception:
+        ids = []
+    if not ids:
+        return Response({'cancelled': 0, 'skipped': 0}, status=200)
+    now = timezone.now()
+    cancelled = 0
+    skipped = 0
+    jobs = list(DownloadJob.objects.filter(pk__in=ids))
+    for job in jobs:
+        if job.status in ('done', 'failed', 'cancelled', 'expired'):
+            skipped += 1
+            continue
+        job.status = 'cancelled'
+        job.finished_at = now
+        try:
+            from datetime import timedelta
+            from django.conf import settings
+            ttl_hours = int(getattr(settings, 'DOWNLOAD_JOB_TTL_HOURS', 72))
+        except Exception:
+            ttl_hours = 72
+        job.expires_at = now + timedelta(hours=ttl_hours)
+        try:
+            note = 'Cancelled by administrator (batch)'
+            job.error = note if not job.error else f'{job.error} (cancelled by administrator)'
+            job.save(update_fields=['status', 'finished_at', 'expires_at', 'error'])
+        except Exception:
+            job.save(update_fields=['status', 'finished_at', 'expires_at'])
+        cancelled += 1
+    # Signal cancels via Redis flags
+    try:
+        broker = getattr(settings, 'CELERY_BROKER_URL', '') or os.environ.get('CELERY_BROKER_URL', '')
+        if broker.startswith('redis') and _redis:
+            from urllib.parse import urlparse
+            u = urlparse(broker)
+            host = u.hostname or '127.0.0.1'
+            port = int(u.port or 6379)
+            db = int((u.path or '/0').lstrip('/') or 0)
+            password = u.password
+            client = _redis.Redis(host=host, port=port, db=db, password=password, socket_timeout=1.0)
+            with client.pipeline() as pipe:
+                for j in jobs:
+                    try:
+                        pipe.setex(f'job_cancel:{j.pk}', 24 * 3600, '1')
+                    except Exception:
+                        continue
+                pipe.execute()
+    except Exception:
+        pass
+    return Response({'cancelled': cancelled, 'skipped': skipped}, status=200)
+
+
+@api_view(['POST'])
+@permission_classes([IsAdminUser])
+def batch_extend_jobs_expiry(request):
+    """Admin: extend expiry for multiple jobs by N hours (default 48)."""
+    ids = request.data.get('ids') or []
+    hours = request.data.get('hours')
+    try:
+        ids = [int(x) for x in ids if str(x).strip().isdigit()]
+    except Exception:
+        ids = []
+    try:
+        hours = int(hours) if hours is not None else 48
+    except Exception:
+        hours = 48
+    if hours <= 0 or not ids:
+        return Response({'updated': 0}, status=200)
+    from datetime import timedelta
+    now = timezone.now()
+    updated = 0
+    for job in DownloadJob.objects.filter(pk__in=ids):
+        base = job.expires_at or now
+        job.expires_at = base + timedelta(hours=hours)
+        try:
+            job.save(update_fields=['expires_at'])
+            updated += 1
+        except Exception:
+            pass
+    return Response({'updated': updated}, status=200)
+
+
+@api_view(['POST'])
+@permission_classes([IsAdminUser])
+def batch_expire_jobs_now(request):
+    """Admin: immediately expire jobs (delete file if present, set status to expired)."""
+    ids = request.data.get('ids') or []
+    try:
+        ids = [int(x) for x in ids if str(x).strip().isdigit()]
+    except Exception:
+        ids = []
+    if not ids:
+        return Response({'expired': 0}, status=200)
+    now = timezone.now()
+    expired = 0
+    for job in DownloadJob.objects.filter(pk__in=ids):
+        try:
+            # Remove file if present
+            if job.file_path:
+                p = Path(job.file_path)
+                try:
+                    if p.exists():
+                        p.unlink()
+                except Exception:
+                    pass
+            job.file_path = ''
+            job.expires_at = now
+            job.finished_at = job.finished_at or now
+            job.status = 'expired'
+            job.save(update_fields=['file_path', 'expires_at', 'finished_at', 'status'])
+            expired += 1
+        except Exception:
+            pass
+    return Response({'expired': expired}, status=200)
 
 
 @api_view(['GET'])
@@ -770,3 +1009,443 @@ def download_job_download(request, job_id):
     from django.http import FileResponse
     filename = path.name
     return FileResponse(open(path, 'rb'), as_attachment=True, filename=filename)
+
+@api_view(['POST'])
+@permission_classes([IsAdminUser])
+def admin_trigger_cleanup_downloads(request):
+    """Trigger cleanup of expired download jobs asynchronously."""
+    try:
+        res = cleanup_expired_downloads.delay()
+        return Response({'enqueued': True, 'task_id': getattr(res, 'id', None)}, status=202)
+    except Exception as e:
+        return Response({'enqueued': False, 'error': str(e)}, status=400)
+
+
+@api_view(['POST'])
+@permission_classes([IsAdminUser])
+def admin_trigger_reconcile(request):
+    """Trigger filesystem reconcile asynchronously. Body: { dry_run: bool }"""
+    try:
+        dry_run = bool(request.data.get('dry_run', True)) if hasattr(request, 'data') else True
+    except Exception:
+        dry_run = True
+    try:
+        res = reconcile_filesystem.delay(dry_run=dry_run)
+        return Response({'enqueued': True, 'task_id': getattr(res, 'id', None), 'dry_run': dry_run}, status=202)
+    except Exception as e:
+        return Response({'enqueued': False, 'error': str(e)}, status=400)
+
+
+@api_view(['POST'])
+@permission_classes([IsAdminUser])
+def admin_trigger_orphans_hashcheck(request):
+    """Trigger orphan cleanup and hash drift check. Body: { dry_run: bool, fix_missing_hashes: bool, limit: int|null }"""
+    payload = request.data if hasattr(request, 'data') else {}
+    try:
+        dry_run = bool(payload.get('dry_run', True))
+    except Exception:
+        dry_run = True
+    try:
+        fix_missing_hashes = bool(payload.get('fix_missing_hashes', True))
+    except Exception:
+        fix_missing_hashes = True
+    try:
+        limit = payload.get('limit', None)
+        limit = int(limit) if (limit is not None and str(limit).strip() != '') else None
+    except Exception:
+        limit = None
+    try:
+        res = cleanup_orphans_and_hashcheck.delay(dry_run=dry_run, fix_missing_hashes=fix_missing_hashes, limit=limit)
+        return Response({'enqueued': True, 'task_id': getattr(res, 'id', None), 'dry_run': dry_run}, status=202)
+    except Exception as e:
+        return Response({'enqueued': False, 'error': str(e)}, status=400)
+
+@api_view(['GET'])
+@permission_classes([IsAdminUser])
+def admin_health(request):
+    """Return system health information for admins."""
+    data = {}
+    # Versions
+    data['versions'] = {
+        'python': sys.version.split()[0],
+        'django': _django_version,
+    }
+    # Optional: Bokeh version
+    try:
+        import bokeh  # type: ignore
+        data['versions']['bokeh'] = getattr(bokeh, '__version__', None) or ''
+    except Exception:
+        data['versions']['bokeh'] = None
+    # Settings of interest
+    try:
+        from django.conf import settings
+        data['celery'] = {
+            'broker_url': getattr(settings, 'CELERY_BROKER_URL', ''),
+            'result_backend': getattr(settings, 'CELERY_RESULT_BACKEND', ''),
+            'task_always_eager': bool(getattr(settings, 'CELERY_TASK_ALWAYS_EAGER', False)),
+        }
+        data['features'] = {
+            'fs_reconcile_enabled': bool(getattr(settings, 'ENABLE_FS_RECONCILE', False)),
+            'download_cleanup_enabled': bool(getattr(settings, 'ENABLE_DOWNLOAD_CLEANUP', False)),
+        }
+    except Exception:
+        data['celery'] = {}
+        data['features'] = {}
+
+    # DB health
+    db_ok = False
+    db_latency_ms = None
+    try:
+        t0 = _time.time()
+        with connection.cursor() as cursor:
+            cursor.execute('SELECT 1')
+            cursor.fetchone()
+        db_latency_ms = int((_time.time() - t0) * 1000)
+        db_ok = True
+    except Exception as e:
+        data['db_error'] = str(e)
+    data['database'] = {'ok': db_ok, 'latency_ms': db_latency_ms}
+
+    # Celery worker ping
+    worker_ok = False
+    workers = []
+    try:
+        if celery_app:
+            insp = celery_app.control.inspect(timeout=1.0)
+            pong = insp.ping() or {}
+            workers = list(pong.keys())
+            worker_ok = len(workers) > 0
+    except Exception as e:
+        data['celery_ping_error'] = str(e)
+    data['celery']['workers'] = workers
+    data['celery']['workers_alive'] = worker_ok
+
+    # Redis (broker) ping
+    redis_ok = None
+    redis_latency_ms = None
+    try:
+        broker = data['celery'].get('broker_url') or ''
+        if broker.startswith('redis') and _redis:
+            # Parse redis URL
+            from urllib.parse import urlparse
+            u = urlparse(broker)
+            host = u.hostname or '127.0.0.1'
+            port = int(u.port or 6379)
+            db = int((u.path or '/0').lstrip('/') or 0)
+            password = u.password
+            client = _redis.Redis(host=host, port=port, db=db, password=password, socket_timeout=1.0)
+            t0 = _time.time()
+            pong = client.ping()
+            redis_latency_ms = int((_time.time() - t0) * 1000)
+            redis_ok = bool(pong)
+    except Exception as e:
+        data['redis_error'] = str(e)
+    data['redis'] = {'ok': redis_ok, 'latency_ms': redis_latency_ms}
+
+    # Storage (filesystem) stats for data path
+    storage = {'ok': None}
+    try:
+        import environ
+        env = environ.Env()
+        environ.Env.read_env()
+        data_path = env('DATA_DIRECTORY', default='/archive/ftp/')
+        p = Path(data_path)
+        exists = p.exists()
+        storage['path'] = str(p)
+        storage['exists'] = exists
+        if exists:
+            st = os.statvfs(str(p))
+            total = st.f_frsize * st.f_blocks
+            free = st.f_frsize * st.f_bavail
+            used = total - free
+            storage.update({
+                'total_bytes': total,
+                'used_bytes': used,
+                'free_bytes': free,
+            })
+            storage['ok'] = True
+        else:
+            storage['ok'] = False
+    except Exception as e:
+        storage['ok'] = False
+        storage['error'] = str(e)
+    data['storage'] = storage
+
+    # Periodic task last runs (from Redis heartbeat written by tasks)
+    periodic = {}
+    try:
+        broker = data.get('celery', {}).get('broker_url') or ''
+        if broker.startswith('redis') and _redis:
+            from urllib.parse import urlparse
+            u = urlparse(broker)
+            host = u.hostname or '127.0.0.1'
+            port = int(u.port or 6379)
+            db = int((u.path or '/0').lstrip('/') or 0)
+            password = u.password
+            client = _redis.Redis(host=host, port=port, db=db, password=password, socket_timeout=1.0)
+            for name in ['cleanup_expired_downloads', 'reconcile_filesystem', 'cleanup_orphans_hashcheck']:
+                hk = f'health:task:{name}'
+                last_run = client.hget(hk, 'last_run')
+                last_error = client.hget(hk, 'last_error')
+                data_json = client.hget(hk, 'data')
+                entry = {}
+                if last_run:
+                    try:
+                        s = last_run.decode('utf-8')
+                        entry['last_run'] = s
+                        try:
+                            from django.utils.dateparse import parse_datetime
+                            dt = parse_datetime(s)
+                            if dt is not None:
+                                age = (timezone.now() - dt).total_seconds()
+                                entry['age_seconds'] = int(age)
+                        except Exception:
+                            pass
+                    except Exception:
+                        pass
+                if last_error:
+                    try:
+                        entry['last_error'] = last_error.decode('utf-8')
+                    except Exception:
+                        entry['last_error'] = str(last_error)
+                if data_json:
+                    try:
+                        entry['data'] = json.loads(data_json.decode('utf-8'))
+                    except Exception:
+                        pass
+                periodic[name] = entry
+    except Exception as e:
+        data['periodic_error'] = str(e)
+    data['periodic'] = periodic
+
+    # Extra settings surface
+    try:
+        data['settings'] = {
+            'DOWNLOAD_JOB_TTL_HOURS': int(getattr(settings, 'DOWNLOAD_JOB_TTL_HOURS', 72)),
+            'DATA_DIRECTORY': os.environ.get('DATA_DIRECTORY', ''),
+            'WATCH_DEBOUNCE_SECONDS': os.environ.get('WATCH_DEBOUNCE_SECONDS', ''),
+            'WATCH_CREATED_DELAY_SECONDS': os.environ.get('WATCH_CREATED_DELAY_SECONDS', ''),
+            'WATCH_STABILITY_SECONDS': os.environ.get('WATCH_STABILITY_SECONDS', ''),
+            'SIMBAD_MIN_INTERVAL': os.environ.get('SIMBAD_MIN_INTERVAL', ''),
+        }
+    except Exception:
+        data['settings'] = {}
+
+    # LDAP status
+    ldap_info = {'configured': False}
+    try:
+        server_uri = getattr(settings, 'AUTH_LDAP_SERVER_URI', None) or os.environ.get('LDAP_SERVER_URI')
+        if server_uri:
+            ldap_info['configured'] = True
+            ldap_info['server_uri'] = server_uri
+            ldap_info['can_import'] = bool(_ldap is not None)
+            if _ldap:
+                # Initialize and optional StartTLS
+                start_tls = bool(getattr(settings, 'AUTH_LDAP_START_TLS', False) or str(os.environ.get('LDAP_START_TLS', 'false')).lower() in ('1','true','yes'))
+                bind_dn = getattr(settings, 'AUTH_LDAP_BIND_DN', None) or os.environ.get('LDAP_BIND_DN') or ''
+                bind_pw = getattr(settings, 'AUTH_LDAP_BIND_PASSWORD', None) or os.environ.get('LDAP_BIND_PASSWORD') or ''
+                try:
+                    conn = _ldap.initialize(server_uri)
+                    conn.set_option(_ldap.OPT_REFERRALS, 0)
+                    if start_tls:
+                        try:
+                            conn.start_tls_s()
+                            ldap_info['start_tls'] = True
+                        except Exception as e:
+                            ldap_info['start_tls'] = False
+                            ldap_info['tls_error'] = str(e)
+                    # Anonymous bind if no DN provided
+                    try:
+                        if bind_dn:
+                            conn.simple_bind_s(bind_dn, bind_pw or '')
+                        else:
+                            conn.simple_bind_s()
+                        ldap_info['bind_ok'] = True
+                    except Exception as e:
+                        ldap_info['bind_ok'] = False
+                        ldap_info['bind_error'] = str(e)
+                    try:
+                        conn.unbind_s()
+                    except Exception:
+                        pass
+                except Exception as e:
+                    ldap_info['connect_error'] = str(e)
+        data['ldap'] = ldap_info
+    except Exception as e:
+        data['ldap'] = {'configured': False, 'error': str(e)}
+
+    # External services: Aladin reachability
+    aladin = {'ok': None}
+    try:
+        # Use the concrete JS asset that the frontend actually loads
+        url = os.environ.get('ALADIN_PING_URL', 'https://aladin.cds.unistra.fr/AladinLite/api/v3/latest/aladin.js')
+        t0 = _time.time()
+        status = None
+        # Try requests first
+        try:
+            import requests  # type: ignore
+            headers = {'User-Agent': 'Mozilla/5.0 (compatible; OSTdata/health-check)'}
+            # Prefer GET because some servers return 403 to HEAD; use stream to avoid downloading content
+            r = requests.get(url, timeout=3.0, allow_redirects=True, headers=headers, stream=True)
+            try:
+                status = r.status_code
+            finally:
+                try:
+                    r.close()
+                except Exception:
+                    pass
+        except Exception:
+            # Fallback to urllib
+            try:
+                import urllib.request  # type: ignore
+                req = urllib.request.Request(url, method='GET', headers={'User-Agent': 'Mozilla/5.0 (compatible; OSTdata/health-check)'})
+                with urllib.request.urlopen(req, timeout=3.0) as resp:
+                    status = getattr(resp, 'status', 200)
+            except Exception as e2:
+                aladin['error'] = str(e2)
+        latency_ms = int((_time.time() - t0) * 1000)
+        aladin['latency_ms'] = latency_ms
+        if status is not None:
+            aladin['status_code'] = int(status)
+            aladin['ok'] = 200 <= int(status) < 400
+        else:
+            aladin['ok'] = False
+    except Exception as e:
+        aladin['ok'] = False
+        aladin['error'] = str(e)
+    data['aladin'] = aladin
+
+    # Optional system resources if psutil available
+    try:
+        import psutil  # type: ignore
+        vm = psutil.virtual_memory()
+        cpu = psutil.cpu_percent(interval=0.1)
+        data['system'] = {
+            'cpu_percent': float(cpu),
+            'memory': {
+                'total_bytes': int(vm.total),
+                'used_bytes': int(vm.total - vm.available),
+                'free_bytes': int(vm.available),
+                'percent': float(vm.percent),
+            }
+        }
+    except Exception:
+        data['system'] = None
+
+    # Download job stats
+    try:
+        counts = {}
+        for s in ['queued', 'running', 'done', 'failed', 'cancelled', 'expired']:
+            counts[s] = DownloadJob.objects.filter(status=s).count()
+        data['jobs'] = counts
+    except Exception as e:
+        data['jobs_error'] = str(e)
+
+    return Response(data, status=200)
+
+
+# ===============================================================
+#   ADMIN - SITE-WIDE BANNER (maintenance notice)
+# ===============================================================
+
+_BANNER_REDIS_KEY = 'site:banner'
+
+def _get_redis_from_broker():
+    try:
+        from django.conf import settings
+        broker = getattr(settings, 'CELERY_BROKER_URL', '')
+        if broker.startswith('redis') and _redis:
+            from urllib.parse import urlparse
+            u = urlparse(broker)
+            host = u.hostname or '127.0.0.1'
+            port = int(u.port or 6379)
+            db = int((u.path or '/0').lstrip('/') or 0)
+            password = u.password
+            client = _redis.Redis(host=host, port=port, db=db, password=password, socket_timeout=1.0)
+            return client
+    except Exception:
+        pass
+    return None
+
+def _banner_get():
+    client = _get_redis_from_broker()
+    if not client:
+        return None
+    try:
+        raw = client.get(_BANNER_REDIS_KEY)
+        if not raw:
+            return None
+        try:
+            return json.loads(raw.decode('utf-8'))
+        except Exception:
+            return None
+    except Exception:
+        return None
+
+def _banner_set(payload: dict):
+    client = _get_redis_from_broker()
+    if not client:
+        return False
+    try:
+        client.set(_BANNER_REDIS_KEY, json.dumps(payload))
+        return True
+    except Exception:
+        return False
+
+def _banner_clear():
+    client = _get_redis_from_broker()
+    if not client:
+        return False
+    try:
+        client.delete(_BANNER_REDIS_KEY)
+        return True
+    except Exception:
+        return False
+
+@api_view(['GET'])
+@permission_classes([IsAdminUser])
+def admin_get_banner(request):
+    """
+    Get current site-wide banner.
+    Returns: { enabled: bool, message: str, level: 'info'|'success'|'warning'|'error' }
+    """
+    data = _banner_get() or {'enabled': False, 'message': '', 'level': 'warning'}
+    return Response(data)
+
+@api_view(['POST'])
+@permission_classes([IsAdminUser])
+def admin_set_banner(request):
+    """
+    Set site-wide banner.
+    Body: { enabled: bool, message: str, level: 'info'|'success'|'warning'|'error' }
+    """
+    body = request.data if hasattr(request, 'data') else {}
+    enabled = bool(body.get('enabled', True))
+    message = str(body.get('message', '') or '')
+    level = str(body.get('level', 'warning') or 'warning')
+    payload = {'enabled': enabled, 'message': message, 'level': level}
+    ok = _banner_set(payload)
+    if not ok:
+        return Response({'error': 'Failed to persist banner'}, status=500)
+    return Response(payload)
+
+@api_view(['POST'])
+@permission_classes([IsAdminUser])
+def admin_clear_banner(request):
+    """
+    Clear site-wide banner.
+    """
+    ok = _banner_clear()
+    if not ok:
+        return Response({'error': 'Failed to clear banner'}, status=500)
+    return Response({'cleared': True})
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def banner_info(request):
+    """
+    Public endpoint: Get current site-wide banner (read-only).
+    Returns: { enabled, message, level }
+    """
+    data = _banner_get() or {'enabled': False, 'message': '', 'level': 'warning'}
+    return Response(data)

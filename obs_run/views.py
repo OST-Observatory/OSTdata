@@ -120,7 +120,7 @@ def dashboard(request):
     #   TODO: Replace with default environment file
     env = environ.Env()
     environ.Env.read_env()
-    data_path = env("DATA_PATH", default='/archive/ftp/')
+    data_path = env("DATA_DIRECTORY", default='/archive/ftp/')
     stats['file_size'] = get_size_dir(data_path) * pow(1000, -4)
 
     #   Recent/Last 25 changes to the observation runs and Objects

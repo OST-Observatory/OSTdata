@@ -11,10 +11,97 @@ import logging
 from django.utils import timezone
 from django.conf import settings
 from datetime import timedelta
+import json
 
 from obs_run.models import DownloadJob, DataFile, ObservationRun
 
 logger = logging.getLogger(__name__)
+
+def _health_set(task_key: str, payload: dict):
+    """Store periodic task heartbeat info in Redis (when broker is Redis)."""
+    try:
+        broker = getattr(settings, 'CELERY_BROKER_URL', '') or os.environ.get('CELERY_BROKER_URL', '')
+        if not broker.startswith('redis'):
+            return
+        try:
+            import redis  # type: ignore
+        except Exception:
+            return
+        from urllib.parse import urlparse
+        u = urlparse(broker)
+        host = u.hostname or '127.0.0.1'
+        port = int(u.port or 6379)
+        db = int((u.path or '/0').lstrip('/') or 0)
+        password = u.password
+        client = redis.Redis(host=host, port=port, db=db, password=password, socket_timeout=1.0)
+        key = f'health:task:{task_key}'
+        client.hset(key, mapping={
+            'last_run': timezone.now().isoformat(),
+            'data': json.dumps(payload, default=str),
+            'last_error': '',
+        })
+        # Set a TTL so keys don't linger forever (e.g. 14 days)
+        client.expire(key, 14 * 24 * 3600)
+    except Exception:
+        # Never fail the task because of health bookkeeping
+        pass
+
+def _health_error(task_key: str, error: Exception):
+    try:
+        broker = getattr(settings, 'CELERY_BROKER_URL', '') or os.environ.get('CELERY_BROKER_URL', '')
+        if not broker.startswith('redis'):
+            return
+        try:
+            import redis  # type: ignore
+        except Exception:
+            return
+        from urllib.parse import urlparse
+        u = urlparse(broker)
+        host = u.hostname or '127.0.0.1'
+        port = int(u.port or 6379)
+        db = int((u.path or '/0').lstrip('/') or 0)
+        password = u.password
+        client = redis.Redis(host=host, port=port, db=db, password=password, socket_timeout=1.0)
+        key = f'health:task:{task_key}'
+        client.hset(key, mapping={
+            'last_run': timezone.now().isoformat(),
+            'last_error': str(error),
+        })
+        client.expire(key, 14 * 24 * 3600)
+    except Exception:
+        pass
+
+def _get_redis_client():
+    """Return a Redis client based on CELERY_BROKER_URL if it's redis://, else None."""
+    try:
+        broker = getattr(settings, 'CELERY_BROKER_URL', '') or os.environ.get('CELERY_BROKER_URL', '')
+        if not broker.startswith('redis'):
+            return None
+        try:
+            import redis  # type: ignore
+        except Exception:
+            return None
+        from urllib.parse import urlparse
+        u = urlparse(broker)
+        host = u.hostname or '127.0.0.1'
+        port = int(u.port or 6379)
+        db = int((u.path or '/0').lstrip('/') or 0)
+        password = u.password
+        return redis.Redis(host=host, port=port, db=db, password=password, socket_timeout=1.0)
+    except Exception:
+        return None
+
+def _cancel_key(job_id: int) -> str:
+    return f'job_cancel:{job_id}'
+
+def _is_cancelled_flag(job_id: int) -> bool:
+    try:
+        client = _get_redis_client()
+        if not client:
+            return False
+        return bool(client.exists(_cancel_key(job_id)))
+    except Exception:
+        return False
 
 
 @shared_task(bind=True)
@@ -23,6 +110,10 @@ def build_zip_task(self, job_id: int):
     try:
         job = DownloadJob.objects.get(pk=job_id)
     except DownloadJob.DoesNotExist:
+        return
+
+    # If job was cancelled/expired/failed/done before the worker picked it up, do nothing.
+    if job.status in ('cancelled', 'expired', 'failed', 'done') or _is_cancelled_flag(job_id):
         return
 
     job.status = 'running'
@@ -76,7 +167,13 @@ def build_zip_task(self, job_id: int):
             job.status = 'failed'
             job.error = 'No files to include'
             job.finished_at = timezone.now()
-            job.save(update_fields=['status', 'error', 'finished_at'])
+            # Set expiry for consistency so cleanup can still sweep this job
+            try:
+                ttl_hours = int(getattr(settings, 'DOWNLOAD_JOB_TTL_HOURS', 72))
+            except Exception:
+                ttl_hours = 72
+            job.expires_at = job.finished_at + timedelta(hours=ttl_hours)
+            job.save(update_fields=['status', 'error', 'finished_at', 'expires_at'])
             return
 
         tmp = tempfile.NamedTemporaryFile(delete=False, suffix='.zip')
@@ -103,21 +200,93 @@ def build_zip_task(self, job_id: int):
         job.save(update_fields=['bytes_total'])
 
         done = 0
+        cancelled_midway = False
         with zipfile.ZipFile(tmp_path, 'w', compression=zipfile.ZIP_DEFLATED) as zf:
             for p, dfpk in paths:
-                arcname = f"{dfpk}_{p.name}"
+                # Periodically check if job was cancelled
                 try:
-                    zf.write(p, arcname=arcname)
-                    try:
-                        done += p.stat().st_size
-                    except Exception:
-                        pass
+                    if _is_cancelled_flag(job.pk):
+                        cancelled_midway = True
+                        break
+                    current_status = DownloadJob.objects.filter(pk=job.pk).values_list('status', flat=True).first()
+                    if current_status == 'cancelled':
+                        cancelled_midway = True
+                        break
                 except Exception:
+                    pass
+                arcname = f"{dfpk}_{p.name}"
+                # Stream file into zip to allow responsive cancellation and progress updates
+                try:
+                    file_size = p.stat().st_size
+                except Exception:
+                    file_size = None
+                try:
+                    with p.open('rb') as src, zf.open(arcname, 'w') as dst:
+                        CHUNK = 1024 * 1024  # 1 MiB
+                        since_update = 0
+                        while True:
+                            buf = src.read(CHUNK)
+                            if not buf:
+                                break
+                            dst.write(buf)
+                            lb = len(buf)
+                            done += lb
+                            since_update += lb
+                            # Periodic status check and progress update
+                            if since_update >= (4 * CHUNK) or (total > 0 and done == total):
+                                try:
+                                    if _is_cancelled_flag(job.pk):
+                                        cancelled_midway = True
+                                        break
+                                    current_status = DownloadJob.objects.filter(pk=job.pk).values_list('status', flat=True).first()
+                                    if current_status == 'cancelled':
+                                        cancelled_midway = True
+                                        break
+                                    if total > 0:
+                                        prog = int(min(100, max(0, round(done * 100 / total))))
+                                        DownloadJob.objects.filter(pk=job.pk).update(bytes_done=done, progress=prog)
+                                except Exception:
+                                    pass
+                                since_update = 0
+                    if cancelled_midway:
+                        break
+                    # Final progress update after finishing this file
+                    if total > 0:
+                        try:
+                            prog = int(min(100, max(0, round(done * 100 / total))))
+                            DownloadJob.objects.filter(pk=job.pk).update(bytes_done=done, progress=prog)
+                        except Exception:
+                            pass
+                except Exception:
+                    # Skip unreadable/failed file but continue others
                     continue
-                # Update progress occasionally
-                if total > 0:
-                    prog = int(min(100, max(0, round(done * 100 / total))))
-                    DownloadJob.objects.filter(pk=job.pk).update(bytes_done=done, progress=prog)
+
+        # If cancelled during processing, cleanup and do not override cancelled status
+        if cancelled_midway:
+            try:
+                if tmp_path and os.path.exists(tmp_path):
+                    os.remove(tmp_path)
+            except Exception:
+                pass
+            # Clear file_path to avoid dangling partial archives
+            try:
+                job = DownloadJob.objects.get(pk=job_id)
+                job.file_path = ''
+                job.finished_at = job.finished_at or timezone.now()
+                # Preserve cancelled status set by API
+                job.save(update_fields=['file_path', 'finished_at'])
+            except Exception:
+                pass
+            return
+
+        # Before marking as done, re-check that job was not cancelled in the meantime
+        try:
+            job = DownloadJob.objects.get(pk=job_id)
+            if job.status in ('cancelled', 'expired', 'failed'):
+                # Do not override terminal status
+                return
+        except DownloadJob.DoesNotExist:
+            return
 
         job.status = 'done'
         job.progress = 100
@@ -131,7 +300,14 @@ def build_zip_task(self, job_id: int):
         job.expires_at = job.finished_at + timedelta(hours=ttl_hours)
         job.save(update_fields=['status', 'progress', 'bytes_done', 'finished_at', 'expires_at'])
     except Exception as e:
-        DownloadJob.objects.filter(pk=job.pk).update(status='failed', error=str(e), finished_at=timezone.now())
+        # On unexpected failure, also set an expiry to allow cleanup
+        try:
+            ttl_hours = int(getattr(settings, 'DOWNLOAD_JOB_TTL_HOURS', 72))
+        except Exception:
+            ttl_hours = 72
+        finished = timezone.now()
+        expires = finished + timedelta(hours=ttl_hours)
+        DownloadJob.objects.filter(pk=job.pk).update(status='failed', error=str(e), finished_at=finished, expires_at=expires)
 
 
 @shared_task(bind=True)
@@ -162,6 +338,12 @@ def reconcile_filesystem(self, dry_run: bool = False):
 
     updated = 0
     runs_missing = 0
+    files_checked = 0
+    already_ok = 0
+    prefix_rewrites = 0
+    hash_recoveries = 0
+    ambiguous_matches = 0
+    recovery_failures = 0
     for run in ObservationRun.objects.all():
         expected_prefix = os.path.join(base, run.name) + os.sep
         if run.name not in dirnames:
@@ -172,8 +354,10 @@ def reconcile_filesystem(self, dry_run: bool = False):
         for df in DataFile.objects.filter(observation_run=run).only('pk', 'datafile', 'content_hash', 'file_size'):
             try:
                 p = str(df.datafile)
+                files_checked += 1
                 # Quick check: if already correct, skip
                 if p.startswith(expected_prefix):
+                    already_ok += 1
                     continue
                 # Attempt to build a corrected path by keeping subpath after top-level segment
                 if p.startswith(base):
@@ -187,6 +371,7 @@ def reconcile_filesystem(self, dry_run: bool = False):
                                 df.datafile = candidate
                                 df.save(update_fields=['datafile'])
                             updated += 1
+                            prefix_rewrites += 1
                         else:
                             # Try hash-based recovery: scan candidate dir for same-size+hash file
                             try:
@@ -222,15 +407,33 @@ def reconcile_filesystem(self, dry_run: bool = False):
                                             df.datafile = recovered
                                             df.save(update_fields=['datafile'])
                                         updated += 1
+                                        hash_recoveries += 1
                                     elif len(matches) > 1:
                                         logger.warning("Reconcile: multiple candidates found for DataFile #%s by hash; skipping ambiguous relink", getattr(df, 'pk', '?'))
+                                        ambiguous_matches += 1
+                                    else:
+                                        recovery_failures += 1
                             except Exception as e:
                                 logger.error("Reconcile: hash-recovery failed for DataFile #%s: %s", getattr(df, 'pk', '?'), e)
+                                recovery_failures += 1
             except Exception as e:
                 logger.error("Reconcile: failed processing DataFile #%s: %s", getattr(df, 'pk', '?'), e)
+                recovery_failures += 1
 
     logger.info("Reconcile complete. updated=%d runs_missing=%d", updated, runs_missing)
-    return {'updated': updated, 'runs_missing': runs_missing}
+    result = {
+        'updated': updated,
+        'runs_missing': runs_missing,
+        'dry_run': dry_run,
+        'files_checked': files_checked,
+        'already_ok': already_ok,
+        'prefix_rewrites': prefix_rewrites,
+        'hash_recoveries': hash_recoveries,
+        'ambiguous_matches': ambiguous_matches,
+        'recovery_failures': recovery_failures,
+    }
+    _health_set('reconcile_filesystem', result)
+    return result
 
 
 
@@ -247,12 +450,18 @@ def cleanup_expired_downloads(self):
     now = timezone.now()
     qs = DownloadJob.objects.filter(expires_at__isnull=False, expires_at__lte=now)
     cleaned = 0
+    checked = qs.count()
+    freed_bytes = 0
     for job in qs.only('pk', 'file_path', 'status'):
         try:
             if job.file_path:
                 p = Path(job.file_path)
                 try:
                     if p.exists():
+                        try:
+                            freed_bytes += p.stat().st_size
+                        except Exception:
+                            pass
                         p.unlink()
                 except Exception as e:
                     logger.warning("Cleanup: failed to delete %s for job #%s: %s", job.file_path, job.pk, e)
@@ -265,4 +474,108 @@ def cleanup_expired_downloads(self):
             logger.error("Cleanup: error processing job #%s: %s", getattr(job, 'pk', '?'), e)
 
     logger.info("Cleanup expired downloads complete. cleaned=%d", cleaned)
-    return {'cleaned': cleaned}
+    result = {'cleaned': cleaned, 'checked': checked, 'freed_bytes': int(freed_bytes)}
+    _health_set('cleanup_expired_downloads', result)
+    return result
+
+
+@shared_task(bind=True)
+def cleanup_orphans_and_hashcheck(self, dry_run: bool = True, fix_missing_hashes: bool = True, limit: int | None = None):
+    """Scan DataFiles for orphans/missing files and hash drift.
+    - Orphans: DataFile with missing observation_run or file path does not exist → delete (when not dry_run).
+    - Hash check: for existing files, compute sha256 and compare to stored content_hash.
+      - If missing content_hash and fix_missing_hashes=True, fill it.
+      - If drift detected (hash differs), report but do not overwrite.
+    """
+    from hashlib import sha256
+    files_checked = 0
+    orphans_deleted = 0
+    orphans_count = 0
+    files_missing = 0
+    missing_deleted = 0
+    hash_checked = 0
+    hash_set = 0
+    hash_drift = 0
+    sizes_updated = 0
+
+    qs = DataFile.objects.all().only('pk', 'datafile', 'content_hash', 'file_size', 'observation_run_id')
+    if limit and isinstance(limit, int) and limit > 0:
+        qs = qs[:limit]
+    for df in qs:
+        try:
+            files_checked += 1
+            # Orphan by missing run
+            if not df.observation_run_id:
+                orphans_count += 1
+                if not dry_run:
+                    try:
+                        df.delete()
+                        orphans_deleted += 1
+                    except Exception:
+                        pass
+                continue
+            p = Path(df.datafile)
+            if not p.exists() or not p.is_file():
+                files_missing += 1
+                if not dry_run:
+                    try:
+                        df.delete()
+                        missing_deleted += 1
+                    except Exception:
+                        pass
+                continue
+            # Existing file: update size, check hash
+            try:
+                size = p.stat().st_size
+                if size != df.file_size:
+                    df.file_size = size
+                    if not dry_run:
+                        try:
+                            df.save(update_fields=['file_size'])
+                        except Exception:
+                            pass
+                    sizes_updated += 1
+            except Exception:
+                pass
+            # Hash check (limited by time/size)
+            try:
+                hasher = sha256()
+                with p.open('rb') as f:
+                    for chunk in iter(lambda: f.read(1024 * 1024), b''):
+                        hasher.update(chunk)
+                current_hash = hasher.hexdigest()
+                hash_checked += 1
+                if not df.content_hash:
+                    if fix_missing_hashes and not dry_run:
+                        try:
+                            df.content_hash = current_hash
+                            df.save(update_fields=['content_hash'])
+                            hash_set += 1
+                        except Exception:
+                            pass
+                    else:
+                        hash_set += 0  # noop
+                else:
+                    if str(df.content_hash) != current_hash:
+                        hash_drift += 1
+            except Exception:
+                # skip hash errors but continue
+                pass
+        except Exception as e:
+            # continue with next item
+            continue
+
+    result = {
+        'dry_run': bool(dry_run),
+        'files_checked': files_checked,
+        'orphans_count': orphans_count,
+        'orphans_deleted': orphans_deleted,
+        'files_missing': files_missing,
+        'missing_deleted': missing_deleted,
+        'hash_checked': hash_checked,
+        'hash_set': hash_set,
+        'hash_drift': hash_drift,
+        'sizes_updated': sizes_updated,
+    }
+    _health_set('cleanup_orphans_hashcheck', result)
+    return result

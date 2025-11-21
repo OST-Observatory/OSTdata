@@ -1,16 +1,17 @@
 from rest_framework import viewsets
-from rest_framework.permissions import IsAuthenticatedOrReadOnly
+from rest_framework.permissions import IsAuthenticatedOrReadOnly, IsAdminUser
 from rest_framework.response import Response
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.filters import OrderingFilter
 
 from django_filters.rest_framework import DjangoFilterBackend
 
-from objects.models import Object
+from objects.models import Object, Identifier
 from django.db import models
 from django.db.models import Q, Value
 from django.db.models.functions import Replace
 from django.db.models import Count, Q
+from rest_framework.decorators import action
 
 from .serializers import ObjectListSerializer
 
@@ -93,6 +94,94 @@ class ObjectViewSet(viewsets.ModelViewSet):
         if self.request.user.is_anonymous:
             return queryset.filter(is_public=True)
         return queryset
+
+    def get_permissions(self):
+        # Admin only for unsafe methods
+        if self.request.method not in ('GET', 'HEAD', 'OPTIONS'):
+            return [IsAdminUser()]
+        return [IsAuthenticatedOrReadOnly()]
+
+    @action(detail=False, methods=['POST'], permission_classes=[IsAdminUser])
+    def merge(self, request):
+        """Merge multiple objects into a target object.
+        Body: { target_id: int, source_ids: [int], combine_tags: bool }
+        - Moves datafiles, observation_run links, tags, identifiers to target
+        - Deletes source objects
+        """
+        payload = request.data if hasattr(request, 'data') else {}
+        try:
+            target_id = int(payload.get('target_id'))
+        except Exception:
+            return Response({'detail': 'target_id required'}, status=400)
+        src_ids = payload.get('source_ids') or []
+        try:
+            src_ids = [int(x) for x in src_ids if str(x).strip().isdigit()]
+        except Exception:
+            src_ids = []
+        src_ids = [i for i in src_ids if i != target_id]
+        if not src_ids:
+            return Response({'merged': 0, 'moved_datafiles': 0, 'moved_runs': 0, 'moved_identifiers': 0, 'moved_tags': 0}, status=200)
+        try:
+            target = Object.objects.get(pk=target_id)
+        except Object.DoesNotExist:
+            return Response({'detail': 'target not found'}, status=404)
+        combine_tags = bool(payload.get('combine_tags', True))
+
+        moved_df = 0
+        moved_runs = 0
+        moved_ids = 0
+        moved_tags = 0
+        removed = 0
+
+        for sid in src_ids:
+            try:
+                src = Object.objects.get(pk=sid)
+            except Object.DoesNotExist:
+                continue
+            # DataFiles
+            try:
+                for df in src.datafiles.all().only('pk'):
+                    target.datafiles.add(df)
+                    moved_df += 1
+            except Exception:
+                pass
+            # Observation runs
+            try:
+                for run in src.observation_run.all().only('pk'):
+                    target.observation_run.add(run)
+                    moved_runs += 1
+            except Exception:
+                pass
+            # Identifiers
+            try:
+                count = Identifier.objects.filter(obj_id=src.pk).update(obj=target)
+                moved_ids += int(count or 0)
+            except Exception:
+                pass
+            # Tags
+            if combine_tags:
+                try:
+                    for tag in src.tags.all().only('pk'):
+                        target.tags.add(tag)
+                        moved_tags += 1
+                except Exception:
+                    pass
+            try:
+                src.delete()
+                removed += 1
+            except Exception:
+                pass
+        try:
+            target.save()
+        except Exception:
+            pass
+        return Response({
+            'merged': removed,
+            'moved_datafiles': moved_df,
+            'moved_runs': moved_runs,
+            'moved_identifiers': moved_ids,
+            'moved_tags': moved_tags
+        }, status=200)
 
 class getObjectRunViewSet(viewsets.ModelViewSet):
     """

@@ -108,6 +108,7 @@ export const api = {
   getObservationRuns: (params) => fetchWithAuth('/runs/runs/', { params }),
   getAllObservationRuns: () => fetchWithAuth('/runs/runs/?limit=1000'),  // Get all runs for filtering
   updateObservationRun: (id, data) => fetchWithAuth(`/runs/runs/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deleteObservationRun: (id) => fetchWithAuth(`/runs/runs/${id}/`, { method: 'DELETE' }),
   getRunDataFiles: (runId) => fetchWithAuth(`/runs/runs/${runId}/datafiles/`),
   getRunDataFilesPaged: (runId, params = {}) => {
     const queryParams = {
@@ -304,8 +305,10 @@ export const api = {
     method: 'PATCH',
     body: JSON.stringify(data)
   }),
-  deleteObject: (id) => fetchWithAuth(`/objects/${id}/`, {
-    method: 'DELETE'
+  deleteObject: (id) => fetchWithAuth(`/objects/${id}/`, { method: 'DELETE' }),
+  mergeObjects: (targetId, sourceIds = [], combineTags = true) => fetchWithAuth('/objects/merge/', {
+    method: 'POST',
+    body: JSON.stringify({ target_id: targetId, source_ids: sourceIds, combine_tags: !!combineTags })
   }),
 
   // Tags
@@ -314,4 +317,37 @@ export const api = {
   createTag: (data) => fetchWithAuth('/tags/', { method: 'POST', body: JSON.stringify(data) }),
   updateTag: (id, data) => fetchWithAuth(`/tags/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }),
   deleteTag: (id) => fetchWithAuth(`/tags/${id}/`, { method: 'DELETE' })
-} 
+,
+
+  // Admin - Users
+  adminListUsers: (params = {}) => fetchWithAuth('/users/admin/users/', { params }),
+  adminUpdateUser: (id, data) => fetchWithAuth(`/users/admin/users/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }),
+  adminDeleteUser: (id) => fetchWithAuth(`/users/admin/users/${id}/`, { method: 'DELETE' }),
+  adminLdapTest: (payload = {}) => fetchWithAuth('/users/admin/ldap/test/', { method: 'POST', body: JSON.stringify(payload) })
+,
+
+  // Admin - System Health
+  adminHealth: () => fetchWithAuth('/runs/admin/health/'),
+  adminMaintenanceCleanup: () => fetchWithAuth('/runs/admin/maintenance/cleanup-downloads/', { method: 'POST' }),
+  adminMaintenanceReconcile: (dryRun = true) => fetchWithAuth('/runs/admin/maintenance/reconcile/', { method: 'POST', body: JSON.stringify({ dry_run: !!dryRun }) }),
+  adminMaintenanceOrphansHashcheck: (opts = {}) => {
+    const body = {
+      dry_run: opts.dry_run !== undefined ? !!opts.dry_run : true,
+      fix_missing_hashes: opts.fix_missing_hashes !== undefined ? !!opts.fix_missing_hashes : true,
+      limit: opts.limit != null ? opts.limit : null,
+    }
+    return fetchWithAuth('/runs/admin/maintenance/orphans-hashcheck/', { method: 'POST', body: JSON.stringify(body) })
+  },
+  // Site-wide Banner
+  getBanner: () => fetchWithAuth('/runs/banner/'),
+  adminGetBanner: () => fetchWithAuth('/runs/admin/banner/'),
+  adminSetBanner: (payload = { enabled: true, message: '', level: 'warning' }) => fetchWithAuth('/runs/admin/banner/set', { method: 'POST', body: JSON.stringify(payload) }),
+  adminClearBanner: () => fetchWithAuth('/runs/admin/banner/clear', { method: 'POST' }),
+
+  // Admin - Jobs
+  adminListDownloadJobs: (params = {}) => fetchWithAuth('/runs/jobs/', { params }),
+  adminCancelDownloadJob: (jobId) => fetchWithAuth(`/runs/jobs/${encodeURIComponent(jobId)}/cancel`, { method: 'POST' }),
+  adminBatchCancelJobs: (ids = []) => fetchWithAuth('/runs/jobs/batch/cancel', { method: 'POST', body: JSON.stringify({ ids }) }),
+  adminBatchExtendJobsExpiry: (ids = [], hours = 48) => fetchWithAuth('/runs/jobs/batch/extend-expiry', { method: 'POST', body: JSON.stringify({ ids, hours }) }),
+  adminBatchExpireJobsNow: (ids = []) => fetchWithAuth('/runs/jobs/batch/expire-now', { method: 'POST', body: JSON.stringify({ ids }) }),
+}

@@ -24,6 +24,7 @@ def get_unknown_user():
 class User(AbstractUser):
 
    is_student = models.BooleanField(default=False)
+   is_supervisor = models.BooleanField(default=False)
 
    note = models.TextField(default='')
 

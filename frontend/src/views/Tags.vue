@@ -2,12 +2,24 @@
   <v-container fluid class="tags">
       <div class="d-flex align-center justify-space-between mb-4">
         <h1 class="text-h4">Tags</h1>
-        <v-btn
-          color="primary"
-          prepend-icon="mdi-plus"
-          v-if="canEdit"
-          @click="openEdit()"
-        >New Tag</v-btn>
+        <div class="d-flex align-center" style="gap: 8px">
+          <v-btn
+            v-if="canAdmin && selected.length > 0"
+            color="error"
+            variant="outlined"
+            prepend-icon="mdi-delete"
+            @click="removeMany"
+            :aria-label="`Delete ${selected.length} selected tags`"
+          >
+            Delete selected ({{ selected.length }})
+          </v-btn>
+          <v-btn
+            color="primary"
+            prepend-icon="mdi-plus"
+            v-if="canEdit"
+            @click="openEdit()"
+          >New Tag</v-btn>
+        </div>
       </div>
 
       <v-card class="mb-4">
@@ -51,6 +63,10 @@
           :sort-by="[{ key: sortKey.replace('-', ''), order: sortKey.startsWith('-') ? 'desc' : 'asc' }]"
           @update:sort-by="handleSort"
           hide-default-footer
+          show-select
+          return-object
+          item-value="pk"
+          v-model:selected="selected"
           class="custom-table"
         >
           <template #loading>
@@ -193,6 +209,7 @@ import ErrorState from '@/components/ui/ErrorState.vue'
 import LoadingState from '@/components/ui/LoadingState.vue'
 
 const items = ref([])
+const selected = ref([])
 const loading = ref(false)
 const error = ref('')
 const search = ref('')
@@ -203,6 +220,7 @@ const sortKey = ref('name')
 
 const authStore = useAuthStore()
 const canEdit = computed(() => authStore.isAuthenticated)
+const canAdmin = computed(() => authStore.isAdmin)
 
 const headers = [
   { title: 'Name', key: 'name', sortable: true },
@@ -352,6 +370,22 @@ const remove = async (item) => {
     await fetchTags()
   } catch (e) {
     console.error(e)
+  }
+}
+
+const removeMany = async () => {
+  if (!canAdmin.value || !selected.value.length) return
+  const cnt = selected.value.length
+  if (!confirm(`Delete ${cnt} selected tag(s)? This cannot be undone.`)) return
+  try {
+    const ids = selected.value.map(x => x.pk).filter(Boolean)
+    await Promise.all(ids.map(id => api.deleteTag(id)))
+    notify.success(`Deleted ${ids.length} tag(s)`)
+    selected.value = []
+    await fetchTags()
+  } catch (e) {
+    console.error(e)
+    notify.error('Bulk delete failed')
   }
 }
 
