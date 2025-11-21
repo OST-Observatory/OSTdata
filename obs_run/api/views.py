@@ -113,11 +113,38 @@ class RunViewSet(viewsets.ModelViewSet):
     ordering_fields = ['name', 'mid_observation_jd', 'reduction_status']
     ordering = ['mid_observation_jd']
 
+    def _has(self, user, codename: str) -> bool:
+        try:
+            return bool(user and (user.is_superuser or user.has_perm(f'users.{codename}')))
+        except Exception:
+            return False
+
     def get_permissions(self):
-        # Admin only for unsafe methods
-        if self.request.method not in ('GET', 'HEAD', 'OPTIONS'):
-            return [IsAdminUser()]
+        # Use auth-or-readonly; enforce ACL in handlers for unsafe ops
         return [IsAuthenticatedOrReadOnly()]
+
+    def update(self, request, *args, **kwargs):
+        if not self._has(request.user, 'acl_runs_edit'):
+            return Response({'detail': 'Forbidden'}, status=403)
+        return super().update(request, *args, **kwargs)
+
+    def partial_update(self, request, *args, **kwargs):
+        # Editing any fields requires runs_edit; toggling publication additionally checked below
+        if not self._has(request.user, 'acl_runs_edit'):
+            return Response({'detail': 'Forbidden'}, status=403)
+        # If is_public is being changed, require publish permission
+        try:
+            data = request.data if hasattr(request, 'data') else {}
+            if 'is_public' in data and not self._has(request.user, 'acl_runs_publish'):
+                return Response({'detail': 'Forbidden (publish)'}, status=403)
+        except Exception:
+            pass
+        return super().partial_update(request, *args, **kwargs)
+
+    def destroy(self, request, *args, **kwargs):
+        if not self._has(request.user, 'acl_runs_delete'):
+            return Response({'detail': 'Forbidden'}, status=403)
+        return super().destroy(request, *args, **kwargs)
 
     def get_queryset(self):
         queryset = ObservationRun.objects.all()
@@ -776,7 +803,9 @@ def list_download_jobs(request):
     """List download jobs. Admins see all; authenticated users see their own; anonymous see none."""
     qs = DownloadJob.objects.all().order_by('-created_at')
     if request.user.is_authenticated and request.user.is_staff:
-        pass
+        # Require ACL to view all jobs; otherwise restrict to own
+        if not (request.user.is_superuser or request.user.has_perm('users.acl_jobs_view_all')):
+            qs = qs.filter(user_id=request.user.pk)
     elif request.user.is_authenticated:
         qs = qs.filter(user_id=request.user.pk)
     else:
@@ -810,6 +839,7 @@ def list_download_jobs(request):
             'bytes_done': j.bytes_done,
             'run': j.run_id,
             'user': j.user_id,
+            'user_name': getattr(j.user, 'username', None),
             'created_at': j.created_at,
             'started_at': j.started_at,
             'finished_at': j.finished_at,
@@ -829,6 +859,10 @@ def cancel_download_job(request, job_id):
     is_admin = bool(getattr(request.user, 'is_staff', False) or getattr(request.user, 'is_superuser', False))
     if job.user_id and (not request.user.is_authenticated or (request.user.pk != job.user_id and not is_admin)):
         return Response({'detail': 'Not found'}, status=404)
+    # If admin cancels someone else's job, require ACL
+    if is_admin and job.user_id and request.user.pk != job.user_id:
+        if not (request.user.is_superuser or request.user.has_perm('users.acl_jobs_cancel_any')):
+            return Response({'detail': 'Forbidden'}, status=403)
     if job.status in ('done', 'failed', 'cancelled', 'expired'):
         return Response({'status': job.status, 'error': job.error or ''})
     job.status = 'cancelled'
@@ -875,6 +909,8 @@ def cancel_download_job(request, job_id):
 @permission_classes([IsAdminUser])
 def batch_cancel_download_jobs(request):
     """Admin: cancel multiple jobs by ids."""
+    if not (request.user.is_superuser or request.user.has_perm('users.acl_jobs_cancel_any')):
+        return Response({'detail': 'Forbidden'}, status=403)
     ids = request.data.get('ids') or []
     try:
         ids = [int(x) for x in ids if str(x).strip().isdigit()]
@@ -933,6 +969,8 @@ def batch_cancel_download_jobs(request):
 @permission_classes([IsAdminUser])
 def batch_extend_jobs_expiry(request):
     """Admin: extend expiry for multiple jobs by N hours (default 48)."""
+    if not (request.user.is_superuser or request.user.has_perm('users.acl_jobs_ttl_modify')):
+        return Response({'detail': 'Forbidden'}, status=403)
     ids = request.data.get('ids') or []
     hours = request.data.get('hours')
     try:
@@ -963,6 +1001,8 @@ def batch_extend_jobs_expiry(request):
 @permission_classes([IsAdminUser])
 def batch_expire_jobs_now(request):
     """Admin: immediately expire jobs (delete file if present, set status to expired)."""
+    if not (request.user.is_superuser or request.user.has_perm('users.acl_jobs_ttl_modify')):
+        return Response({'detail': 'Forbidden'}, status=403)
     ids = request.data.get('ids') or []
     try:
         ids = [int(x) for x in ids if str(x).strip().isdigit()]
@@ -1014,6 +1054,8 @@ def download_job_download(request, job_id):
 @permission_classes([IsAdminUser])
 def admin_trigger_cleanup_downloads(request):
     """Trigger cleanup of expired download jobs asynchronously."""
+    if not (request.user.is_superuser or request.user.has_perm('users.acl_maintenance_cleanup')):
+        return Response({'detail': 'Forbidden'}, status=403)
     try:
         res = cleanup_expired_downloads.delay()
         return Response({'enqueued': True, 'task_id': getattr(res, 'id', None)}, status=202)
@@ -1025,6 +1067,8 @@ def admin_trigger_cleanup_downloads(request):
 @permission_classes([IsAdminUser])
 def admin_trigger_reconcile(request):
     """Trigger filesystem reconcile asynchronously. Body: { dry_run: bool }"""
+    if not (request.user.is_superuser or request.user.has_perm('users.acl_maintenance_reconcile')):
+        return Response({'detail': 'Forbidden'}, status=403)
     try:
         dry_run = bool(request.data.get('dry_run', True)) if hasattr(request, 'data') else True
     except Exception:
@@ -1040,6 +1084,8 @@ def admin_trigger_reconcile(request):
 @permission_classes([IsAdminUser])
 def admin_trigger_orphans_hashcheck(request):
     """Trigger orphan cleanup and hash drift check. Body: { dry_run: bool, fix_missing_hashes: bool, limit: int|null }"""
+    if not (request.user.is_superuser or request.user.has_perm('users.acl_maintenance_orphans')):
+        return Response({'detail': 'Forbidden'}, status=403)
     payload = request.data if hasattr(request, 'data') else {}
     try:
         dry_run = bool(payload.get('dry_run', True))
@@ -1064,6 +1110,9 @@ def admin_trigger_orphans_hashcheck(request):
 @permission_classes([IsAdminUser])
 def admin_health(request):
     """Return system health information for admins."""
+    # Enforce ACL: system health view
+    if not (request.user and (request.user.is_superuser or request.user.has_perm('users.acl_system_health_view'))):
+        return Response({'detail': 'Forbidden'}, status=403)
     data = {}
     # Versions
     data['versions'] = {
@@ -1320,7 +1369,7 @@ def admin_health(request):
         import psutil  # type: ignore
         vm = psutil.virtual_memory()
         cpu = psutil.cpu_percent(interval=0.1)
-        data['system'] = {
+        sysinfo = {
             'cpu_percent': float(cpu),
             'memory': {
                 'total_bytes': int(vm.total),
@@ -1329,6 +1378,20 @@ def admin_health(request):
                 'percent': float(vm.percent),
             }
         }
+        # Try overall disk usage at root (can be adjusted via env if needed)
+        try:
+            root_path = os.environ.get('SYSTEM_DISK_PATH', '/') or '/'
+            du = psutil.disk_usage(root_path)
+            sysinfo['disk'] = {
+                'path': root_path,
+                'total_bytes': int(du.total),
+                'used_bytes': int(du.used),
+                'free_bytes': int(du.free),
+                'percent': float(du.percent),
+            }
+        except Exception:
+            pass
+        data['system'] = sysinfo
     except Exception:
         data['system'] = None
 
@@ -1409,6 +1472,8 @@ def admin_get_banner(request):
     Get current site-wide banner.
     Returns: { enabled: bool, message: str, level: 'info'|'success'|'warning'|'error' }
     """
+    if not (request.user.is_superuser or request.user.has_perm('users.acl_banner_manage')):
+        return Response({'detail': 'Forbidden'}, status=403)
     data = _banner_get() or {'enabled': False, 'message': '', 'level': 'warning'}
     return Response(data)
 
@@ -1419,6 +1484,8 @@ def admin_set_banner(request):
     Set site-wide banner.
     Body: { enabled: bool, message: str, level: 'info'|'success'|'warning'|'error' }
     """
+    if not (request.user.is_superuser or request.user.has_perm('users.acl_banner_manage')):
+        return Response({'detail': 'Forbidden'}, status=403)
     body = request.data if hasattr(request, 'data') else {}
     enabled = bool(body.get('enabled', True))
     message = str(body.get('message', '') or '')
@@ -1435,6 +1502,8 @@ def admin_clear_banner(request):
     """
     Clear site-wide banner.
     """
+    if not (request.user.is_superuser or request.user.has_perm('users.acl_banner_manage')):
+        return Response({'detail': 'Forbidden'}, status=403)
     ok = _banner_clear()
     if not ok:
         return Response({'error': 'Failed to clear banner'}, status=500)

@@ -83,7 +83,11 @@
       </v-card-text>
     </v-card>
 
-    <v-card>
+    <v-alert v-if="!canView" type="warning" variant="tonal" class="mb-4">
+      You don't have permission to view users.
+    </v-alert>
+
+    <v-card v-if="canView">
       <v-card-text>
         <v-row>
           <v-col cols="12" sm="6" md="4">
@@ -134,6 +138,7 @@
             hide-details
             density="compact"
             inset
+            :disabled="!canEdit"
             @update:model-value="(val) => toggleActive(item, val)"
             :aria-label="`Toggle active for ${item.username}`"
           />
@@ -145,6 +150,7 @@
             hide-details
             density="compact"
             inset
+            :disabled="!canEdit"
             @update:model-value="(val) => toggleStaff(item, val)"
             :aria-label="`Toggle staff for ${item.username}`"
           />
@@ -156,6 +162,7 @@
             hide-details
             density="compact"
             inset
+            :disabled="!canEdit"
             @update:model-value="(val) => toggleSupervisor(item, val)"
             :aria-label="`Toggle supervisor for ${item.username}`"
           />
@@ -167,6 +174,7 @@
             hide-details
             density="compact"
             inset
+            :disabled="!canEdit"
             @update:model-value="(val) => toggleStudent(item, val)"
             :aria-label="`Toggle student for ${item.username}`"
           />
@@ -177,11 +185,48 @@
           </v-chip>
         </template>
         <template #item.actions="{ item }">
-          <v-btn icon variant="text" color="error" class="action-btn" @click="remove(item)" :aria-label="`Delete ${item.username}`">
-            <v-icon>mdi-delete</v-icon>
-          </v-btn>
+          <div v-if="canDelete">
+            <v-btn icon variant="text" color="error" class="action-btn" @click="remove(item)" :aria-label="`Delete ${item.username}`">
+              <v-icon>mdi-delete</v-icon>
+            </v-btn>
+          </div>
         </template>
       </v-data-table>
+    </v-card>
+
+    <v-card class="mt-4">
+      <v-card-title class="text-h6">ACL</v-card-title>
+      <v-card-text>
+        <div class="text-caption text-medium-emphasis mb-2">
+          Manage which roles have which permissions. Superusers bypass ACL.
+        </div>
+        <div class="mb-2 d-flex align-center" style="gap: 12px">
+          <v-btn color="secondary" variant="outlined" prepend-icon="mdi-refresh" :loading="aclLoading" @click="loadAcl">Refresh</v-btn>
+          <v-btn color="primary" prepend-icon="mdi-content-save" :loading="aclSaving" @click="saveAcl">Save changes</v-btn>
+        </div>
+        <v-table density="comfortable">
+          <thead>
+            <tr>
+              <th class="text-left">Permission</th>
+              <th v-for="g in aclGroups" :key="g" class="text-center text-capitalize">{{ g }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="p in aclPerms" :key="p.codename">
+              <td class="text-caption">{{ p.name }}</td>
+              <td v-for="g in aclGroups" :key="g" class="text-center">
+                <v-checkbox
+                  v-model="aclMatrixLocal[g]"
+                  :value="p.codename"
+                  hide-details
+                  density="compact"
+                />
+              </td>
+            </tr>
+          </tbody>
+        </v-table>
+        <div v-if="aclError" class="text-error text-caption mt-2">{{ aclError }}</div>
+      </v-card-text>
     </v-card>
   </v-container>
 </template>
@@ -192,6 +237,7 @@ import { api } from '@/services/api'
 import { useNotifyStore } from '@/store/notify'
 import EmptyState from '@/components/ui/EmptyState.vue'
 import LoadingState from '@/components/ui/LoadingState.vue'
+import { useAuthStore } from '@/store/auth'
 
 const loading = ref(false)
 const items = ref([])
@@ -201,6 +247,12 @@ const ldapUser = ref('')
 const ldapFilter = ref('')
 const ldapLoading = ref(false)
 const ldapResult = ref(null)
+const auth = useAuthStore()
+
+// ACL helpers
+const canView = computed(() => auth.isAdmin || auth.hasPerm('users.acl_users_view') || auth.hasPerm('acl_users_view'))
+const canEdit = computed(() => auth.isAdmin || auth.hasPerm('users.acl_users_edit_roles') || auth.hasPerm('acl_users_edit_roles'))
+const canDelete = computed(() => auth.isAdmin || auth.hasPerm('users.acl_users_delete') || auth.hasPerm('acl_users_delete'))
 
 const headers = [
   { title: 'Username', key: 'username', sortable: true },
@@ -226,6 +278,7 @@ const filteredItems = computed(() => {
 const fetchUsers = async () => {
   loading.value = true
   try {
+    if (!canView.value) { items.value = []; return }
     const data = await api.adminListUsers()
     items.value = Array.isArray(data) ? data : (data.results || data.items || [])
   } catch (e) {
@@ -316,6 +369,48 @@ const runLdapTest = async () => {
   }
 }
 
+// ACL helpers
+const loadAcl = async () => {
+  aclLoading.value = true
+  aclError.value = ''
+  try {
+    const data = await api.adminAclGet()
+    aclGroups.value = Array.isArray(data?.groups) ? data.groups : []
+    aclPerms.value = Array.isArray(data?.permissions) ? data.permissions : []
+    const m = data?.matrix || {}
+    aclMatrix.value = m
+    // Local clone as group->Set array for checkbox v-model
+    const local = {}
+    aclGroups.value.forEach(g => {
+      local[g] = Array.isArray(m[g]) ? m[g].slice() : []
+    })
+    aclMatrixLocal.value = local
+  } catch (e) {
+    aclError.value = 'Failed to load ACL'
+  } finally {
+    aclLoading.value = false
+  }
+}
+const saveAcl = async () => {
+  aclSaving.value = true
+  aclError.value = ''
+  try {
+    const matrix = {}
+    Object.keys(aclMatrixLocal.value || {}).forEach(g => {
+      matrix[g] = (aclMatrixLocal.value[g] || []).slice()
+    })
+    await api.adminAclSet(matrix)
+    notify.success('ACL saved')
+    await loadAcl()
+  } catch (e) {
+    aclError.value = 'Failed to save ACL'
+  } finally {
+    aclSaving.value = false
+  }
+}
+onMounted(() => {
+  loadAcl()
+})
 const formatRelative = (iso) => {
   if (!iso) return '—'
   try {

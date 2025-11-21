@@ -18,4 +18,6 @@ router.register(r'users', views.UserAdminViewSet, basename='admin-users')
 urlpatterns += [
     path('admin/', include(router.urls)),
     path('admin/ldap/test/', views.admin_ldap_test, name='admin_ldap_test'),
+    path('admin/acl/', views.admin_acl_get, name='admin_acl_get'),
+    path('admin/acl/set', views.admin_acl_set, name='admin_acl_set'),
 ]

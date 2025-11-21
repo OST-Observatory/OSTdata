@@ -2,21 +2,31 @@
   <v-container fluid class="runs">
       <div class="d-flex align-center justify-space-between mb-4">
         <h1 class="text-h4">Observation Runs</h1>
-        <div class="d-flex align-center" style="gap: 8px" v-if="canAdmin">
-          <v-btn
-            variant="outlined"
-            color="primary"
-            prepend-icon="mdi-eye"
-            :disabled="!selected.length"
-            @click="bulkPublish(true)"
-          >Publish ({{ selected.length }})</v-btn>
-          <v-btn
-            variant="outlined"
-            color="secondary"
-            prepend-icon="mdi-eye-off"
-            :disabled="!selected.length"
-            @click="bulkPublish(false)"
-          >Unpublish ({{ selected.length }})</v-btn>
+        <div class="d-flex align-center" style="gap: 8px">
+          <div class="d-inline-block">
+            <v-btn
+              variant="outlined"
+              color="primary"
+              prepend-icon="mdi-eye"
+              :disabled="!selected.length || !canPublish"
+              @click="bulkPublish(true)"
+            >Publish ({{ selected.length }})</v-btn>
+            <v-tooltip v-if="!canPublish || !selected.length" activator="parent" location="top">
+              {{ !selected.length ? 'Select runs first' : 'No permission' }}
+            </v-tooltip>
+          </div>
+          <div class="d-inline-block">
+            <v-btn
+              variant="outlined"
+              color="secondary"
+              prepend-icon="mdi-eye-off"
+              :disabled="!selected.length || !canPublish"
+              @click="bulkPublish(false)"
+            >Unpublish ({{ selected.length }})</v-btn>
+            <v-tooltip v-if="!canPublish || !selected.length" activator="parent" location="top">
+              {{ !selected.length ? 'Select runs first' : 'No permission' }}
+            </v-tooltip>
+          </div>
         </div>
       </div>
 
@@ -222,7 +232,7 @@
 
           <template v-slot:item.actions="{ item }">
             <v-btn
-              v-if="canAdmin"
+              v-if="canEditRun"
               icon
               variant="text"
               color="primary"
@@ -233,7 +243,7 @@
               <v-icon>mdi-pencil</v-icon>
             </v-btn>
             <v-btn
-              v-if="canAdmin"
+              v-if="canDeleteRun"
               icon
               variant="text"
               color="error"
@@ -391,6 +401,9 @@ const spectroscopyFilter = ref(null)
 const notify = useNotifyStore()
 const authStore = useAuthStore()
 const canAdmin = computed(() => authStore.isAdmin)
+const canEditRun = computed(() => authStore.isAdmin || authStore.hasPerm('users.acl_runs_edit') || authStore.hasPerm('acl_runs_edit'))
+const canPublish = computed(() => authStore.isAdmin || authStore.hasPerm('users.acl_runs_publish') || authStore.hasPerm('acl_runs_publish'))
+const canDeleteRun = computed(() => authStore.isAdmin || authStore.hasPerm('users.acl_runs_delete') || authStore.hasPerm('acl_runs_delete'))
 
 const headers = [
   { title: 'Name', key: 'name', sortable: true },
@@ -559,7 +572,7 @@ const copyShareLink = async () => {
 }
 
 const removeRun = async (item) => {
-  if (!canAdmin.value || !(item?.pk || item?.id)) return
+  if (!canDeleteRun.value || !(item?.pk || item?.id)) return
   const id = item.pk || item.id
   if (!confirm(`Delete observation run ${item.name}? This cannot be undone.`)) return
   try {
@@ -573,7 +586,7 @@ const removeRun = async (item) => {
 }
 
 const bulkPublish = async (makePublic) => {
-  if (!canAdmin.value || !selected.value.length) return
+  if (!canPublish.value || !selected.value.length) return
   const ids = selected.value.map(x => x.pk || x.id).filter(Boolean)
   try {
     await Promise.all(ids.map(id => api.updateObservationRun(id, { is_public: !!makePublic })))

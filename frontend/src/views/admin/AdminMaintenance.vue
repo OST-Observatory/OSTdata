@@ -18,7 +18,7 @@
     </div>
 
     <v-row>
-      <v-col cols="12" md="6">
+      <v-col cols="12" md="6" v-if="canCleanup">
         <v-card class="mb-4">
           <v-card-title class="text-h6">
             <div class="d-flex align-center" style="gap: 8px">
@@ -63,7 +63,7 @@
         </v-card>
       </v-col>
 
-      <v-col cols="12" md="6">
+      <v-col cols="12" md="6" v-if="canReconcile">
         <v-card class="mb-4">
           <v-card-title class="text-h6">
             <div class="d-flex align-center" style="gap: 8px">
@@ -115,7 +115,7 @@
         </v-card>
       </v-col>
 
-      <v-col cols="12" md="12">
+      <v-col cols="12" md="12" v-if="canOrphans">
         <v-card class="mb-4">
           <v-card-title class="text-h6">
             <div class="d-flex align-center" style="gap: 8px">
@@ -180,7 +180,7 @@
       </v-col>
     </v-row>
     <v-row>
-      <v-col cols="12" md="12">
+      <v-col cols="12" md="12" v-if="canBanner">
         <v-card class="mb-4">
           <v-card-title class="text-h6">Site-wide Banner</v-card-title>
           <v-card-text>
@@ -229,8 +229,10 @@
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { api } from '@/services/api'
 import { useNotifyStore } from '@/store/notify'
+import { useAuthStore } from '@/store/auth'
 
 const notify = useNotifyStore()
+const auth = useAuthStore()
 const loading = ref(false)
 const busy = ref({ cleanup: false, reconcile: false, orphans: false, banner: false })
 const health = ref({ periodic: {}, settings: {} })
@@ -243,6 +245,10 @@ const orphDryRun = ref(true)
 const orphFixMissing = ref(true)
 const orphLimit = ref('')
 
+const canCleanup = computed(() => auth.isAdmin || auth.hasPerm('users.acl_maintenance_cleanup') || auth.hasPerm('acl_maintenance_cleanup'))
+const canReconcile = computed(() => auth.isAdmin || auth.hasPerm('users.acl_maintenance_reconcile') || auth.hasPerm('acl_maintenance_reconcile'))
+const canOrphans = computed(() => auth.isAdmin || auth.hasPerm('users.acl_maintenance_orphans') || auth.hasPerm('acl_maintenance_orphans'))
+const canBanner = computed(() => auth.isAdmin || auth.hasPerm('users.acl_banner_manage') || auth.hasPerm('acl_banner_manage'))
 // Banner state
 const bannerEnabled = ref(false)
 const bannerMessage = ref('')

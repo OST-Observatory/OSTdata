@@ -325,6 +325,9 @@ export const api = {
   adminDeleteUser: (id) => fetchWithAuth(`/users/admin/users/${id}/`, { method: 'DELETE' }),
   adminLdapTest: (payload = {}) => fetchWithAuth('/users/admin/ldap/test/', { method: 'POST', body: JSON.stringify(payload) })
 ,
+  // Admin - ACL
+  adminAclGet: () => fetchWithAuth('/users/admin/acl/'),
+  adminAclSet: (matrix = {}) => fetchWithAuth('/users/admin/acl/set', { method: 'POST', body: JSON.stringify({ matrix }) }),
 
   // Admin - System Health
   adminHealth: () => fetchWithAuth('/runs/admin/health/'),

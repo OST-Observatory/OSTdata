@@ -1,5 +1,5 @@
-from rest_framework import viewsets
-from rest_framework.permissions import IsAuthenticatedOrReadOnly, IsAdminUser
+from rest_framework import viewsets, status
+from rest_framework.permissions import IsAuthenticatedOrReadOnly, IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.filters import OrderingFilter
@@ -68,6 +68,12 @@ class ObjectViewSet(viewsets.ModelViewSet):
     ordering_fields = ['name', 'object_type', 'ra', 'dec']
     ordering = ['name']  # default ordering
 
+    def _has(self, user, codename: str) -> bool:
+        try:
+            return bool(user and (user.is_superuser or user.has_perm(f'users.{codename}')))
+        except Exception:
+            return False
+
     def get_queryset(self):
         queryset = super().get_queryset()
         ordering = self.request.query_params.get('ordering', '')
@@ -90,24 +96,48 @@ class ObjectViewSet(viewsets.ModelViewSet):
                 )
             ).order_by('-last_modified')
         
-        # Public-only for anonymous users
-        if self.request.user.is_anonymous:
+        # Public-only for anonymous users; for authenticated users without explicit permission, hide private
+        user = self.request.user
+        if user.is_anonymous:
+            return queryset.filter(is_public=True)
+        if not self._has(user, 'acl_objects_view_private'):
             return queryset.filter(is_public=True)
         return queryset
 
     def get_permissions(self):
-        # Admin only for unsafe methods
-        if self.request.method not in ('GET', 'HEAD', 'OPTIONS'):
-            return [IsAdminUser()]
+        # Use authenticated-or-readonly; enforce ACL in handlers for unsafe ops
         return [IsAuthenticatedOrReadOnly()]
 
-    @action(detail=False, methods=['POST'], permission_classes=[IsAdminUser])
+    def create(self, request, *args, **kwargs):
+        if not self._has(request.user, 'acl_objects_edit'):
+            return Response({'detail': 'Forbidden'}, status=status.HTTP_403_FORBIDDEN)
+        return super().create(request, *args, **kwargs)
+
+    def update(self, request, *args, **kwargs):
+        if not self._has(request.user, 'acl_objects_edit'):
+            return Response({'detail': 'Forbidden'}, status=status.HTTP_403_FORBIDDEN)
+        return super().update(request, *args, **kwargs)
+
+    def partial_update(self, request, *args, **kwargs):
+        if not self._has(request.user, 'acl_objects_edit'):
+            return Response({'detail': 'Forbidden'}, status=status.HTTP_403_FORBIDDEN)
+        return super().partial_update(request, *args, **kwargs)
+
+    def destroy(self, request, *args, **kwargs):
+        if not self._has(request.user, 'acl_objects_delete'):
+            return Response({'detail': 'Forbidden'}, status=status.HTTP_403_FORBIDDEN)
+        return super().destroy(request, *args, **kwargs)
+
+    @action(detail=False, methods=['POST'], permission_classes=[IsAuthenticated])
     def merge(self, request):
         """Merge multiple objects into a target object.
         Body: { target_id: int, source_ids: [int], combine_tags: bool }
         - Moves datafiles, observation_run links, tags, identifiers to target
         - Deletes source objects
         """
+        # ACL
+        if not self._has(request.user, 'acl_objects_merge'):
+            return Response({'detail': 'Forbidden'}, status=status.HTTP_403_FORBIDDEN)
         payload = request.data if hasattr(request, 'data') else {}
         try:
             target_id = int(payload.get('target_id'))
@@ -288,6 +318,12 @@ class ObjectVuetifyViewSet(viewsets.ModelViewSet):
     ordering = ['name']
     permission_classes = [IsAuthenticatedOrReadOnly]
 
+    def _has(self, user, codename: str) -> bool:
+        try:
+            return bool(user and (user.is_superuser or user.has_perm(f'users.{codename}')))
+        except Exception:
+            return False
+
     def get_queryset(self):
         queryset = super().get_queryset()
         
@@ -378,8 +414,11 @@ class ObjectVuetifyViewSet(viewsets.ModelViewSet):
                 sort_field = f'-{sort_field}'
             queryset = queryset.order_by(sort_field)
         
-        # Public-only for anonymous users
-        if self.request.user.is_anonymous:
+        # Public-only for anonymous; for authenticated without permission, hide private
+        user = self.request.user
+        if user.is_anonymous:
+            queryset = queryset.filter(is_public=True)
+        elif not self._has(user, 'acl_objects_view_private'):
             queryset = queryset.filter(is_public=True)
 
         return queryset.distinct()  # Ensure we don't get duplicate objects

@@ -767,6 +767,41 @@ Notes:
 - In eager mode, job creation returns immediately and the resulting ZIP can usually be downloaded right away.
 - The ZIP is generated on the server’s filesystem; ensure adequate disk space and permissions.
 
+# Access Control (ACL) for Admin Features
+
+The project uses a lightweight ACL on top of Django auth to control access to admin features. Superusers bypass all checks. Roles (staff, supervisor, student) are represented by Django Groups, and a set of custom Permissions (codenames) is attached to the `User` content type.
+
+- Permissions (subset):
+  - Users: `users.acl_users_view`, `users.acl_users_edit_roles`, `users.acl_users_delete`
+  - Objects: `users.acl_objects_view_private`, `users.acl_objects_edit`, `users.acl_objects_merge`, `users.acl_objects_delete`
+  - Runs: `users.acl_runs_edit`, `users.acl_runs_publish`, `users.acl_runs_delete`
+  - Tags: `users.acl_tags_manage`
+  - Jobs: `users.acl_jobs_view_all`, `users.acl_jobs_cancel_any`, `users.acl_jobs_ttl_modify`
+  - Maintenance: `users.acl_maintenance_cleanup`, `users.acl_maintenance_reconcile`, `users.acl_maintenance_orphans`
+  - Banner: `users.acl_banner_manage`
+  - System: `users.acl_system_health_view`, `users.acl_system_settings_view`
+
+- Defaults:
+  - Groups `staff`, `supervisor`, `student` are created automatically together with sensible default permission sets on first access to the ACL endpoint.
+  - On login, the system syncs flags (`is_staff`, `is_supervisor`, `is_student`) to membership in the respective Django Groups to keep ACLs consistent.
+
+- Admin API to manage ACL:
+  - GET `/api/users/admin/acl/` → returns `{ groups, permissions, matrix }`
+  - POST `/api/users/admin/acl/set` with `{ matrix: { groupName: [permissionCodenames...] } }`
+
+- UI:
+  - Admin → Users: includes an “ACL” matrix to set permissions per role.
+  - Admin routes are additionally guarded on the frontend:
+    - Health requires `acl_system_health_view`
+    - Maintenance requires at least one of `acl_maintenance_*` or `acl_banner_manage`
+    - Users requires `acl_users_view`
+  - Buttons and actions in Jobs, Objects, Runs and Tags are shown/disabled according to the user’s permissions; missing rights show a tooltip “No permission”.
+
+Notes:
+- Backend endpoints enforce permissions regardless of UI state.
+- Superuser bypasses all ACL checks.
+- If you change Group memberships manually (e.g. via Django admin), the changes take effect immediately; on next login the role flags are synced.
+
 # Acknowledgements
 
 This projects uses code from the following projects:

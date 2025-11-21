@@ -254,6 +254,12 @@
               {{ humanBytes(health.system.memory.used_bytes) }} / {{ humanBytes(health.system.memory.total_bytes) }} ({{ health.system.memory.percent }}%)
             </div>
           </div>
+              <div class="mt-2" v-if="health.system.disk">
+                <div class="text-caption text-medium-emphasis mb-1">Disk<span v-if="health.system.disk.path"> ({{ health.system.disk.path }})</span></div>
+                <div class="text-caption text-medium-emphasis">
+                  {{ humanBytes(health.system.disk.used_bytes) }} / {{ humanBytes(health.system.disk.total_bytes) }} ({{ health.system.disk.percent }}%)
+                </div>
+              </div>
         </div>
         <div v-else class="text-medium-emphasis text-caption">
           psutil not available
@@ -264,13 +270,16 @@
   </template>
 
   <script setup>
-  import { ref, onMounted, onBeforeUnmount } from 'vue'
+  import { ref, onMounted, onBeforeUnmount, computed } from 'vue'
   import { api } from '@/services/api'
   import { useNotifyStore } from '@/store/notify'
+  import { useAuthStore } from '@/store/auth'
   
   const loading = ref(false)
   const health = ref({})
   const notify = useNotifyStore()
+  const auth = useAuthStore()
+  const canView = computed(() => auth.isAdmin || auth.hasPerm('users.acl_system_health_view') || auth.hasPerm('acl_system_health_view'))
   const autoRefresh = ref(true)
   const refreshSeconds = 10
   let intervalId = null
@@ -340,6 +349,10 @@
 
   const fetchHealth = async () => {
     loading.value = true
+    if (!canView.value) {
+      loading.value = false
+      return
+    }
     try {
       health.value = await api.adminHealth()
     } catch (e) {

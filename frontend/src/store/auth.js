@@ -13,6 +13,15 @@ export const useAuthStore = defineStore('auth', () => {
     const u = user.value
     return !!(u && (u.is_staff || u.is_superuser))
   })
+  const perms = computed(() => Array.isArray(user.value?.perms) ? user.value.perms : [])
+  const hasPerm = (code) => {
+    try {
+      if (user.value?.is_superuser) return true
+      const p = Array.isArray(user.value?.perms) ? user.value.perms : []
+      // Accept both 'users.acl_x' and plain 'acl_x'
+      return p.includes(code) || p.includes(code.startsWith('users.') ? code : `users.${code}`)
+    } catch { return false }
+  }
 
   async function login(credentials) {
     try {
@@ -94,6 +103,8 @@ export const useAuthStore = defineStore('auth', () => {
     isAuthenticated,
     username,
     isAdmin,
+    perms,
+    hasPerm,
     login,
     logout,
     checkAuth,

@@ -32,13 +32,13 @@
 
       <v-col cols="12" md="6" lg="4">
         <v-card variant="outlined" class="mb-4">
-          <v-card-title class="text-h6">Jobs</v-card-title>
+          <v-card-title class="text-h6">Download Jobs</v-card-title>
           <v-card-text>
             Monitor download jobs; cancel stuck tasks.
           </v-card-text>
           <v-card-actions>
-            <v-btn color="primary" :to="{ path: '/admin/jobs' }" aria-label="Open Jobs">
-              Open Jobs
+            <v-btn color="primary" :to="{ path: '/admin/jobs' }" aria-label="Open Download Jobs">
+              Open Download Jobs
             </v-btn>
           </v-card-actions>
         </v-card>

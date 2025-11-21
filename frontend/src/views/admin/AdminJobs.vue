@@ -1,7 +1,7 @@
 <template>
   <v-container fluid class="py-4">
     <div class="d-flex align-center justify-space-between mb-4">
-      <h1 class="text-h5">Admin · Jobs</h1>
+      <h1 class="text-h5">Admin · Download Jobs</h1>
       <div class="d-flex align-center" style="gap: 8px">
         <v-switch
           v-model="autoRefresh"
@@ -47,7 +47,7 @@
               clearable
             />
           </v-col>
-          <v-col cols="12" sm="4" md="3">
+          <v-col cols="12" sm="4" md="3" v-if="canViewAll">
             <v-text-field
               v-model="filters.user"
               label="User ID"
@@ -75,32 +75,47 @@
           {{ selectedCount }} selected
         </div>
         <div class="d-flex align-center" style="gap: 8px">
-          <v-btn
-            color="error"
-            variant="outlined"
-            :disabled="selectedCount === 0"
-            prepend-icon="mdi-close-octagon"
-            @click="batchCancel"
-          >
-            Cancel ({{ selectedCount }})
-          </v-btn>
-          <v-btn
-            variant="outlined"
-            prepend-icon="mdi-clock-plus"
-            :disabled="selectedCount === 0"
-            @click="extendDialog = true"
-          >
-            Extend expiry
-          </v-btn>
-          <v-btn
-            color="secondary"
-            variant="outlined"
-            prepend-icon="mdi-timer-off"
-            :disabled="selectedCount === 0"
-            @click="batchExpireNow"
-          >
-            Expire now
-          </v-btn>
+          <div class="d-inline-block">
+            <v-btn
+              color="error"
+              variant="outlined"
+              :disabled="selectedCount === 0 || !canBatchCancel"
+              prepend-icon="mdi-close-octagon"
+              @click="batchCancel"
+            >
+              Cancel ({{ selectedCount }})
+            </v-btn>
+            <v-tooltip v-if="batchCancelHint" activator="parent" location="top">
+              {{ batchCancelHint }}
+            </v-tooltip>
+          </div>
+          <div class="d-inline-block">
+            <v-btn
+              variant="outlined"
+              prepend-icon="mdi-clock-plus"
+              :disabled="selectedCount === 0 || !canTTLModify"
+              @click="extendDialog = true"
+            >
+              Extend expiry
+            </v-btn>
+            <v-tooltip v-if="extendHint" activator="parent" location="top">
+              {{ extendHint }}
+            </v-tooltip>
+          </div>
+          <div class="d-inline-block">
+            <v-btn
+              color="secondary"
+              variant="outlined"
+              prepend-icon="mdi-timer-off"
+              :disabled="selectedCount === 0 || !canTTLModify"
+              @click="batchExpireNow"
+            >
+              Expire now
+            </v-btn>
+            <v-tooltip v-if="expireHint" activator="parent" location="top">
+              {{ expireHint }}
+            </v-tooltip>
+          </div>
         </div>
       </v-card-text>
     </v-card>
@@ -159,6 +174,9 @@
         <template #item.created_at="{ item }">
           {{ item.created_at ? formatDateTime(item.created_at) : '—' }}
         </template>
+        <template #item.user="{ item }">
+          <span>{{ item.user_name || item.user || '—' }}</span>
+        </template>
         <template #item.started_at="{ item }">
           {{ item.started_at ? formatDateTime(item.started_at) : '—' }}
         </template>
@@ -170,33 +188,42 @@
         </template>
 
         <template #item.actions="{ item }">
-          <v-btn
-            icon
-            variant="text"
-            :disabled="!canDownload(item)"
-            :aria-label="`Download job ${item.id}`"
-            @click="download(item)"
-          >
-            <v-icon>mdi-download</v-icon>
-          </v-btn>
-          <v-btn
-            icon
-            variant="text"
-            color="error"
-            :disabled="!canCancel(item)"
-            :aria-label="`Cancel job ${item.id}`"
-            @click="cancel(item)"
-          >
-            <v-icon>mdi-close-circle</v-icon>
-          </v-btn>
-          <v-btn
-            icon
-            variant="text"
-            :aria-label="`Details for job ${item.id}`"
-            @click="openDetails(item)"
-          >
-            <v-icon>mdi-information</v-icon>
-          </v-btn>
+          <div class="d-inline-block">
+            <v-btn
+              icon
+              variant="text"
+              :disabled="!canDownload(item)"
+              :aria-label="`Download job ${item.id}`"
+              @click="download(item)"
+            >
+              <v-icon>mdi-download</v-icon>
+            </v-btn>
+          </div>
+          <div class="d-inline-block">
+            <v-btn
+              icon
+              variant="text"
+              color="error"
+              :disabled="!canCancel(item)"
+              :aria-label="`Cancel job ${item.id}`"
+              @click="cancel(item)"
+            >
+              <v-icon>mdi-close-circle</v-icon>
+            </v-btn>
+            <v-tooltip v-if="cancelHint(item)" activator="parent" location="top">
+              {{ cancelHint(item) }}
+            </v-tooltip>
+          </div>
+          <div class="d-inline-block">
+            <v-btn
+              icon
+              variant="text"
+              :aria-label="`Details for job ${item.id}`"
+              @click="openDetails(item)"
+            >
+              <v-icon>mdi-information</v-icon>
+            </v-btn>
+          </div>
         </template>
       </v-data-table>
     </v-card>
@@ -303,11 +330,17 @@
   import EmptyState from '@/components/ui/EmptyState.vue'
   import { useNotifyStore } from '@/store/notify'
   import { formatDateTime } from '@/utils/datetime'
+  import { useAuthStore } from '@/store/auth'
   
   const loading = ref(false)
   const items = ref([])
   const selected = ref([])
   const notify = useNotifyStore()
+  const auth = useAuthStore()
+  const myUserId = computed(() => auth?.user?.id)
+  const canViewAll = computed(() => auth.isAdmin || auth.hasPerm('users.acl_jobs_view_all') || auth.hasPerm('acl_jobs_view_all'))
+  const canBatchCancel = computed(() => auth.isAdmin || auth.hasPerm('users.acl_jobs_cancel_any') || auth.hasPerm('acl_jobs_cancel_any'))
+  const canTTLModify = computed(() => auth.isAdmin || auth.hasPerm('users.acl_jobs_ttl_modify') || auth.hasPerm('acl_jobs_ttl_modify'))
   
   const headers = [
     { title: 'ID', key: 'id', sortable: true },
@@ -455,7 +488,17 @@
   }
   
   const canCancel = (job) => {
-    return job && (job.status === 'queued' || job.status === 'running')
+    if (!job || (job.status !== 'queued' && job.status !== 'running')) return false
+    // Owners can always cancel own jobs
+    if (myUserId.value && job.user === myUserId.value) return true
+    // Admins need explicit permission to cancel any
+    return !!canBatchCancel.value
+  }
+  const cancelHint = (job) => {
+    if (!job || (job.status !== 'queued' && job.status !== 'running')) return ''
+    if (myUserId.value && job.user === myUserId.value) return ''
+    if (!canBatchCancel.value) return 'No permission'
+    return ''
   }
   
   const download = async (job) => {
@@ -479,7 +522,7 @@
   }
   
   const batchCancel = async () => {
-    if (selectedCount.value === 0) return
+    if (selectedCount.value === 0 || !canBatchCancel.value) return
     if (!confirm(`Cancel ${selectedCount.value} selected job(s)?`)) return
     try {
       await api.adminBatchCancelJobs(selectedIds.value)
@@ -487,11 +530,16 @@
       await fetchJobs()
     } catch (e) {}
   }
+  const batchCancelHint = computed(() => {
+    if (selectedCount.value === 0) return 'Select jobs first'
+    if (!canBatchCancel.value) return 'No permission'
+    return ''
+  })
 
   const extendDialog = ref(false)
   const extendHours = ref(48)
   const confirmExtend = async () => {
-    if (selectedCount.value === 0) { extendDialog.value = false; return }
+    if (selectedCount.value === 0 || !canTTLModify.value) { extendDialog.value = false; return }
     const hours = parseInt(extendHours.value, 10)
     if (!Number.isFinite(hours) || hours <= 0) {
       notify.error('Please enter a positive number of hours')
@@ -504,9 +552,14 @@
       await fetchJobs()
     } catch (e) {}
   }
+  const extendHint = computed(() => {
+    if (selectedCount.value === 0) return 'Select jobs first'
+    if (!canTTLModify.value) return 'No permission'
+    return ''
+  })
 
   const batchExpireNow = async () => {
-    if (selectedCount.value === 0) return
+    if (selectedCount.value === 0 || !canTTLModify.value) return
     if (!confirm(`Expire ${selectedCount.value} selected job(s) now? This will delete ZIP files.`)) return
     try {
       await api.adminBatchExpireJobsNow(selectedIds.value)
@@ -514,6 +567,11 @@
       await fetchJobs()
     } catch (e) {}
   }
+  const expireHint = computed(() => {
+    if (selectedCount.value === 0) return 'Select jobs first'
+    if (!canTTLModify.value) return 'No permission'
+    return ''
+  })
 
   const detailsOpen = ref(false)
   const details = ref(null)

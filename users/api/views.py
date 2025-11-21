@@ -6,6 +6,8 @@ from rest_framework.authtoken.models import Token
 from django.conf import settings
 import os
 import time
+from django.contrib.auth.models import Group, Permission
+from django.contrib.contenttypes.models import ContentType
 from django.contrib.auth import authenticate
 from django.contrib.auth import logout as django_logout
 from django.views.decorators.csrf import csrf_exempt
@@ -34,11 +36,35 @@ def login(request):
     user = authenticate(username=username, password=password)
     
     if user:
+        try:
+            # Light-touch: sync role flags to Django groups so ACL applies consistently
+            def _ensure_group(name: str, enabled: bool):
+                try:
+                    grp, _ = Group.objects.get_or_create(name=name)
+                    if enabled:
+                        user.groups.add(grp)
+                    else:
+                        user.groups.remove(grp)
+                except Exception:
+                    pass
+            _ensure_group('staff', bool(user.is_staff))
+            # Custom roles if present on model
+            _ensure_group('supervisor', bool(getattr(user, 'is_supervisor', False)))
+            _ensure_group('student', bool(getattr(user, 'is_student', False)))
+        except Exception:
+            pass
         token, created = Token.objects.get_or_create(user=user)
         serializer = UserSerializer(user)
+        try:
+            perms_all = set(user.get_all_permissions())
+            acl_perms = sorted([p for p in perms_all if p.startswith('users.acl_')])
+        except Exception:
+            acl_perms = []
+        user_payload = serializer.data
+        user_payload['perms'] = acl_perms
         return Response({
             'token': token.key,
-            'user': serializer.data
+            'user': user_payload
         })
     else:
         return Response(
@@ -73,7 +99,14 @@ def user_info(request):
     Get current user information
     """
     serializer = UserSerializer(request.user)
-    return Response(serializer.data)
+    try:
+        perms_all = set(request.user.get_all_permissions())
+        acl_perms = sorted([p for p in perms_all if p.startswith('users.acl_')])
+    except Exception:
+        acl_perms = []
+    data = serializer.data
+    data['perms'] = acl_perms
+    return Response(data)
 
 
 @api_view(['POST'])
@@ -129,6 +162,37 @@ class UserAdminViewSet(viewsets.ModelViewSet):
     queryset = User.objects.all().order_by('username')
     serializer_class = UserAdminSerializer
     permission_classes = [IsAdminUser]
+
+    def _has(self, user, codename: str) -> bool:
+        try:
+            return bool(user.is_superuser or user.has_perm(f'users.{codename}'))
+        except Exception:
+            return False
+
+    def list(self, request, *args, **kwargs):
+        if not self._has(request.user, 'acl_users_view'):
+            return Response({'detail': 'Forbidden'}, status=status.HTTP_403_FORBIDDEN)
+        return super().list(request, *args, **kwargs)
+
+    def retrieve(self, request, *args, **kwargs):
+        if not self._has(request.user, 'acl_users_view'):
+            return Response({'detail': 'Forbidden'}, status=status.HTTP_403_FORBIDDEN)
+        return super().retrieve(request, *args, **kwargs)
+
+    def update(self, request, *args, **kwargs):
+        if not self._has(request.user, 'acl_users_edit_roles'):
+            return Response({'detail': 'Forbidden'}, status=status.HTTP_403_FORBIDDEN)
+        return super().update(request, *args, **kwargs)
+
+    def partial_update(self, request, *args, **kwargs):
+        if not self._has(request.user, 'acl_users_edit_roles'):
+            return Response({'detail': 'Forbidden'}, status=status.HTTP_403_FORBIDDEN)
+        return super().partial_update(request, *args, **kwargs)
+
+    def destroy(self, request, *args, **kwargs):
+        if not self._has(request.user, 'acl_users_delete'):
+            return Response({'detail': 'Forbidden'}, status=status.HTTP_403_FORBIDDEN)
+        return super().destroy(request, *args, **kwargs)
 
 
 @api_view(['POST'])
@@ -269,3 +333,126 @@ def admin_ldap_test(request):
         result['errors']['connect'] = str(e)
 
     return Response(result)
+
+
+# =========================
+# ACL management (groups/permissions)
+# =========================
+
+ACL_PERMISSIONS = [
+    # (codename, name)
+    ('acl_users_view', 'Users: view'),
+    ('acl_users_edit_roles', 'Users: edit roles'),
+    ('acl_users_delete', 'Users: delete'),
+    ('acl_objects_view_private', 'Objects: view private'),
+    ('acl_objects_edit', 'Objects: edit'),
+    ('acl_objects_merge', 'Objects: merge'),
+    ('acl_objects_delete', 'Objects: delete'),
+    ('acl_runs_edit', 'Runs: edit'),
+    ('acl_runs_delete', 'Runs: delete'),
+    ('acl_runs_publish', 'Runs: publish/unpublish'),
+    ('acl_tags_manage', 'Tags: manage'),
+    ('acl_jobs_view_all', 'Jobs: view all'),
+    ('acl_jobs_cancel_any', 'Jobs: cancel any'),
+    ('acl_jobs_ttl_modify', 'Jobs: modify TTL'),
+    ('acl_maintenance_cleanup', 'Maintenance: cleanup'),
+    ('acl_maintenance_reconcile', 'Maintenance: reconcile'),
+    ('acl_maintenance_orphans', 'Maintenance: orphans/hashcheck'),
+    ('acl_banner_manage', 'Banner: manage'),
+    ('acl_system_health_view', 'System: health view'),
+    ('acl_system_settings_view', 'System: settings view'),
+]
+
+ACL_GROUPS = ['staff', 'supervisor', 'student']
+
+ACL_DEFAULTS = {
+    'staff': {
+        'acl_users_view', 'acl_objects_view_private', 'acl_objects_edit', 'acl_objects_merge',
+        'acl_runs_edit', 'acl_runs_publish', 'acl_tags_manage', 'acl_jobs_view_all',
+        'acl_jobs_cancel_any', 'acl_jobs_ttl_modify', 'acl_maintenance_cleanup',
+        'acl_maintenance_reconcile', 'acl_maintenance_orphans', 'acl_banner_manage',
+        'acl_system_health_view', 'acl_system_settings_view',
+    },
+    'supervisor': {
+        'acl_users_view', 'acl_objects_view_private', 'acl_objects_edit', 'acl_objects_merge',
+        'acl_runs_edit', 'acl_runs_publish', 'acl_tags_manage', 'acl_jobs_view_all',
+        'acl_system_health_view',
+    },
+    'student': {
+        'acl_users_view', 'acl_system_health_view',
+    },
+}
+
+def _acl_bootstrap():
+    """
+    Ensure permissions and groups exist and defaults are present.
+    """
+    # Attach custom permissions to the User content type for simplicity
+    ct = ContentType.objects.get_for_model(User)
+    existing = {p.codename: p for p in Permission.objects.filter(content_type=ct, codename__in=[c for c, _ in ACL_PERMISSIONS])}
+    for codename, name in ACL_PERMISSIONS:
+        if codename not in existing:
+            Permission.objects.get_or_create(codename=codename, content_type=ct, defaults={'name': name})
+    # Ensure groups
+    for g in ACL_GROUPS:
+        Group.objects.get_or_create(name=g)
+    # Apply defaults only if the group currently has no of our ACL permissions
+    for gname, perm_set in ACL_DEFAULTS.items():
+        try:
+            grp = Group.objects.get(name=gname)
+        except Group.DoesNotExist:
+            continue
+        current = set(grp.permissions.filter(content_type=ct, codename__in=[c for c, _ in ACL_PERMISSIONS]).values_list('codename', flat=True))
+        if not current:
+            perms = list(Permission.objects.filter(content_type=ct, codename__in=list(perm_set)))
+            grp.permissions.add(*perms)
+
+@api_view(['GET'])
+@permission_classes([IsAdminUser])
+def admin_acl_get(request):
+    """
+    Return ACL matrix: groups, permissions, and which groups have which perms.
+    """
+    _acl_bootstrap()
+    ct = ContentType.objects.get_for_model(User)
+    perms = list(Permission.objects.filter(content_type=ct, codename__in=[c for c, _ in ACL_PERMISSIONS]).order_by('codename'))
+    groups = list(Group.objects.filter(name__in=ACL_GROUPS).order_by('name'))
+    matrix = {}
+    for g in groups:
+        matrix[g.name] = set(g.permissions.filter(id__in=[p.id for p in perms]).values_list('codename', flat=True))
+    payload = {
+        'groups': [g.name for g in groups],
+        'permissions': [{'codename': p.codename, 'name': p.name} for p in perms],
+        'matrix': { g: list(codes) for g, codes in matrix.items() },
+        'defaults': { k: list(v) for k, v in ACL_DEFAULTS.items() },
+    }
+    return Response(payload)
+
+@api_view(['POST'])
+@permission_classes([IsAdminUser])
+def admin_acl_set(request):
+    """
+    Set ACL matrix. Body: { matrix: { group: [codenames...] } }
+    Only affects known groups and known ACL permissions.
+    """
+    _acl_bootstrap()
+    body = request.data or {}
+    new_matrix = body.get('matrix') or {}
+    ct = ContentType.objects.get_for_model(User)
+    valid_perms = {c for c, _ in ACL_PERMISSIONS}
+    perm_map = {p.codename: p.id for p in Permission.objects.filter(content_type=ct, codename__in=valid_perms)}
+    for gname, codes in (new_matrix.items() if isinstance(new_matrix, dict) else []):
+        if gname not in ACL_GROUPS:
+            continue
+        try:
+            grp = Group.objects.get(name=gname)
+        except Group.DoesNotExist:
+            continue
+        codes = [c for c in (codes or []) if c in perm_map]
+        # Replace group's ACL permissions atomically: remove old ACL perms, add selected
+        current_qs = grp.permissions.filter(content_type=ct, codename__in=list(valid_perms))
+        grp.permissions.remove(*list(current_qs))
+        if codes:
+            to_add = list(Permission.objects.filter(id__in=[perm_map[c] for c in codes]))
+            grp.permissions.add(*to_add)
+    return admin_acl_get(request)

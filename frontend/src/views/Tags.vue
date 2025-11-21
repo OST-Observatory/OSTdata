@@ -13,12 +13,17 @@
           >
             Delete selected ({{ selected.length }})
           </v-btn>
-          <v-btn
-            color="primary"
-            prepend-icon="mdi-plus"
-            v-if="canEdit"
-            @click="openEdit()"
-          >New Tag</v-btn>
+          <div class="d-inline-block">
+            <v-btn
+              color="primary"
+              prepend-icon="mdi-plus"
+              :disabled="!canEdit"
+              @click="openEdit()"
+            >New Tag</v-btn>
+            <v-tooltip v-if="!canEdit" activator="parent" location="top">
+              No permission
+            </v-tooltip>
+          </div>
         </div>
       </div>
 
@@ -219,7 +224,7 @@ const totalItems = ref(0)
 const sortKey = ref('name')
 
 const authStore = useAuthStore()
-const canEdit = computed(() => authStore.isAuthenticated)
+const canEdit = computed(() => authStore.isAdmin || authStore.hasPerm('users.acl_tags_manage') || authStore.hasPerm('acl_tags_manage'))
 const canAdmin = computed(() => authStore.isAdmin)
 
 const headers = [

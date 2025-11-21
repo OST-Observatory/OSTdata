@@ -53,25 +53,25 @@ const routes = [
     path: '/admin/users',
     name: 'admin-users',
     component: () => import('@/views/admin/AdminUsers.vue'),
-    meta: { requiresAuth: true, requiresAdmin: true, title: 'Admin – Users', description: 'Manage users and roles.' }
+    meta: { requiresAuth: true, requiresAdmin: true, requiresAnyPerms: ['users.acl_users_view','acl_users_view'], title: 'Admin – Users', description: 'Manage users and roles.' }
   },
   {
     path: '/admin/jobs',
     name: 'admin-jobs',
     component: () => import('@/views/admin/AdminJobs.vue'),
-    meta: { requiresAuth: true, requiresAdmin: true, title: 'Admin – Jobs', description: 'Monitor and control background jobs.' }
+    meta: { requiresAuth: true, requiresAdmin: true, title: 'Admin – Download Jobs', description: 'Monitor and control download jobs.' }
   },
   {
     path: '/admin/health',
     name: 'admin-health',
     component: () => import('@/views/admin/AdminHealth.vue'),
-    meta: { requiresAuth: true, requiresAdmin: true, title: 'Admin – Health', description: 'System health and diagnostics.' }
+    meta: { requiresAuth: true, requiresAdmin: true, requiresPerm: 'users.acl_system_health_view', title: 'Admin – Health', description: 'System health and diagnostics.' }
   },
   {
     path: '/admin/maintenance',
     name: 'admin-maintenance',
     component: () => import('@/views/admin/AdminMaintenance.vue'),
-    meta: { requiresAuth: true, requiresAdmin: true, title: 'Admin – Maintenance', description: 'Data maintenance tools.' }
+    meta: { requiresAuth: true, requiresAdmin: true, requiresAnyPerms: ['users.acl_maintenance_cleanup','users.acl_maintenance_reconcile','users.acl_maintenance_orphans','users.acl_banner_manage','acl_maintenance_cleanup','acl_maintenance_reconcile','acl_maintenance_orphans','acl_banner_manage'], title: 'Admin – Maintenance', description: 'Data maintenance tools.' }
   },
   {
     path: '/login',
@@ -112,6 +112,22 @@ router.beforeEach(async (to) => {
 
   if (to.meta?.requiresAdmin && !(auth.isAdmin)) {
     return { path: '/' }
+  }
+
+  // Optional ACL route gating: requiresPerm or requiresAnyPerms
+  const requiresPerm = to.meta?.requiresPerm
+  const requiresAny = to.meta?.requiresAnyPerms
+  const has = (code) => {
+    try {
+      return auth.hasPerm(code)
+    } catch { return false }
+  }
+  if (requiresPerm && !has(requiresPerm)) {
+    return { path: '/' }
+  }
+  if (Array.isArray(requiresAny) && requiresAny.length) {
+    const ok = requiresAny.some(code => has(code))
+    if (!ok) return { path: '/' }
   }
 })
 

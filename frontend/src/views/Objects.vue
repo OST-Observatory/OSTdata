@@ -4,27 +4,42 @@
       <div class="d-flex align-center justify-space-between mb-4">
         <h1 class="text-h4">Objects</h1>
         <div class="d-flex align-center" style="gap: 8px" v-if="canAdmin">
-          <v-btn
-            variant="outlined"
-            color="primary"
-            prepend-icon="mdi-eye"
-            :disabled="!selected.length"
-            @click="bulkPublishObjects(true)"
-          >Publish ({{ selected.length }})</v-btn>
-          <v-btn
-            variant="outlined"
-            color="secondary"
-            prepend-icon="mdi-eye-off"
-            :disabled="!selected.length"
-            @click="bulkPublishObjects(false)"
-          >Unpublish ({{ selected.length }})</v-btn>
-          <v-btn
-            variant="outlined"
-            color="warning"
-            prepend-icon="mdi-merge"
-            :disabled="selected.length < 2"
-            @click="openMergeDialog"
-          >Merge ({{ selected.length }})</v-btn>
+          <div class="d-inline-block">
+            <v-btn
+              variant="outlined"
+              color="primary"
+              prepend-icon="mdi-eye"
+              :disabled="!selected.length || !canPublish"
+              @click="bulkPublishObjects(true)"
+            >Publish ({{ selected.length }})</v-btn>
+            <v-tooltip v-if="!canPublish || !selected.length" activator="parent" location="top">
+              {{ !selected.length ? 'Select objects first' : 'No permission' }}
+            </v-tooltip>
+          </div>
+          <div class="d-inline-block">
+            <v-btn
+              variant="outlined"
+              color="secondary"
+              prepend-icon="mdi-eye-off"
+              :disabled="!selected.length || !canPublish"
+              @click="bulkPublishObjects(false)"
+            >Unpublish ({{ selected.length }})</v-btn>
+            <v-tooltip v-if="!canPublish || !selected.length" activator="parent" location="top">
+              {{ !selected.length ? 'Select objects first' : 'No permission' }}
+            </v-tooltip>
+          </div>
+          <div class="d-inline-block">
+            <v-btn
+              variant="outlined"
+              color="warning"
+              prepend-icon="mdi-merge"
+              :disabled="selected.length < 2 || !canMerge"
+              @click="openMergeDialog"
+            >Merge ({{ selected.length }})</v-btn>
+            <v-tooltip v-if="selected.length < 2 || !canMerge" activator="parent" location="top">
+              {{ selected.length < 2 ? 'Select at least two objects' : 'No permission' }}
+            </v-tooltip>
+          </div>
         </div>
       </div>
 
@@ -356,7 +371,7 @@
 
           <template v-slot:item.actions="{ item }">
             <v-btn
-              v-if="canAdmin"
+              v-if="canEdit"
               icon
               variant="text"
               color="primary"
@@ -367,7 +382,7 @@
               <v-icon>mdi-pencil</v-icon>
             </v-btn>
             <v-btn
-              v-if="canAdmin"
+              v-if="canDelete"
               icon
               variant="text"
               color="error"
@@ -594,6 +609,10 @@ const radiusUnit = ref('arcsec')
 const notify = useNotifyStore()
 const authStore = useAuthStore()
 const canAdmin = computed(() => authStore.isAdmin)
+const canEdit = computed(() => authStore.isAdmin || authStore.hasPerm('users.acl_objects_edit') || authStore.hasPerm('acl_objects_edit'))
+const canMerge = computed(() => authStore.isAdmin || authStore.hasPerm('users.acl_objects_merge') || authStore.hasPerm('acl_objects_merge'))
+const canDelete = computed(() => authStore.isAdmin || authStore.hasPerm('users.acl_objects_delete') || authStore.hasPerm('acl_objects_delete'))
+const canPublish = canEdit
 const boolFilterItems = [
   { title: 'Not selected', value: null },
   { title: 'Yes', value: true },
@@ -890,7 +909,7 @@ const copyShareLink = async () => {
 }
 
 const removeObject = async (item) => {
-  if (!canAdmin.value || !item?.pk) return
+  if (!canEdit.value || !item?.pk) return
   if (!confirm(`Delete object ${item.name}? This cannot be undone.`)) return
   try {
     await api.deleteObject(item.pk)
@@ -903,7 +922,7 @@ const removeObject = async (item) => {
 }
 
 const bulkPublishObjects = async (makePublic) => {
-  if (!canAdmin.value || !selected.value.length) return
+  if (!canMerge.value || !selected.value.length) return
   const ids = selected.value.map(x => x.pk).filter(Boolean)
   try {
     await Promise.all(ids.map(id => api.updateObject(id, { is_public: !!makePublic })))
