@@ -36,6 +36,7 @@ INSTALLED_APPS = [
     'users.apps.UsersConfig',
     'tags.apps.TagsConfig',
     'objects.apps.ObjectsConfig',
+    'drf_spectacular',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -44,7 +45,6 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'rest_framework',
     'rest_framework.authtoken',
-    'rest_framework_datatables',
     'django_filters',
     'simple_history',
     'corsheaders',
@@ -68,7 +68,7 @@ ROOT_URLCONF = 'ostdata.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': ['templates',],
+        'DIRS': [],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -94,22 +94,47 @@ REST_FRAMEWORK = {
         'rest_framework.permissions.IsAuthenticatedOrReadOnly',
         'ostdata.custom_permissions.IsAllowedOnRun',
     ],
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
     'DEFAULT_RENDERER_CLASSES': (
         'rest_framework.renderers.JSONRenderer',
         'rest_framework.renderers.BrowsableAPIRenderer',
-        'rest_framework_datatables.renderers.DatatablesRenderer',
     ),
 
     'DEFAULT_FILTER_BACKENDS': (
-        'rest_framework_datatables.filters.DatatablesFilterBackend',
+        'django_filters.rest_framework.DjangoFilterBackend',
+        'rest_framework.filters.OrderingFilter',
     ),
 
-    'DEFAULT_PAGINATION_CLASS': 'rest_framework_datatables.pagination.DatatablesPageNumberPagination',
+    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 10,
+    'DEFAULT_THROTTLE_CLASSES': [
+        'rest_framework.throttling.AnonRateThrottle',
+        'rest_framework.throttling.UserRateThrottle',
+        'rest_framework.throttling.ScopedRateThrottle',
+    ],
+    'DEFAULT_THROTTLE_RATES': {
+        'anon': '60/min',
+        'user': '600/min',
+        # Scoped throttles for heavier endpoints
+        'plots': '30/min',
+        'stats': '12/min',
+    },
+    # Consistent ISO-8601 timestamps with timezone/offset
+    'DATETIME_FORMAT': 'iso-8601',
 }
 
-# Login url
-LOGIN_URL = '/accounts/login'
+# drf-spectacular: OpenAPI/Schema settings
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'OST Data Archive API',
+    'DESCRIPTION': 'OpenAPI schema for the OST Data Archive REST API.',
+    'VERSION': '1.0.0',
+    'SERVE_INCLUDE_SCHEMA': False,
+    'SERVE_PERMISSIONS': [],  # schema and docs are public (adjust if needed)
+    # Optional: shorten component names
+    'COMPONENT_SPLIT_REQUEST': True,
+}
+# Login url (SPA)
+LOGIN_URL = '/login'
 
 # Login redirection
 LOGIN_REDIRECT_URL = '/'
@@ -156,11 +181,20 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/4.0/howto/static-files/
 
-STATIC_URL = 'static/'
+# Static files
+# Use absolute STATIC_URL in dev when browsing API via a different origin (e.g., Vite at :5173)
+# Example: set STATIC_URL=http://localhost:8000/static/ to avoid MIME/type issues for DRF assets
+STATIC_URL = env('STATIC_URL', default='/static/')
 STATIC_ROOT = BASE_DIR / 'static/'
 
-# Extra locations for static files
-STATICFILES_DIRS = ['site_static', 'frontend/dist',]
+# Extra locations for static files (added only if they exist)
+STATICFILES_DIRS = []
+_site_static = BASE_DIR / 'site_static'
+_frontend_dist = BASE_DIR / 'frontend' / 'dist'
+if _site_static.exists():
+    STATICFILES_DIRS.append(str(_site_static))
+if _frontend_dist.exists():
+    STATICFILES_DIRS.append(str(_frontend_dist))
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.0/ref/settings/#default-auto-field

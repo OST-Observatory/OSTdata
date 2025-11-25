@@ -33,4 +33,5 @@ test_data*
 favicon_old.ico
 generate_skychart/
 *.env
-
+old/
+frontend/dist/

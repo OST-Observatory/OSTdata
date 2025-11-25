@@ -109,7 +109,7 @@ export const api = {
   getAllObservationRuns: () => fetchWithAuth('/runs/runs/?limit=1000'),  // Get all runs for filtering
   updateObservationRun: (id, data) => fetchWithAuth(`/runs/runs/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }),
   deleteObservationRun: (id) => fetchWithAuth(`/runs/runs/${id}/`, { method: 'DELETE' }),
-  getRunDataFiles: (runId) => fetchWithAuth(`/runs/runs/${runId}/datafiles/`),
+  // getRunDataFiles: deprecated in favor of paged datafiles endpoint
   getRunDataFilesPaged: (runId, params = {}) => {
     const queryParams = {
       observation_run: runId,
@@ -296,7 +296,8 @@ export const api = {
   getObject: (id) => fetchWithAuth(`/objects/${id}/`),
   getObjectObservationRuns: (id) => fetchWithAuth(`/objects/${id}/observation_runs/`),
   getObjectDataFiles: (id) => fetchWithAuth(`/objects/${id}/datafiles/`),
-  getRecentObjects: () => fetchWithAuth('/objects/?limit=10&ordering=-created_at'),
+  // Use last_modified (supported server-side) instead of created_at
+  getRecentObjects: () => fetchWithAuth('/objects/?limit=10&ordering=-last_modified'),
   createObject: (data) => fetchWithAuth('/objects/', {
     method: 'POST',
     body: JSON.stringify(data)

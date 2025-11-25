@@ -44,11 +44,6 @@ router.register(r'datafiles', DataFileViewSet)
 
 urlpatterns = [
     path(
-        'runs/<int:run_pk>/datafiles/',
-        getRunDataFile,
-        name='observation_run_datafiles',
-    ),
-    path(
         'runs/<int:run_pk>/conditions/',
         get_observing_conditions,
         name='observation_run_conditions',
@@ -56,7 +51,6 @@ urlpatterns = [
     path('visibility/', get_visibility_plot, name='visibility_plot'),
     path('fov/', get_sky_fov, name='sky_fov'),
     path('time-distribution/', get_time_distribution, name='time_distribution'),
-    path('bokeh-version/', get_bokeh_version, name='bokeh_version'),
     path('dashboard/stats/', getDashboardStats, name='dashboard_stats'),
     path('datafiles/<int:pk>/thumbnail/', get_datafile_thumbnail, name='datafile_thumbnail'),
     path('datafiles/<int:pk>/header/', get_datafile_header, name='datafile_header'),

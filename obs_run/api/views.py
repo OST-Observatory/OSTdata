@@ -54,6 +54,9 @@ import time as _time
 import json
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAdminUser, AllowAny
+from rest_framework.throttling import ScopedRateThrottle
+from django.utils.http import http_date
+from drf_spectacular.utils import extend_schema, OpenApiParameter
 try:
     import redis as _redis
 except Exception:
@@ -113,6 +116,10 @@ class RunViewSet(viewsets.ModelViewSet):
     ordering_fields = ['name', 'mid_observation_jd', 'reduction_status']
     ordering = ['mid_observation_jd']
 
+    def get_queryset(self):
+        # Prefetch tags to avoid N+1 in list
+        return ObservationRun.objects.all().prefetch_related('tags')
+
     def _has(self, user, codename: str) -> bool:
         try:
             return bool(user and (user.is_superuser or user.has_perm(f'users.{codename}')))
@@ -159,6 +166,97 @@ class RunViewSet(viewsets.ModelViewSet):
             return RunSerializer
         return RunSerializer
 
+    @extend_schema(
+        summary='List observation runs',
+        description='Paginated list of observation runs with filtering and ordering.',
+        parameters=[
+            OpenApiParameter(name='page', description='Page number', required=False, type=int),
+            OpenApiParameter(name='limit', description='Items per page', required=False, type=int),
+            OpenApiParameter(name='ordering', description='name|mid_observation_jd|reduction_status (prefix with - for desc)', required=False, type=str),
+            OpenApiParameter(name='status', description='Filter by reduction status (NE|PR|FR|ER)', required=False, type=str),
+        ],
+    )
+    def list(self, request, *args, **kwargs):
+        """
+        Validate ordering and gracefully fall back to a safe default to avoid errors.
+        Adds ETag and Last-Modified for conditional GETs.
+        """
+        queryset = self.filter_queryset(self.get_queryset())
+        # Handle ordering aliases and invalid fields gracefully
+        ordering_param = (request.query_params.get('ordering') or '').strip()
+        if ordering_param:
+            desc = ordering_param.startswith('-')
+            field = ordering_param.lstrip('-')
+            allowed = set(self.ordering_fields or [])
+            alias = {'date': 'mid_observation_jd'}
+            if field in alias:
+                mapped = alias[field]
+                queryset = queryset.order_by(f"{'-' if desc else ''}{mapped}")
+            elif field not in allowed:
+                # Fallback to default ordering if invalid field is supplied
+                queryset = queryset.order_by('mid_observation_jd')
+        # Conditional GET: ETag/Last-Modified based on history and count + query string
+        try:
+            from obs_run.models import ObservationRun  # local import safe
+            from django.db.models import Max
+            # For Last-Modified use latest history_date if available; fallback to None
+            latest_hist = ObservationRun.history.aggregate(m=Max('history_date'))['m']
+            count = queryset.count()
+            sig = f"runs:{count}:{str(latest_hist)}:{hash(request.META.get('QUERY_STRING',''))}"
+            etag = f"W/\"{abs(hash(sig))}\""
+            if_none_match = request.META.get('HTTP_IF_NONE_MATCH')
+            if if_none_match and if_none_match == etag:
+                return Response(status=304)
+        except Exception:
+            etag = None
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            resp = self.get_paginated_response(serializer.data)
+            try:
+                if etag:
+                    resp['ETag'] = etag
+                if latest_hist:
+                    resp['Last-Modified'] = http_date(int(latest_hist.timestamp()))
+            except Exception:
+                pass
+            return resp
+        serializer = self.get_serializer(queryset, many=True)
+        resp = Response(serializer.data)
+        try:
+            if etag:
+                resp['ETag'] = etag
+            if latest_hist:
+                resp['Last-Modified'] = http_date(int(latest_hist.timestamp()))
+        except Exception:
+            pass
+        return resp
+
+    @extend_schema(summary='Retrieve observation run', description='Get an observation run by ID.')
+    def retrieve(self, request, *args, **kwargs):
+        """Detail view with conditional GET headers."""
+        instance = self.get_object()
+        # Compute Last-Modified from history
+        try:
+            hist = instance.history.order_by('-history_date').values_list('history_date', flat=True).first()
+        except Exception:
+            hist = None
+        sig = f"run:{instance.pk}:{str(hist)}"
+        etag = f"W/\"{abs(hash(sig))}\""
+        if_none_match = request.META.get('HTTP_IF_NONE_MATCH')
+        if if_none_match and if_none_match == etag:
+            return Response(status=304)
+        serializer = self.get_serializer(instance)
+        resp = Response(serializer.data)
+        try:
+            if etag:
+                resp['ETag'] = etag
+            if hist:
+                resp['Last-Modified'] = http_date(int(hist.timestamp()))
+        except Exception:
+            pass
+        return resp
+
 
 
 class DataFilesPagination(PageNumberPagination):
@@ -184,21 +282,10 @@ class DataFilesPagination(PageNumberPagination):
 
 @api_view(['GET'])
 def getRunDataFile(request, run_pk):
-    '''
-        Get all DataFile objects associated with an observation run, serialized.
-    '''
-    try:
-        # Ensure run exists (and could add access checks here if needed)
-        ObservationRun.objects.get(pk=run_pk)
-    except ObservationRun.DoesNotExist:
-        return Response({"detail": "Observation run not found"}, status=404)
-
-    # Query data files for the run; order by HJD when available
-    qs = DataFile.objects.filter(observation_run_id=run_pk).order_by('hjd')
-
-    # Serialize full details so frontend tables can display rich info
-    serializer = DataFileSerializer(qs, many=True)
-    return Response(serializer.data)
+    """
+    DEPRECATED: This endpoint has been removed in favor of the generic /api/runs/datafiles/ with filters.
+    """
+    return Response({"detail": "Not found"}, status=404)
 
 
 @api_view(['GET'])
@@ -512,6 +599,17 @@ def download_datafiles_bulk(request):
         return Response({"detail": str(e)}, status=400)
 
 
+@extend_schema(
+    summary='Visibility plot',
+    description='Returns a Bokeh JSON item for visibility given run_id, coordinates and time.',
+    parameters=[
+        OpenApiParameter('run_id', int, OpenApiParameter.QUERY),
+        OpenApiParameter('ra', float, OpenApiParameter.QUERY),
+        OpenApiParameter('dec', float, OpenApiParameter.QUERY),
+        OpenApiParameter('start_hjd', float, OpenApiParameter.QUERY),
+        OpenApiParameter('expo_time', float, OpenApiParameter.QUERY),
+    ],
+)
 @api_view(['GET'])
 def get_visibility_plot(request):
     """
@@ -544,6 +642,7 @@ def get_visibility_plot(request):
         return Response({'error': str(e)}, status=400)
 
 
+@extend_schema(summary='Observing conditions plot', description='Returns a Bokeh JSON item (Tabs) for observing conditions of a run.')
 @api_view(['GET'])
 def get_observing_conditions(request, run_pk):
     """
@@ -556,7 +655,21 @@ def get_observing_conditions(request, run_pk):
     except Exception as e:
         return Response({'error': str(e)}, status=400)
 
+# (moved throttling assignments below function definitions to avoid NameError)
 
+
+@extend_schema(
+    summary='Sky FOV plot',
+    parameters=[
+        OpenApiParameter('ra', float, OpenApiParameter.QUERY),
+        OpenApiParameter('dec', float, OpenApiParameter.QUERY),
+        OpenApiParameter('fov_x', float, OpenApiParameter.QUERY),
+        OpenApiParameter('fov_y', float, OpenApiParameter.QUERY),
+        OpenApiParameter('scale', float, OpenApiParameter.QUERY),
+        OpenApiParameter('rotation', float, OpenApiParameter.QUERY),
+        OpenApiParameter('constellations', bool, OpenApiParameter.QUERY),
+    ],
+)
 @api_view(['GET'])
 def get_sky_fov(request):
     """
@@ -582,6 +695,14 @@ def get_sky_fov(request):
         return Response({'error': str(e)}, status=400)
 
 
+@extend_schema(
+    summary='Time distribution plot',
+    parameters=[
+        OpenApiParameter('model', str, OpenApiParameter.QUERY, description='run|object'),
+        OpenApiParameter('label', str, OpenApiParameter.QUERY),
+        OpenApiParameter('months', int, OpenApiParameter.QUERY),
+    ],
+)
 @api_view(['GET'])
 def get_time_distribution(request):
     """
@@ -602,15 +723,22 @@ def get_time_distribution(request):
     except Exception as e:
         return Response({'error': str(e)}, status=400)
 
+# Scoped throttling for time distribution and dashboard stats
+get_time_distribution.throttle_classes = [ScopedRateThrottle]
+get_time_distribution.throttle_scope = 'plots'
+get_visibility_plot.throttle_classes = [ScopedRateThrottle]
+get_visibility_plot.throttle_scope = 'plots'
+get_sky_fov.throttle_classes = [ScopedRateThrottle]
+get_sky_fov.throttle_scope = 'plots'
+get_observing_conditions.throttle_classes = [ScopedRateThrottle]
+get_observing_conditions.throttle_scope = 'plots'
 
 @api_view(['GET'])
 def get_bokeh_version(request):
-    """Return the installed Python Bokeh version so the frontend can load the matching JS."""
-    try:
-        import bokeh
-        return Response({ 'version': getattr(bokeh, '__version__', '') })
-    except Exception as e:
-        return Response({ 'version': '', 'error': str(e) }, status=200)
+    """
+    DEPRECATED: Bokeh version is surfaced via admin health; frontend loads version from env.
+    """
+    return Response({ 'version': '' }, status=410)
 
 # ===============================================================
 #   DATA FILE
@@ -620,8 +748,7 @@ class DataFileViewSet(viewsets.ModelViewSet):
     """
         Returns a list of all stars/objects in the database
     """
-
-    queryset = DataFile.objects.all()
+    queryset = DataFile.objects.select_related('observation_run').all()
     serializer_class = DataFileSerializer
     pagination_class = DataFilesPagination
 
@@ -673,6 +800,14 @@ def getDashboardStats(request):
     """
     Get statistics for the dashboard including file counts, types and object statistics
     """
+    # Short-lived cache to avoid repeated heavy computations
+    try:
+        from django.core.cache import cache
+        cached = cache.get('dashboard_stats_v1')
+        if cached:
+            return Response(cached)
+    except Exception:
+        cached = None
     # Set time frame of 7 days
     dtime_naive = datetime.now() - timedelta(days=7)
     aware_datetime = make_aware(dtime_naive)
@@ -732,7 +867,16 @@ def getDashboardStats(request):
     data_path = env("DATA_DIRECTORY", default='/archive/ftp/')
     stats['files']['storage_size'] = get_size_dir(data_path) * pow(1000, -4)  # Convert to TB
 
+    try:
+        if 'cache' in globals() or 'cache' in locals():
+            cache.set('dashboard_stats_v1', stats, timeout=300)  # 5 minutes
+    except Exception:
+        pass
     return Response(stats)
+
+# Throttle dashboard stats modestly
+getDashboardStats.throttle_classes = [ScopedRateThrottle]
+getDashboardStats.throttle_scope = 'stats'
 
 @api_view(['POST'])
 def create_download_job_bulk(request):
@@ -1106,6 +1250,7 @@ def admin_trigger_orphans_hashcheck(request):
     except Exception as e:
         return Response({'enqueued': False, 'error': str(e)}, status=400)
 
+@extend_schema(summary='Admin system health (admin only)')
 @api_view(['GET'])
 @permission_classes([IsAdminUser])
 def admin_health(request):

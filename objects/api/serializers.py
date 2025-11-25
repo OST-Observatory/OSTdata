@@ -1,4 +1,5 @@
 from django.urls import reverse
+from django.utils import timezone
 
 from rest_framework.serializers import (
     ModelSerializer,
@@ -153,8 +154,23 @@ class ObjectListSerializer(ModelSerializer):
             # Observed start/end from science frames with valid HJD
             try:
                 valid = df_science.filter(hjd__gt=2451545).order_by('hjd')
-                observed_start = valid.first().obs_date if valid.exists() else None
-                observed_end = valid.last().obs_date if valid.exists() else None
+                observed_start = None
+                observed_end = None
+                if valid.exists():
+                    s = valid.first().obs_date
+                    e = valid.last().obs_date
+                    try:
+                        if s is not None:
+                            if timezone.is_naive(s):
+                                s = timezone.make_aware(s, timezone.get_current_timezone())
+                            observed_start = s.isoformat()
+                        if e is not None:
+                            if timezone.is_naive(e):
+                                e = timezone.make_aware(e, timezone.get_current_timezone())
+                            observed_end = e.isoformat()
+                    except Exception:
+                        observed_start = None
+                        observed_end = None
             except Exception:
                 observed_start = None
                 observed_end = None
@@ -162,7 +178,8 @@ class ObjectListSerializer(ModelSerializer):
             result.append({
                 'pk': run.pk,
                 'name': run.name,
-                'href': reverse('obs_runs:run_detail', args=[run.pk]),
+                # SPA route to run detail
+                'href': f"/observation-runs/{run.pk}",
                 'reduction_status': run.reduction_status,
                 'reduction_status_display': run.get_reduction_status_display(),
                 'n_light': df_science.count(),
@@ -199,7 +216,8 @@ class ObjectListSerializer(ModelSerializer):
             return []
 
     def get_href(self, obj):
-        return reverse('objects:object_detail', args=[obj.pk])
+        # SPA route to object detail
+        return f"/objects/{obj.pk}"
 
     def get_object_type_display(self, obj):
         return obj.get_object_type_display()

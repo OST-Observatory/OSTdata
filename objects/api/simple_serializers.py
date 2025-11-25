@@ -26,4 +26,5 @@ class ObjectSimpleSerializer(ModelSerializer):
         read_only_fields = ('pk',)
 
     def get_href(self, obj):
-        return reverse('objects:object_detail', args=[obj.pk])
+        # Return SPA route to object detail
+        return f"/objects/{obj.pk}"

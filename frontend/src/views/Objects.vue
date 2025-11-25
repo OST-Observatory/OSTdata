@@ -341,14 +341,19 @@
 
           <!-- Tags column -->
           <template v-slot:item.tags="{ item }">
-            <v-chip
-              v-for="tag in item.tags"
-              :key="tag"
-              size="small"
-              class="mr-1"
-            >
-              {{ tag }}
-            </v-chip>
+            <div class="d-flex flex-wrap gap-1">
+              <v-chip
+                v-for="tag in normalizeTags(item.tags)"
+                :key="tag.name"
+                :color="tag.color || 'primary'"
+                size="x-small"
+                variant="outlined"
+                class="mr-1"
+              >
+                {{ tag.name }}
+              </v-chip>
+              <span v-if="!item?.tags || normalizeTags(item.tags).length === 0" class="text-secondary text-caption">—</span>
+            </div>
           </template>
 
           <!-- Observation Runs column -->
@@ -709,6 +714,18 @@ const sortOptions = [
 
 // Methods
 const formatDate = (date) => formatDateTime(date, { dateStyle: 'short' })
+
+// Normalize tags coming as objects or strings to a common shape for rendering
+const normalizeTags = (tags) => {
+  if (!tags) return []
+  if (Array.isArray(tags)) {
+    return tags.map(t => {
+      if (typeof t === 'string') return { name: t, color: undefined }
+      return { name: t?.name || t?.label || String(t), color: t?.color }
+    })
+  }
+  return []
+}
 
 const formatRA = (ra) => {
   if (ra === undefined || ra === null) return 'N/A'

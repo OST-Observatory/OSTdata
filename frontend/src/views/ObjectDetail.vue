@@ -239,42 +239,105 @@
           <v-expand-transition>
             <div v-show="showObservationRuns" id="object-observation-runs">
               <div class="px-4">
-              <v-data-table
-                :headers="observationRunHeaders"
-                :items="observationRuns"
-                :loading="loadingObservationRuns"
-                class="elevation-1"
-              >
-                <template v-slot:item.name="{ item }">
-                  <router-link :to="`/observation-runs/${item.pk}`" class="text-decoration-none">
-                    {{ formatRunName(item) }}
-                  </router-link>
-                </template>
-                <template v-slot:item.n_fits="{ item }">
-                  {{ item.n_fits }}/{{ item.n_img }}/{{ item.n_ser }}
-                </template>
-                <template v-slot:item.expo_time="{ item }">
-                  {{ formatExposureTime(item.expo_time) }}
-                </template>
-                <template v-slot:item.tags="{ item }">
-                  <div class="d-flex flex-wrap gap-1">
-                    <v-chip
-                      v-for="tag in item.tags"
-                      :key="tag.pk"
-                      :color="tag.color"
-                      variant="outlined"
-                      size="x-small"
-                    >
-                      {{ tag.name }}
-                    </v-chip>
-                  </div>
-                </template>
-                <template v-slot:item.reduction_status="{ item }">
-                  <v-icon :color="getStatusColor(item.reduction_status)" size="small">
-                    {{ getStatusIcon(item.reduction_status) }}
-                  </v-icon>
-                </template>
-              </v-data-table>
+              <v-table class="custom-table">
+                <thead>
+                  <tr>
+                    <th class="text-primary">Date</th>
+                    <th class="text-primary">Nobs</th>
+                    <th class="text-primary">Exposure Time [s]</th>
+                    <th class="text-primary">Tags</th>
+                    <th class="text-primary">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="item in obsRunPagedItems" :key="item.pk || item.id">
+                    <td>
+                      <router-link :to="`/observation-runs/${item.pk || item.id}`" class="text-decoration-none">
+                        {{ formatRunName(item) }}
+                      </router-link>
+                    </td>
+                    <td>{{ item.n_fits }}/{{ item.n_img }}/{{ item.n_ser }}</td>
+                    <td>{{ formatExposureTime(item.expo_time) }}</td>
+                    <td>
+                      <div class="d-flex flex-wrap gap-1">
+                        <v-chip
+                          v-for="tag in (item.tags || [])"
+                          :key="tag.pk || tag.name"
+                          :color="tag.color"
+                          variant="outlined"
+                          size="x-small"
+                        >
+                          {{ tag.name }}
+                        </v-chip>
+                      </div>
+                    </td>
+                    <td>
+                      <v-icon :color="getStatusColor(item.reduction_status)" size="small">
+                        {{ getStatusIcon(item.reduction_status) }}
+                      </v-icon>
+                    </td>
+                  </tr>
+                  <tr v-if="!Array.isArray(observationRuns) || observationRuns.length === 0">
+                    <td colspan="5" class="text-caption text-secondary">No runs.</td>
+                  </tr>
+                </tbody>
+              </v-table>
+              <v-card-actions class="d-flex align-center justify-space-between px-4 py-2 card-actions-responsive">
+                <div class="d-flex align-center actions-left">
+                  <span class="text-body-2 mr-4">Items per page:</span>
+                  <v-select
+                    v-model="runItemsPerPage"
+                    :items="runPageSizeOptions"
+                    item-title="title"
+                    item-value="value"
+                    density="compact"
+                    variant="outlined"
+                    hide-details
+                    class="items-per-page-select"
+                    style="width: 100px"
+                    @update:model-value="handleRunItemsPerPageChange"
+                    aria-label="Items per page"
+                  ></v-select>
+                </div>
+
+                <div class="d-flex align-center actions-right">
+                  <span class="text-body-2 mr-4">
+                    {{ obsRunPaginationInfo }}
+                  </span>
+                  <v-btn
+                    icon="mdi-page-first"
+                    variant="text"
+                    :disabled="runPage === 1"
+                    @click="handleRunPageChange(1)"
+                    class="mx-1 pagination-btn"
+                    aria-label="First page"
+                  ></v-btn>
+                  <v-btn
+                    icon="mdi-chevron-left"
+                    variant="text"
+                    :disabled="runPage === 1"
+                    @click="handleRunPageChange(runPage - 1)"
+                    class="mx-1 pagination-btn"
+                    aria-label="Previous page"
+                  ></v-btn>
+                  <v-btn
+                    icon="mdi-chevron-right"
+                    variant="text"
+                    :disabled="runPage >= obsRunTotalPages"
+                    @click="handleRunPageChange(runPage + 1)"
+                    class="mx-1 pagination-btn"
+                    aria-label="Next page"
+                  ></v-btn>
+                  <v-btn
+                    icon="mdi-page-last"
+                    variant="text"
+                    :disabled="runPage >= obsRunTotalPages"
+                    @click="handleRunPageChange(obsRunTotalPages)"
+                    class="mx-1 pagination-btn"
+                    aria-label="Last page"
+                  ></v-btn>
+                </div>
+              </v-card-actions>
               </div>
             </div>
           </v-expand-transition>
@@ -624,6 +687,16 @@ const loadingObservationRuns = ref(false)
 const loadingDataFiles = ref(false)
 const objDfPage = ref(1)
 const objDfItemsPerPage = ref(10)
+// Client-side pagination for Observation Runs table
+const runPage = ref(1)
+const runItemsPerPage = ref(10)
+const runPageSizeOptions = [
+  { title: '10', value: 10 },
+  { title: '25', value: 25 },
+  { title: '50', value: 50 },
+  { title: '100', value: 100 },
+  { title: 'All', value: -1 },
+]
 const basicDialog = ref(false)
 const savingBasic = ref(false)
 const basicCloseBtn = ref(null)
@@ -1094,6 +1167,34 @@ const handleObjDfItemsPerPageChange = () => {
   objDfPage.value = 1
 }
 
+// Observation runs pagination helpers
+const obsRunPagedItems = computed(() => {
+  const items = Array.isArray(observationRuns.value) ? observationRuns.value : []
+  if (runItemsPerPage.value === -1) return items
+  const start = (runPage.value - 1) * runItemsPerPage.value
+  return items.slice(start, start + runItemsPerPage.value)
+})
+const obsRunTotalPages = computed(() => {
+  const total = Array.isArray(observationRuns.value) ? observationRuns.value.length : 0
+  if (runItemsPerPage.value === -1) return 1
+  return Math.max(1, Math.ceil(total / (runItemsPerPage.value || 10)))
+})
+const obsRunPaginationInfo = computed(() => {
+  const total = Array.isArray(observationRuns.value) ? observationRuns.value.length : 0
+  if (runItemsPerPage.value === -1) return `Showing all ${total}`
+  const start = (runPage.value - 1) * runItemsPerPage.value + 1
+  const end = Math.min(runPage.value * runItemsPerPage.value, total)
+  return `${start}-${end} of ${total}`
+})
+const handleRunPageChange = (newPage) => {
+  if (newPage >= 1 && newPage <= obsRunTotalPages.value) {
+    runPage.value = newPage
+  }
+}
+const handleRunItemsPerPageChange = () => {
+  runPage.value = 1
+}
+
 const resetDfFilters = () => {
   dfFilterFileName.value = ''
   dfFilterType.value = ''
@@ -1288,5 +1389,20 @@ watch(object, (val) => {
 
 .expand-clickable:hover {
   background-color: rgba(var(--v-theme-primary), 0.04);
+}
+
+/* Align observation runs table styling with other detail tables */
+.v-data-table :deep(th) {
+  position: sticky;
+  top: 0;
+  background: rgb(var(--v-theme-surface));
+  z-index: 2;
+}
+.v-data-table :deep(.v-data-table__wrapper) {
+  overflow-x: auto;
+  overflow-y: visible;
+}
+.v-data-table :deep(td) {
+  padding: 8px 16px !important;
 }
 </style> 

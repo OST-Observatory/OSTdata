@@ -16,15 +16,17 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import include, path
 from django.views.generic import RedirectView, TemplateView
+from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView, SpectacularRedocView
 
 from rest_framework import routers
 
-from obs_run import views as run_views
+# Legacy server-rendered views have been removed
 
 router = routers.DefaultRouter()
 
 urlpatterns = [
-    path('', RedirectView.as_view(pattern_name='dashboard')),
+    # Root: hand off to frontend (served separately) or keep as is
+    path('', RedirectView.as_view(url='/')),
     path(
         "robots.txt",
         TemplateView.as_view(
@@ -32,23 +34,19 @@ urlpatterns = [
             content_type="text/plain",
             ),
     ),
-    path(
-        'w/documentation/',
-        TemplateView.as_view(template_name='documentation.html'),
-        name='documentation',
-    ),
-    path('w/dashboard/', run_views.dashboard, name='dashboard'),
-    path('w/runs/', include('obs_run.urls')),
-    path('w/tags/', include('tags.urls')),
-    path('w/objects/', include('objects.urls')),
+    # Removed legacy Django-rendered frontend routes under /w/*
 
     path('api/', include(router.urls), name='api'),
     path('api/runs/', include("obs_run.api.urls", namespace='runs-api')),
     path('api/tags/', include("tags.api.urls", namespace='tags-api')),
     path('api/objects/', include("objects.api.urls", namespace='objects-api')),
     path('api/users/', include("users.api.urls", namespace='users-api')),
+    # OpenAPI schema and docs
+    path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
+    path('api/schema/swagger-ui/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
+    path('api/schema/redoc/', SpectacularRedocView.as_view(url_name='schema'), name='redoc'),
 
     path(r'admin/', admin.site.urls),
 
-    path('accounts/', include('django.contrib.auth.urls')),
+    # Legacy Django auth routes removed; SPA handles authentication
 ]

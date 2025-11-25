@@ -260,7 +260,7 @@ const toggleTheme = () => {
   try { localStorage.setItem('theme', newName) } catch {}
 }
 const display = useDisplay()
-const isMobile = computed(() => display.smAndDown.value)
+const isMobile = computed(() => display.mdAndDown.value)
 
 // Site-wide banner (public)
 type Banner = { enabled: boolean; message: string; level: 'info' | 'success' | 'warning' | 'error' }
@@ -434,6 +434,11 @@ const isActive = (base: string) => {
 .app-bar {
   box-shadow: var(--v-theme-app-bar-shadow) !important;
   border-bottom: var(--v-theme-app-bar-border);
+}
+
+/* Ensure Vuetify toolbar content inside app bar has right padding */
+.app-bar :deep(.v-toolbar__content) {
+  padding-right: 8px !important;
 }
 
 .main-content {

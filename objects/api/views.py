@@ -12,6 +12,8 @@ from django.db.models import Q, Value
 from django.db.models.functions import Replace
 from django.db.models import Count, Q
 from rest_framework.decorators import action
+from drf_spectacular.utils import extend_schema, OpenApiParameter
+from django.utils.http import http_date
 
 from .serializers import ObjectListSerializer
 
@@ -75,7 +77,7 @@ class ObjectViewSet(viewsets.ModelViewSet):
             return False
 
     def get_queryset(self):
-        queryset = super().get_queryset()
+        queryset = super().get_queryset().prefetch_related('tags', 'observation_run', 'datafiles')
         ordering = self.request.query_params.get('ordering', '')
         
         # Handle last_modified sorting using history
@@ -104,6 +106,52 @@ class ObjectViewSet(viewsets.ModelViewSet):
             return queryset.filter(is_public=True)
         return queryset
 
+    @extend_schema(
+        summary='List objects',
+        description='Paginated list of objects with filters and ordering.',
+        parameters=[
+            OpenApiParameter('page', int, OpenApiParameter.QUERY),
+            OpenApiParameter('limit', int, OpenApiParameter.QUERY),
+            OpenApiParameter('ordering', str, OpenApiParameter.QUERY),
+            OpenApiParameter('object_type', str, OpenApiParameter.QUERY),
+            OpenApiParameter('photometry', bool, OpenApiParameter.QUERY),
+            OpenApiParameter('spectroscopy', bool, OpenApiParameter.QUERY),
+        ],
+    )
+    def list(self, request, *args, **kwargs):
+        # Validate 'ordering' param explicitly to avoid invalid field errors
+        ordering_param = (request.query_params.get('ordering') or '').strip()
+        if ordering_param:
+            field = ordering_param.lstrip('-')
+            allowed = set(self.ordering_fields or [])
+            if field not in allowed and field not in ('last_modified',):
+                return Response({'detail': f'Invalid ordering: {field}'}, status=400)
+        # Conditional GET headers (ETag/Last-Modified) for the list
+        try:
+            from django.db.models import Max
+            from objects.models import Object as ObjectModel
+            latest_hist = ObjectModel.history.aggregate(m=Max('history_date'))['m']
+            # Compute queryset and count for signature (after filters)
+            queryset = self.filter_queryset(self.get_queryset())
+            count = queryset.count()
+            sig = f"objects:{count}:{str(latest_hist)}:{hash(request.META.get('QUERY_STRING',''))}"
+            etag = f"W/\"{abs(hash(sig))}\""
+            if request.META.get('HTTP_IF_NONE_MATCH') == etag:
+                return Response(status=304)
+        except Exception:
+            etag = None
+            latest_hist = None
+            queryset = None
+        # Let DRF handle pagination/serialization
+        response = super().list(request, *args, **kwargs)
+        try:
+            if etag:
+                response['ETag'] = etag
+            if latest_hist:
+                response['Last-Modified'] = http_date(int(latest_hist.timestamp()))
+        except Exception:
+            pass
+        return response
     def get_permissions(self):
         # Use authenticated-or-readonly; enforce ACL in handlers for unsafe ops
         return [IsAuthenticatedOrReadOnly()]
@@ -325,7 +373,7 @@ class ObjectVuetifyViewSet(viewsets.ModelViewSet):
             return False
 
     def get_queryset(self):
-        queryset = super().get_queryset()
+        queryset = super().get_queryset().prefetch_related('tags', 'observation_run', 'datafiles')
         
         # Handle search parameter
         search = self.request.query_params.get('search', None)
@@ -423,6 +471,48 @@ class ObjectVuetifyViewSet(viewsets.ModelViewSet):
 
         return queryset.distinct()  # Ensure we don't get duplicate objects
 
+    def list(self, request, *args, **kwargs):
+        # Validate sortBy param
+        sort_by = request.query_params.get('sortBy', None)
+        if sort_by:
+            field = str(sort_by).lstrip('-')
+            allowed = set(self.ordering_fields or [])
+            if field not in allowed:
+                return Response({'detail': f'Invalid sortBy: {field}'}, status=400)
+        return super().list(request, *args, **kwargs)
+
+    @extend_schema(summary='Retrieve object', description='Get an object by ID.')
+    def retrieve(self, request, *args, **kwargs):
+        """Detail with conditional GET headers."""
+        instance = self.get_object()
+        try:
+            hist = instance.history.order_by('-history_date').values_list('history_date', flat=True).first()
+        except Exception:
+            hist = None
+        sig = f"object:{instance.pk}:{str(hist)}"
+        etag = f"W/\"{abs(hash(sig))}\""
+        if request.META.get('HTTP_IF_NONE_MATCH') == etag:
+            return Response(status=304)
+        response = super().retrieve(request, *args, **kwargs)
+        try:
+            if etag:
+                response['ETag'] = etag
+            if hist:
+                response['Last-Modified'] = http_date(int(hist.timestamp()))
+        except Exception:
+            pass
+        return response
+
+    @extend_schema(
+        summary='List objects (Vuetify table optimized)',
+        parameters=[
+            OpenApiParameter('page', int, OpenApiParameter.QUERY),
+            OpenApiParameter('limit', int, OpenApiParameter.QUERY),
+            OpenApiParameter('sortBy', str, OpenApiParameter.QUERY),
+            OpenApiParameter('sortDesc', bool, OpenApiParameter.QUERY),
+            OpenApiParameter('search', str, OpenApiParameter.QUERY),
+        ],
+    )
     def list(self, request, *args, **kwargs):
         queryset = self.get_queryset()
         page = self.paginate_queryset(queryset)

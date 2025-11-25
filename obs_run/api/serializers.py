@@ -1,4 +1,5 @@
 from django.urls import reverse
+from django.utils import timezone
 
 from rest_framework.serializers import (
     ModelSerializer,
@@ -76,7 +77,8 @@ class RunListSerializer(ModelSerializer):
         return tags
 
     def get_href(self, obj):
-        return reverse('obs_runs:run_detail', args=[obj.pk])
+        # Return SPA route instead of Django reverse (legacy templates removed)
+        return f"/observation-runs/{obj.pk}"
 
     def get_reduction_status_display(self, obj):
         return obj.get_reduction_status_display()
@@ -126,22 +128,40 @@ class RunListSerializer(ModelSerializer):
         return total_expo_time
 
     def get_start_time(self, obj):
-        #   Filter JD to avoid files with the default date (2000:01:01 00:00:00)
+        # Filter JD to avoid files with the default date; return ISO-8601
         data_files = obj.datafile_set.filter(hjd__gt=2451545).order_by('hjd')
-        if len(data_files) > 0:
-            return data_files[0].obs_date
-        else:
-            return '2000-01-01 00:00:00'
+        if data_files.exists():
+            dt = data_files.first().obs_date
+            try:
+                # If it's a datetime
+                if hasattr(dt, 'isoformat'):
+                    if timezone.is_naive(dt):
+                        dt = timezone.make_aware(dt, timezone.get_current_timezone())
+                    return dt.isoformat()
+                # If it's a string already
+                if isinstance(dt, str):
+                    return dt
+            except Exception:
+                pass
+            return '2000-01-01T00:00:00Z'
+        return '2000-01-01T00:00:00Z'
 
     def get_end_time(self, obj):
-        #   Filter JD to avoid files with the default date (2000:01:01 00:00:00)
-        data_files = obj.datafile_set.filter(
-            hjd__gt=2451545
-        ).order_by('hjd').reverse()
-        if len(data_files) > 0:
-            return data_files[0].obs_date
-        else:
-            return '2000-01-01 00:00:00'
+        # Filter JD to avoid files with the default date; return ISO-8601
+        data_files = obj.datafile_set.filter(hjd__gt=2451545).order_by('-hjd')
+        if data_files.exists():
+            dt = data_files.first().obs_date
+            try:
+                if hasattr(dt, 'isoformat'):
+                    if timezone.is_naive(dt):
+                        dt = timezone.make_aware(dt, timezone.get_current_timezone())
+                    return dt.isoformat()
+                if isinstance(dt, str):
+                    return dt
+            except Exception:
+                pass
+            return '2000-01-01T00:00:00Z'
+        return '2000-01-01T00:00:00Z'
 
     def get_objects(self, obj):
         objects = ObjectSimpleSerializer(obj.object_set.all(), many=True).data
@@ -194,7 +214,8 @@ class RunSerializer(ModelSerializer):
         read_only_fields = ('pk', 'tags', 'reduction_status_display')
 
     def get_href(self, obj):
-        return reverse('obs_runs:run_detail', args=[obj.pk])
+        # Return SPA route instead of Django reverse (legacy templates removed)
+        return f"/observation-runs/{obj.pk}"
 
     def get_tags(self, obj):
         #   This has to be used instead of a through field, as otherwise
@@ -230,18 +251,38 @@ class RunSerializer(ModelSerializer):
         return total_expo_time
 
     def get_start_time(self, obj):
-        # Filter JD to avoid default date (2000-01-01 00:00:00)
+        # Return ISO-8601 timestamp
         data_files = obj.datafile_set.filter(hjd__gt=2451545).order_by('hjd')
         if data_files.exists():
-            return data_files.first().obs_date
-        return '2000-01-01 00:00:00'
+            dt = data_files.first().obs_date
+            try:
+                if hasattr(dt, 'isoformat'):
+                    if timezone.is_naive(dt):
+                        dt = timezone.make_aware(dt, timezone.get_current_timezone())
+                    return dt.isoformat()
+                if isinstance(dt, str):
+                    return dt
+            except Exception:
+                pass
+            return '2000-01-01T00:00:00Z'
+        return '2000-01-01T00:00:00Z'
 
     def get_end_time(self, obj):
-        # Filter JD to avoid default date (2000-01-01 00:00:00)
+        # Return ISO-8601 timestamp
         data_files = obj.datafile_set.filter(hjd__gt=2451545).order_by('-hjd')
         if data_files.exists():
-            return data_files.first().obs_date
-        return '2000-01-01 00:00:00'
+            dt = data_files.first().obs_date
+            try:
+                if hasattr(dt, 'isoformat'):
+                    if timezone.is_naive(dt):
+                        dt = timezone.make_aware(dt, timezone.get_current_timezone())
+                    return dt.isoformat()
+                if isinstance(dt, str):
+                    return dt
+            except Exception:
+                pass
+            return '2000-01-01T00:00:00Z'
+        return '2000-01-01T00:00:00Z'
 
 
 ################################################################################
@@ -265,7 +306,8 @@ class SimpleRunSerializer(ModelSerializer):
         read_only_fields = ('pk',)
 
     def get_href(self, obj):
-        return reverse('runs:run_detail', args=[obj.pk])
+        # Return SPA route instead of Django reverse (legacy templates removed)
+        return f"/observation-runs/{obj.pk}"
 
 
 # ===============================================================

@@ -1,6 +1,6 @@
 <template>
   <v-container fluid class="runs">
-      <div class="d-flex align-center justify-space-between mb-4">
+      <div class="d-flex align-center justify-space-between mb-4 header-bar">
         <h1 class="text-h4">Observation Runs</h1>
         <div class="d-flex align-center" style="gap: 8px">
           <div class="d-inline-block">
@@ -9,8 +9,11 @@
               color="primary"
               prepend-icon="mdi-eye"
               :disabled="!selected.length || !canPublish"
+              :size="isMobile ? 'default' : undefined"
               @click="bulkPublish(true)"
-            >Publish ({{ selected.length }})</v-btn>
+            >
+              <span class="btn-label">Publish ({{ selected.length }})</span>
+            </v-btn>
             <v-tooltip v-if="!canPublish || !selected.length" activator="parent" location="top">
               {{ !selected.length ? 'Select runs first' : 'No permission' }}
             </v-tooltip>
@@ -21,8 +24,11 @@
               color="secondary"
               prepend-icon="mdi-eye-off"
               :disabled="!selected.length || !canPublish"
+              :size="isMobile ? 'default' : undefined"
               @click="bulkPublish(false)"
-            >Unpublish ({{ selected.length }})</v-btn>
+            >
+              <span class="btn-label">Unpublish ({{ selected.length }})</span>
+            </v-btn>
             <v-tooltip v-if="!canPublish || !selected.length" activator="parent" location="top">
               {{ !selected.length ? 'Select runs first' : 'No permission' }}
             </v-tooltip>
@@ -375,6 +381,7 @@
 
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
+import { useDisplay } from 'vuetify'
 import { api } from '@/services/api'
 import { formatDateTime } from '@/utils/datetime'
 import { getStatusColor } from '@/utils/status'
@@ -392,7 +399,7 @@ const error = ref(null)
 const currentPage = ref(1)
 const itemsPerPage = ref(10)
 const totalItems = ref(0)
-const sortKey = ref('start_time')
+const sortKey = ref('mid_observation_jd')
 const search = ref('')
 const objectFilter = ref('')
 const selectedStatus = ref(null)
@@ -400,6 +407,8 @@ const photometryFilter = ref(null)
 const spectroscopyFilter = ref(null)
 const notify = useNotifyStore()
 const authStore = useAuthStore()
+const display = useDisplay()
+const isMobile = computed(() => display.mdAndDown.value)
 const canAdmin = computed(() => authStore.isAdmin)
 const canEditRun = computed(() => authStore.isAdmin || authStore.hasPerm('users.acl_runs_edit') || authStore.hasPerm('acl_runs_edit'))
 const canPublish = computed(() => authStore.isAdmin || authStore.hasPerm('users.acl_runs_publish') || authStore.hasPerm('acl_runs_publish'))
@@ -420,10 +429,10 @@ const headers = [
 ]
 
 const statusItems = [
-  { title: 'Completed', value: 'completed' },
-  { title: 'In Progress', value: 'in_progress' },
-  { title: 'Error', value: 'error' },
-  { title: 'Not Reduced', value: 'not_reduced' },
+  { title: 'Fully reduced', value: 'FR' },
+  { title: 'Partly reduced', value: 'PR' },
+  { title: 'Reduction error', value: 'ER' },
+  { title: 'New', value: 'NE' },
 ]
 
 const boolFilterItems = [
@@ -750,6 +759,19 @@ watch(runs, (val) => {
 <style scoped>
 .runs {
   padding: 20px 0;
+}
+
+/* Allow title + actions to wrap on small widths */
+.header-bar {
+  flex-wrap: wrap;
+  row-gap: 8px;
+}
+
+/* Hide long button labels on small screens to keep action buttons compact */
+@media (max-width: 540px) {
+  .runs .btn-label {
+    display: none;
+  }
 }
 
 .hi-contrast-switch:not(.v-selection-control--dirty) :deep(.v-switch__track) {

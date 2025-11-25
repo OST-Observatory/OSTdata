@@ -67,16 +67,7 @@ class RunFilter(filters.FilterSet):
         lookup_expr='lte',
     )
 
-    exposure_time_min = filters.NumberFilter(
-        field_name="datafile",
-        method='filter_exposure_time_gt',
-        lookup_expr='gte',
-    )
-    exposure_time_max = filters.NumberFilter(
-        field_name="datafile",
-        method='filter_exposure_time_lt',
-        lookup_expr='lte',
-    )
+    # Exposure time filters removed (not implemented server-side for runs)
 
 
     #   Method definitions for the filter definitions above
