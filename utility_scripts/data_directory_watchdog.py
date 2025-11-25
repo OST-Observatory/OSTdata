@@ -16,12 +16,12 @@ import environ
 import django
 from django.conf import settings
 
-from utilities import (
+from OSTdata.utilities import (
     add_new_observation_run,
     add_new_data_file,
     evaluate_data_file,
+    compute_file_hash,
 )
-from utilities import compute_file_hash
 
 # sys.path.append('../')
 os.environ["DJANGO_SETTINGS_MODULE"] = "ostdata.settings"
