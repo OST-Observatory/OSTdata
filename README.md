@@ -514,7 +514,7 @@ WATCH_STABILITY_SECONDS=0
 Run the watcher (manual):
 
 ```
-python OSTdata/utility_scripts/data_directory_watchdog.py
+python OSTdata/data_directory_watchdog.py
 ```
 
 Run the watcher as systemd service (recommended):
@@ -535,7 +535,7 @@ Group=www-data
 WorkingDirectory=/path/to/OSTdata
 Environment=PYTHONUNBUFFERED=1
 Environment=DJANGO_SETTINGS_MODULE=ostdata.settings
-ExecStart=/path/to/venv/bin/python OSTdata/utility_scripts/data_directory_watchdog.py
+ExecStart=/path/to/venv/bin/python OSTdata/data_directory_watchdog.py
 Restart=always
 RestartSec=5
 

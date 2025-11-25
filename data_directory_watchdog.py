@@ -16,7 +16,7 @@ import environ
 import django
 from django.conf import settings
 
-from OSTdata.utilities import (
+from utilities import (
     add_new_observation_run,
     add_new_data_file,
     evaluate_data_file,
