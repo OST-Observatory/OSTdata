@@ -92,3 +92,10 @@ LOGGING = {
 # Email settings
 
 DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL")
+
+# Security headers (production defaults)
+SESSION_COOKIE_SECURE = True
+CSRF_COOKIE_SECURE = True
+SECURE_CONTENT_TYPE_NOSNIFF = True
+SECURE_REFERRER_POLICY = 'same-origin'
+X_FRAME_OPTIONS = 'DENY'

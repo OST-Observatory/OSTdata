@@ -2,39 +2,36 @@ from django.urls import include, path
 
 from rest_framework import routers
 
-from .views import (
+from .runs import (
     RunViewSet,
-    DataFileViewSet,
-    getRunDataFile,
     getDashboardStats,
-    batch_cancel_download_jobs,
-    batch_extend_jobs_expiry,
-    batch_expire_jobs_now,
     get_visibility_plot,
     get_observing_conditions,
     get_sky_fov,
     get_time_distribution,
+)
+from .views import (
+    DataFileViewSet,
+    getRunDataFile,
     get_bokeh_version,
     get_datafile_thumbnail,
     get_datafile_header,
     download_datafile,
     download_run_datafiles,
-    admin_health,
-    admin_trigger_cleanup_downloads,
-    admin_trigger_reconcile,
-    admin_trigger_orphans_hashcheck,
     download_datafiles_bulk,
+)
+from .jobs import (
     create_download_job_bulk,
     create_download_job,
     download_job_status,
     cancel_download_job,
     download_job_download,
     list_download_jobs,
-    admin_get_banner,
-    admin_set_banner,
-    admin_clear_banner,
-    banner_info,
+    batch_cancel_download_jobs,
+    batch_extend_jobs_expiry,
+    batch_expire_jobs_now,
 )
+from adminops.api.views import banner_info
 
 app_name = 'runs-api'
 
@@ -64,15 +61,7 @@ urlpatterns = [
     path('jobs/<int:job_id>/cancel', cancel_download_job, name='download_job_cancel'),
     path('jobs/<int:job_id>/download', download_job_download, name='download_job_download'),
     path('jobs/', list_download_jobs, name='download_job_list'),
-    # Admin health
-    path('admin/health/', admin_health, name='admin_health'),
-    path('admin/maintenance/cleanup-downloads/', admin_trigger_cleanup_downloads, name='admin_cleanup_downloads'),
-    path('admin/maintenance/reconcile/', admin_trigger_reconcile, name='admin_reconcile'),
-    path('admin/maintenance/orphans-hashcheck/', admin_trigger_orphans_hashcheck, name='admin_orphans_hashcheck'),
-    # Admin site-wide banner
-    path('admin/banner/', admin_get_banner, name='admin_get_banner'),
-    path('admin/banner/set', admin_set_banner, name='admin_set_banner'),
-    path('admin/banner/clear', admin_clear_banner, name='admin_clear_banner'),
+    # Admin endpoints moved to adminops app under /api/admin/
     path('banner/', banner_info, name='banner_info'),
     # Admin batch job tools
     path('jobs/batch/cancel', batch_cancel_download_jobs, name='download_jobs_batch_cancel'),

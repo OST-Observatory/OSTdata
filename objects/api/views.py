@@ -149,6 +149,8 @@ class ObjectViewSet(viewsets.ModelViewSet):
                 response['ETag'] = etag
             if latest_hist:
                 response['Last-Modified'] = http_date(int(latest_hist.timestamp()))
+            if request.user.is_anonymous:
+                response['Cache-Control'] = 'public, max-age=60'
         except Exception:
             pass
         return response
@@ -518,6 +520,18 @@ class ObjectVuetifyViewSet(viewsets.ModelViewSet):
         page = self.paginate_queryset(queryset)
         if page is not None:
             serializer = self.get_serializer(page, many=True)
-            return self.get_paginated_response(serializer.data)
+            resp = self.get_paginated_response(serializer.data)
+            try:
+                if request.user.is_anonymous:
+                    resp['Cache-Control'] = 'public, max-age=60'
+            except Exception:
+                pass
+            return resp
         serializer = self.get_serializer(queryset, many=True)
-        return Response(serializer.data)
+        resp = Response(serializer.data)
+        try:
+            if request.user.is_anonymous:
+                resp['Cache-Control'] = 'public, max-age=60'
+        except Exception:
+            pass
+        return resp

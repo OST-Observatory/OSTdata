@@ -90,6 +90,13 @@ class ObservationRun(models.Model):
     def __str__(self):
         return self.name
 
+    class Meta:
+        indexes = [
+            models.Index(fields=['mid_observation_jd'], name='run_mid_jd_idx'),
+            models.Index(fields=['reduction_status'], name='run_red_status_idx'),
+            models.Index(fields=['is_public'], name='run_is_public_idx'),
+        ]
+
 
 class DataFile(models.Model):
     """
@@ -279,6 +286,18 @@ class DataFile(models.Model):
             self.exposure_type,
             self.obs_date,
         )
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['observation_run'], name='df_run_idx'),
+            models.Index(fields=['file_type'], name='df_file_type_idx'),
+            models.Index(fields=['exposure_type'], name='df_expo_type_idx'),
+            models.Index(fields=['exptime'], name='df_exptime_idx'),
+            models.Index(fields=['hjd'], name='df_hjd_idx'),
+            models.Index(fields=['instrument'], name='df_instrument_idx'),
+            models.Index(fields=['telescope'], name='df_telescope_idx'),
+            models.Index(fields=['main_target'], name='df_main_target_idx'),
+        ]
 
 
 class DownloadJob(models.Model):

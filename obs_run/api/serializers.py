@@ -32,14 +32,15 @@ class RunListSerializer(ModelSerializer):
         read_only=False,
         source='tags',
     )
-    n_datafiles = SerializerMethodField()
-    n_fits = SerializerMethodField()
-    n_img = SerializerMethodField()
-    n_ser = SerializerMethodField()
-    n_light = SerializerMethodField()
-    n_flat = SerializerMethodField()
-    n_dark = SerializerMethodField()
-    expo_time = SerializerMethodField()
+    # Use annotated fields for list performance; fall back to 0 if missing
+    n_datafiles = ReadOnlyField()
+    n_fits = ReadOnlyField()
+    n_img = ReadOnlyField()
+    n_ser = ReadOnlyField()
+    n_light = ReadOnlyField()
+    n_flat = ReadOnlyField()
+    n_dark = ReadOnlyField()
+    expo_time = ReadOnlyField()
     start_time = SerializerMethodField()
     end_time = SerializerMethodField()
     objects = SerializerMethodField()
@@ -83,49 +84,7 @@ class RunListSerializer(ModelSerializer):
     def get_reduction_status_display(self, obj):
         return obj.get_reduction_status_display()
 
-    def get_n_datafiles(self, obj):
-        datafiles = obj.datafile_set.all()
-        return len(datafiles)
-
-    def get_n_fits(self, obj):
-        # fits = obj.datafile_set.filter(file_type__exact='FITS')
-        # return len(fits)
-        return obj.datafile_set.filter(file_type__exact='FITS').count()
-
-    def get_n_img(self, obj):
-        # jpegs = obj.datafile_set.filter(file_type__exact='JPG')
-        # cr2s = obj.datafile_set.filter(file_type__exact='CR2')
-        # tiffs = obj.datafile_set.filter(file_type__exact='TIFF')
-        # return len(jpegs) + len(cr2s) + len(tiffs)
-        jpegs = obj.datafile_set.filter(file_type__exact='JPG').count()
-        cr2s = obj.datafile_set.filter(file_type__exact='CR2').count()
-        tiffs = obj.datafile_set.filter(file_type__exact='TIFF').count()
-        return jpegs + cr2s + tiffs
-
-    def get_n_ser(self, obj):
-        # sers = obj.datafile_set.filter(file_type__exact='SER')
-        # return len(sers)
-        return obj.datafile_set.filter(file_type__exact='SER').count()
-
-    def get_n_light(self, obj):
-        return obj.datafile_set.filter(exposure_type__exact='LI').count()
-
-    def get_n_flat(self, obj):
-        return obj.datafile_set.filter(exposure_type__exact='FL').count()
-
-    def get_n_dark(self, obj):
-        return obj.datafile_set.filter(exposure_type__exact='DA').count()
-
-    def get_expo_time(self, obj):
-        data_files = obj.datafile_set.all()
-
-        total_expo_time = 0
-        for f in data_files:
-            expo_time = f.exptime
-            if expo_time > 0:
-                total_expo_time += expo_time
-
-        return total_expo_time
+    # Counts/expo_time are provided via queryset annotations for efficiency
 
     def get_start_time(self, obj):
         # Filter JD to avoid files with the default date; return ISO-8601

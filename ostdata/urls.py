@@ -38,6 +38,7 @@ urlpatterns = [
 
     path('api/', include(router.urls), name='api'),
     path('api/runs/', include("obs_run.api.urls", namespace='runs-api')),
+    path('api/admin/', include("adminops.api.urls", namespace='adminops-api')),
     path('api/tags/', include("tags.api.urls", namespace='tags-api')),
     path('api/objects/', include("objects.api.urls", namespace='objects-api')),
     path('api/users/', include("users.api.urls", namespace='users-api')),
