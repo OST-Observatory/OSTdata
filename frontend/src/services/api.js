@@ -103,7 +103,8 @@ export const api = {
   },
 
   // Observation Runs
-  getRecentRuns: () => fetchWithAuth('/runs/runs/?limit=10'),
+  // Recent runs: order by newest mid_observation_jd first
+  getRecentRuns: () => fetchWithAuth('/runs/runs/?limit=20&ordering=-mid_observation_jd'),
   getObservationRun: (id) => fetchWithAuth(`/runs/runs/${id}/`),
   getObservationRuns: (params) => fetchWithAuth('/runs/runs/', { params }),
   getAllObservationRuns: () => fetchWithAuth('/runs/runs/?limit=1000'),  // Get all runs for filtering

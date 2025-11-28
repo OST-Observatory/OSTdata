@@ -159,7 +159,7 @@
                           </template>
                         </v-tooltip>
                       </td>
-                      <td class="text-secondary">{{ formatDate(run.date) }}</td>
+                      <td class="text-secondary">{{ formatDate(run.start_time || run.date) }}</td>
                       <td>
                         <v-chip
                           :color="getStatusColor(run.status || run.reduction_status)"
@@ -407,7 +407,14 @@ export default {
     const fetchRecentRuns = async () => {
       try {
         const response = await api.getRecentRuns()
-        recentRuns.value = response.results || response
+        const items = response.results || response || []
+        // Exclude runs without valid date (mid_observation_jd <= 0 or missing)
+        const filtered = items.filter(r => {
+          const jd = typeof r?.mid_observation_jd === 'number' ? r.mid_observation_jd : Number(r?.mid_observation_jd)
+          return Number.isFinite(jd) && jd > 0
+        })
+        // Keep only top 10 after filtering
+        recentRuns.value = filtered.slice(0, 10)
       } catch (error) {
         console.error('Error fetching recent runs:', error)
       }
