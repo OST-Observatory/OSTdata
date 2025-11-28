@@ -30,6 +30,8 @@ DATABASES = {
 }
 
 FORCE_SCRIPT_NAME = '/data_archive'
+# Ensure STATIC_URL matches the mounted prefix; can still be overridden by env
+STATIC_URL = env('STATIC_URL', default=f"{FORCE_SCRIPT_NAME.rstrip('/')}/static/")
 
 CSRF_TRUSTED_ORIGINS = env.list("TRUSTED_ORIGIN")
 

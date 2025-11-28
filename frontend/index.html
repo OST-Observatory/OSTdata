@@ -2,10 +2,10 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <!-- Favicon: prefer server static path to work in production and with Firefox -->
-    <link rel="icon" href="/static/favicon.ico" sizes="any" />
-    <link rel="icon" type="image/svg+xml" href="/static/favicon.svg" />
-    <link rel="apple-touch-icon" href="/static/apple-touch-icon.png" />
+    <!-- Favicon paths honor VITE_BASE (e.g., /data_archive/) -->
+    <link rel="icon" href="%VITE_BASE%static/favicon.ico" sizes="any" />
+    <link rel="icon" type="image/svg+xml" href="%VITE_BASE%static/favicon.svg" />
+    <link rel="apple-touch-icon" href="%VITE_BASE%static/apple-touch-icon.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="Explore observation runs, objects, files, and statistics in the OST Data Archive." />
     <meta name="theme-color" content="#1584cb" />
