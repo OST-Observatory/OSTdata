@@ -6,6 +6,7 @@ import sys
 import time as _time
 from pathlib import Path
 from typing import Dict, Any
+from datetime import timedelta
 
 from django.db import connection
 from django.utils import timezone
@@ -101,6 +102,76 @@ def gather_admin_health() -> Dict[str, Any]:
     except Exception as e:
         data['redis_error'] = str(e)
     data['redis'] = {'ok': redis_ok, 'latency_ms': redis_latency_ms}
+
+    # AladinLite availability (simple HTTP ping to CDN)
+    try:
+        import urllib.request  # type: ignore
+        aladin_url = 'https://aladin.cds.unistra.fr/AladinLite/api/v3/latest/aladin.js'
+        t0 = _time.time()
+        req = urllib.request.Request(aladin_url, method='HEAD')
+        with urllib.request.urlopen(req, timeout=2.5) as resp:  # nosec - external status check
+            status = getattr(resp, 'status', 200)
+        latency = int((_time.time() - t0) * 1000)
+        data['aladin'] = {
+            'ok': bool(status == 200),
+            'latency_ms': latency,
+            'url': aladin_url,
+            'status_code': status,
+        }
+    except Exception as e:
+        data['aladin'] = {
+            'ok': False,
+            'latency_ms': None,
+            'url': 'https://aladin.cds.unistra.fr/AladinLite/api/v3/latest/aladin.js',
+            'error': str(e),
+        }
+
+    # Download jobs summary
+    try:
+        from obs_run.models import DownloadJob  # lazy import
+        qs = DownloadJob.objects.all()
+        jobs = {
+            'total': qs.count(),
+            'queued': qs.filter(status='queued').count(),
+            'running': qs.filter(status='running').count(),
+            'done': qs.filter(status='done').count(),
+            'failed': qs.filter(status='failed').count(),
+            'cancelled': qs.filter(status='cancelled').count(),
+            'expired': qs.filter(status='expired').count(),
+        }
+        jobs['active'] = jobs['queued'] + jobs['running']
+        # recent (last 24h) finished (done or failed or cancelled)
+        try:
+            since = timezone.now() - timedelta(hours=24)
+            jobs['finished_24h'] = qs.filter(finished_at__gte=since, status__in=['done', 'failed', 'cancelled']).count()
+            jobs['created_24h'] = qs.filter(created_at__gte=since).count()
+        except Exception:
+            pass
+        data['jobs'] = jobs
+    except Exception as e:
+        data['jobs'] = {'error': str(e)}
+
+    # Selected settings (sanitized) and app-specific envs expected by UI
+    try:
+        s = {
+            'debug': bool(getattr(settings, 'DEBUG', False)),
+            'force_script_name': getattr(settings, 'FORCE_SCRIPT_NAME', None),
+            'static_url': getattr(settings, 'STATIC_URL', None),
+            'allowed_hosts': list(getattr(settings, 'ALLOWED_HOSTS', []) or []),
+            'csrf_trusted_origins': list(getattr(settings, 'CSRF_TRUSTED_ORIGINS', []) or []),
+            'cors_allowed_origins': list(getattr(settings, 'CORS_ALLOWED_ORIGINS', []) or []),
+            'django_settings_module': os.environ.get('DJANGO_SETTINGS_MODULE', None),
+            # Values referenced on AdminHealth page
+            'DOWNLOAD_JOB_TTL_HOURS': getattr(settings, 'DOWNLOAD_JOB_TTL_HOURS', None),
+            'DATA_DIRECTORY': os.environ.get('DATA_DIRECTORY', None),
+            'WATCH_DEBOUNCE_SECONDS': os.environ.get('WATCH_DEBOUNCE_SECONDS', None),
+            'WATCH_CREATED_DELAY_SECONDS': os.environ.get('WATCH_CREATED_DELAY_SECONDS', None),
+            'WATCH_STABILITY_SECONDS': os.environ.get('WATCH_STABILITY_SECONDS', None),
+            'SIMBAD_MIN_INTERVAL': os.environ.get('SIMBAD_MIN_INTERVAL', None),
+        }
+        data['settings'] = s
+    except Exception:
+        data['settings'] = {}
 
     # Storage summary
     storage = {'ok': None}

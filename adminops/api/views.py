@@ -39,6 +39,7 @@ from obs_run.tasks import (
     cleanup_orphans_and_hashcheck,
 )
 from ostdata.services.health import gather_admin_health
+from obs_run.models import ObservationRun, DataFile
 
 
 # -------------------- Banner helpers (Redis) --------------------
@@ -108,6 +109,74 @@ def admin_health(request):
     data = gather_admin_health()
     return Response(data, status=200)
 
+@extend_schema(summary='Set observation date (mid JD) for a run', tags=['Admin'])
+@api_view(['POST'])
+@permission_classes([IsAdminUser])
+def admin_run_set_date(request, run_id: int):
+    if not (request.user.is_superuser or request.user.has_perm('users.acl_runs_edit')):
+        return Response({'detail': 'Forbidden'}, status=403)
+    payload = request.data if hasattr(request, 'data') else {}
+    jd = payload.get('jd', None)
+    iso = payload.get('iso') or payload.get('datetime') or payload.get('date')
+    try:
+        run = ObservationRun.objects.get(pk=run_id)
+    except ObservationRun.DoesNotExist:
+        return Response({'detail': 'Run not found'}, status=404)
+    # Compute jd if not provided
+    if jd is None and iso:
+        try:
+            # Prefer astropy if available (authoritative JD conversion)
+            try:
+                from astropy.time import Time  # type: ignore
+                t = Time(str(iso), format='isot', scale='utc') if 'T' in str(iso) else Time(str(iso), format='iso', scale='utc')
+                jd = float(t.jd)
+            except Exception:
+                # Fallback: parse as datetime and convert from Unix epoch
+                from datetime import datetime, timezone
+                s = str(iso).strip().replace(' ', 'T')
+                # Ensure timezone-aware UTC
+                dt = datetime.fromisoformat(s.replace('Z', '+00:00'))
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=timezone.utc)
+                unix = dt.timestamp()  # seconds
+                jd = unix / 86400.0 + 2440587.5
+        except Exception as e:
+            return Response({'detail': f'Invalid datetime: {e}'}, status=400)
+    if jd is None:
+        return Response({'detail': 'jd or iso required'}, status=400)
+    try:
+        run.mid_observation_jd = float(jd)
+        run.save(update_fields=['mid_observation_jd'])
+        return Response({'pk': run.pk, 'name': run.name, 'mid_observation_jd': run.mid_observation_jd})
+    except Exception as e:
+        logger.exception("Failed to set mid_observation_jd for run %s: %s", run_id, e)
+        return Response({'detail': str(e)}, status=400)
+
+@extend_schema(summary='Recompute observation date (mid JD) from files', tags=['Admin'])
+@api_view(['POST'])
+@permission_classes([IsAdminUser])
+def admin_run_recompute_date(request, run_id: int):
+    if not (request.user.is_superuser or request.user.has_perm('users.acl_runs_edit')):
+        return Response({'detail': 'Forbidden'}, status=403)
+    try:
+        run = ObservationRun.objects.get(pk=run_id)
+    except ObservationRun.DoesNotExist:
+        return Response({'detail': 'Run not found'}, status=404)
+    try:
+        qs = DataFile.objects.filter(observation_run=run, hjd__gt=2451545)
+        a = qs.order_by('hjd').values_list('hjd', flat=True).first()
+        b = qs.order_by('-hjd').values_list('hjd', flat=True).first()
+        if a is None and b is None:
+            run.mid_observation_jd = 0.0
+        elif a is None or b is None:
+            run.mid_observation_jd = float(a or b or 0.0)
+        else:
+            run.mid_observation_jd = float(a + (b - a) / 2.0)
+        run.save(update_fields=['mid_observation_jd'])
+        return Response({'pk': run.pk, 'name': run.name, 'mid_observation_jd': run.mid_observation_jd})
+    except Exception as e:
+        logger.exception("Failed to recompute mid_observation_jd for run %s: %s", run_id, e)
+        return Response({'detail': str(e)}, status=400)
 
 class AdminReconcileRequestSerializer(serializers.Serializer):
     dry_run = serializers.BooleanField(required=False, default=True)

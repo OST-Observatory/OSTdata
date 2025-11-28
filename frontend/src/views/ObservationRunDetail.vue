@@ -9,6 +9,14 @@
               Basic Data
               <div class="d-flex align-center" style="gap: 8px">
                 <v-btn
+                  v-if="canEditRun"
+                    icon="mdi-pencil-box"
+                  size="small"
+                  variant="text"
+                  aria-label="Edit observation run"
+                  @click="openRunEdit"
+                ></v-btn>
+                <v-btn
                   v-if="isAuthenticated"
                   icon="mdi-pencil"
                   size="small"
@@ -125,6 +133,70 @@
           </v-card>
         </v-col>
       </v-row>
+
+      <!-- Edit Observation Run Dialog -->
+      <v-dialog v-model="runEditDialog" max-width="640" aria-labelledby="edit-run-title">
+        <v-card>
+          <v-card-title id="edit-run-title">Edit Observation Run</v-card-title>
+          <v-card-text>
+            <v-row dense class="mb-2">
+              <v-col cols="12" sm="6">
+                <v-text-field v-model="runEditForm.name" label="Name" variant="outlined" density="comfortable" hide-details />
+              </v-col>
+              <v-col cols="12" sm="6">
+                <v-select
+                  v-model="runEditForm.reduction_status"
+                  :items="runStatusOptions"
+                  item-title="title"
+                  item-value="value"
+                  label="Reduction status"
+                  variant="outlined"
+                  density="comfortable"
+                  hide-details
+                />
+              </v-col>
+            </v-row>
+            <v-row dense class="mb-2">
+              <v-col cols="12" sm="4">
+                <v-switch v-model="runEditForm.is_public" inset hide-details color="primary" :label="`Public`" />
+              </v-col>
+            </v-row>
+            <v-row dense class="mt-2">
+              <v-col cols="12" sm="7">
+                <v-text-field
+                  v-model="runEditDateInput"
+                  label="Observation date/time (ISO, e.g. 2021-02-24T23:30:00Z)"
+                  variant="outlined"
+                  density="comfortable"
+                  hide-details
+                  clearable
+                />
+              </v-col>
+              <v-col cols="12" sm="5">
+                <v-text-field
+                  v-model.number="runEditJdInput"
+                  label="Julian Date (e.g. 2459254.48)"
+                  type="number"
+                  variant="outlined"
+                  density="comfortable"
+                  hide-details
+                  clearable
+                />
+              </v-col>
+              <v-col cols="12">
+                <v-btn variant="text" color="primary" @click="runEditRecomputeDate" :loading="runEditSaving">
+                  Recompute date from files
+                </v-btn>
+              </v-col>
+            </v-row>
+          </v-card-text>
+          <v-card-actions>
+            <v-spacer />
+            <v-btn variant="text" @click="runEditDialog = false">Cancel</v-btn>
+            <v-btn color="primary" variant="flat" :loading="runEditSaving" @click="saveRunEdit">Save</v-btn>
+          </v-card-actions>
+        </v-card>
+      </v-dialog>
 
       <!-- Edit Observation Type Dialog -->
       <v-dialog v-model="obsTypeDialog" max-width="520" @keydown.esc.prevent="closeObsTypeDialog" aria-labelledby="edit-obs-type-title">
@@ -620,6 +692,7 @@ const route = useRoute()
 const notify = useNotifyStore()
 const authStore = useAuthStore()
 const isAuthenticated = computed(() => authStore.isAuthenticated)
+const canEditRun = computed(() => authStore.isAdmin || authStore.hasPerm('users.acl_runs_edit') || authStore.hasPerm('acl_runs_edit'))
 const runId = route.params.id
 
 const run = ref(null)
@@ -711,6 +784,84 @@ const editSpectroscopy = ref(false)
 const editPhotometry = ref(false)
 const savingObsType = ref(false)
 const obsTypeCloseBtn = ref(null)
+
+// Admin run edit
+const runEditDialog = ref(false)
+const runEditSaving = ref(false)
+const runEditForm = ref({
+  name: '',
+  reduction_status: 'NE',
+  is_public: true,
+})
+const runEditDateInput = ref('')
+const runEditJdInput = ref(null)
+const runStatusOptions = [
+  { title: 'New', value: 'NE' },
+  { title: 'Partly reduced', value: 'PR' },
+  { title: 'Fully reduced', value: 'FR' },
+  { title: 'Reduction error', value: 'ER' },
+]
+const openRunEdit = () => {
+  if (!run.value) return
+  runEditForm.value = {
+    name: run.value.name || '',
+    reduction_status: run.value.reduction_status || 'NE',
+    is_public: run.value.is_public ?? true,
+  }
+  runEditDateInput.value = ''
+  runEditJdInput.value = null
+  runEditDialog.value = true
+}
+const normalizeIso = (s) => {
+  if (!s) return ''
+  let x = String(s).trim()
+  if (/^\d{4}-\d{2}-\d{2}\s/.test(x)) x = x.replace(' ', 'T')
+  if (!/[zZ]|[+\-]\d{2}:\d{2}$/.test(x)) x = `${x}Z`
+  return x
+}
+const saveRunEdit = async () => {
+  try {
+    runEditSaving.value = true
+    const payload = {
+      name: runEditForm.value.name,
+      reduction_status: runEditForm.value.reduction_status,
+      is_public: !!runEditForm.value.is_public,
+    }
+    await api.updateObservationRun(runId, payload)
+    // Optional: set mid_observation_jd if provided
+    const hasJd = runEditJdInput.value != null && runEditJdInput.value !== ''
+    const hasIso = runEditDateInput.value && String(runEditDateInput.value).trim()
+    if (hasJd || hasIso) {
+      const datePayload = {}
+      if (hasJd) datePayload.jd = Number(runEditJdInput.value)
+      if (!hasJd && hasIso) datePayload.iso = normalizeIso(runEditDateInput.value)
+      await api.adminSetRunDate(runId, datePayload)
+    }
+    const data = await api.getObservationRun(runId)
+    run.value = data
+    runEditDialog.value = false
+    try { notify.success('Observation run updated') } catch {}
+  } catch (e) {
+    console.error(e)
+    try { notify.error('Failed to update observation run') } catch {}
+  } finally {
+    runEditSaving.value = false
+  }
+}
+const runEditRecomputeDate = async () => {
+  try {
+    runEditSaving.value = true
+    await api.adminRecomputeRunDate(runId)
+    const data = await api.getObservationRun(runId)
+    run.value = data
+    try { notify.success('Observation date recomputed from files') } catch {}
+  } catch (e) {
+    console.error(e)
+    try { notify.error('Failed to recompute observation date') } catch {}
+  } finally {
+    runEditSaving.value = false
+  }
+}
 
 const dateString = computed(() => {
   if (!run.value?.name) return ''
@@ -1345,6 +1496,7 @@ const downloadSelected = () => {
   const url = api.getRunDataFilesZipUrl(runId, selectedIds.value)
   window.location.href = url
 }
+
 
 const buildCurrentFilters = () => ({
   file_type: dfFilterType.value || undefined,

@@ -368,6 +368,34 @@
                 <v-textarea v-model="runEditForm.note" label="Note" rows="3" auto-grow density="comfortable" variant="outlined" hide-details />
               </v-col>
             </v-row>
+            <v-row dense class="mt-2">
+              <v-col cols="12" sm="7">
+                <v-text-field
+                  v-model="runEditDateInput"
+                  label="Observation date/time (ISO, e.g. 2021-02-24T23:30:00Z)"
+                  density="comfortable"
+                  variant="outlined"
+                  hide-details
+                  clearable
+                />
+              </v-col>
+              <v-col cols="12" sm="5">
+                <v-text-field
+                  v-model.number="runEditJdInput"
+                  label="Julian Date (e.g. 2459254.48)"
+                  density="comfortable"
+                  type="number"
+                  variant="outlined"
+                  hide-details
+                  clearable
+                />
+              </v-col>
+              <v-col cols="12">
+                <v-btn variant="text" color="primary" @click="runEditRecomputeDate" :loading="runEditSaving">
+                  Recompute date from files
+                </v-btn>
+              </v-col>
+            </v-row>
           </v-card-text>
           <v-card-actions>
             <v-spacer />
@@ -628,6 +656,8 @@ const runEditForm = ref({
   spectroscopy: false,
   note: '',
 })
+const runEditDateInput = ref('')
+const runEditJdInput = ref(null)
 const runStatusOptions = [
   { title: 'New', value: 'NE' },
   { title: 'Partly reduced', value: 'PR' },
@@ -644,7 +674,16 @@ const openRunEdit = (item) => {
     spectroscopy: item.spectroscopy ?? false,
     note: item.note || '',
   }
+  runEditDateInput.value = ''
+  runEditJdInput.value = null
   runEditOpen.value = true
+}
+const normalizeIso = (s) => {
+  if (!s) return ''
+  let x = String(s).trim()
+  if (/^\d{4}-\d{2}-\d{2}\s/.test(x)) x = x.replace(' ', 'T')
+  if (!/[zZ]|[+\-]\d{2}:\d{2}$/.test(x)) x = `${x}Z`
+  return x
 }
 const saveRunEdit = async () => {
   const id = runEditForm.value.pk
@@ -660,6 +699,15 @@ const saveRunEdit = async () => {
       note: runEditForm.value.note || '',
     }
     await api.updateObservationRun(id, payload)
+    // If date fields set, apply via admin endpoint
+    const hasJd = runEditJdInput.value != null && runEditJdInput.value !== ''
+    const hasIso = runEditDateInput.value && String(runEditDateInput.value).trim()
+    if (hasJd || hasIso) {
+      const datePayload = {}
+      if (hasJd) datePayload.jd = Number(runEditJdInput.value)
+      if (!hasJd && hasIso) datePayload.iso = normalizeIso(runEditDateInput.value)
+      await api.adminSetRunDate(id, datePayload)
+    }
     notify.success('Run updated')
     runEditOpen.value = false
     await fetchRuns()
@@ -669,6 +717,21 @@ const saveRunEdit = async () => {
     runEditSaving.value = false
   }
 }
+const runEditRecomputeDate = async () => {
+  const id = runEditForm.value.pk
+  if (!id) return
+  try {
+    runEditSaving.value = true
+    await api.adminRecomputeRunDate(id)
+    notify.success('Observation date recomputed from files')
+  } catch (e) {
+    notify.error('Failed to recompute observation date')
+  } finally {
+    runEditSaving.value = false
+  }
+}
+
+// (Date tools integrated into Edit dialog; standalone dialog removed)
 
 const getMainTargets = (item) => {
   // prefer item.main_targets (array of names or objects), or build from nested objects
