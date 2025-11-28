@@ -1,29 +1,18 @@
 from rest_framework import viewsets
 from rest_framework.pagination import PageNumberPagination
-from rest_framework.filters import OrderingFilter
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticatedOrReadOnly, IsAdminUser, IsAuthenticated
 
 from django_filters.rest_framework import DjangoFilterBackend
 
 from obs_run.models import ObservationRun, DataFile
-from ostdata.custom_permissions import IsAllowedOnRun, get_allowed_model_to_view_for_user
 
-from .serializers import RunSerializer, RunListSerializer, DataFileSerializer
-from obs_run.models import ObservationRun
-from objects.models import Object
-from .filter import RunFilter, DataFileFilter
+from .serializers import DataFileSerializer
+from .filter import DataFileFilter
 
-from django.utils.timezone import make_aware
-from datetime import datetime, timedelta
-import environ
-from ..auxil import get_size_dir
-from objects.models import Object
 from django.http import HttpResponse
 from io import BytesIO
 from pathlib import Path
-import os
 import tempfile
 import zipfile
 import numpy as np
@@ -34,42 +23,10 @@ try:
 except Exception:
     Image = None
 
-from django.utils import timezone
-from django.db import transaction
-from obs_run.models import DownloadJob
-from obs_run.tasks import build_zip_task
-from obs_run.tasks import cleanup_expired_downloads, reconcile_filesystem
-from obs_run.tasks import cleanup_orphans_and_hashcheck
-from django.db import connection
-import platform
-import sys
-import time as _time
-import json
-from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAdminUser, AllowAny
-from rest_framework.throttling import ScopedRateThrottle
-from django.utils.http import http_date
 from drf_spectacular.utils import extend_schema, OpenApiParameter, extend_schema_view
 import logging
 logger = logging.getLogger(__name__)
-try:
-    import redis as _redis
-except Exception:
-    _redis = None
-try:
-    import django
-    _django_version = getattr(django, 'get_version', lambda: '')()
-except Exception:
-    _django_version = ''
-try:
-    import ldap as _ldap
-except Exception:
-    _ldap = None
-try:
-    # Import Celery app to ping workers
-    from ostdata.celery import app as celery_app
-except Exception:
-    celery_app = None
+#
 
 
 #

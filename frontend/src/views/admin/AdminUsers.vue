@@ -254,6 +254,15 @@ const canView = computed(() => auth.isAdmin || auth.hasPerm('users.acl_users_vie
 const canEdit = computed(() => auth.isAdmin || auth.hasPerm('users.acl_users_edit_roles') || auth.hasPerm('acl_users_edit_roles'))
 const canDelete = computed(() => auth.isAdmin || auth.hasPerm('users.acl_users_delete') || auth.hasPerm('acl_users_delete'))
 
+// ACL state
+const aclLoading = ref(false)
+const aclSaving = ref(false)
+const aclError = ref('')
+const aclGroups = ref([])
+const aclPerms = ref([])
+const aclMatrix = ref({})
+const aclMatrixLocal = ref({})
+
 const headers = [
   { title: 'Username', key: 'username', sortable: true },
   { title: 'Email', key: 'email', sortable: true },

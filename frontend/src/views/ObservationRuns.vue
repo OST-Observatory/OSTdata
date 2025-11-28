@@ -138,7 +138,7 @@
           :items-length="totalItems"
           :items-per-page="itemsPerPage === -1 ? totalItems : itemsPerPage"
           :loading="loading"
-          :sort-by="[{ key: sortKey.replace('-', ''), order: sortKey.startsWith('-') ? 'desc' : 'asc' }]"
+          :sort-by="tableSort"
           @update:sort-by="handleSort"
           hide-default-footer
           show-select
@@ -399,7 +399,7 @@ const error = ref(null)
 const currentPage = ref(1)
 const itemsPerPage = ref(10)
 const totalItems = ref(0)
-const sortKey = ref('mid_observation_jd')
+const sortKey = ref('-mid_observation_jd')
 const search = ref('')
 const objectFilter = ref('')
 const selectedStatus = ref(null)
@@ -451,6 +451,15 @@ const paginationInfo = computed(() => {
   const start = (currentPage.value - 1) * itemsPerPage.value + 1
   const end = Math.min(currentPage.value * itemsPerPage.value, totalItems.value)
   return `${start}-${end} of ${totalItems.value}`
+})
+
+// Map backend sort key to table header key
+const tableSort = computed(() => {
+  const backend = sortKey.value || ''
+  const order = backend.startsWith('-') ? 'desc' : 'asc'
+  const field = backend.replace('-', '')
+  const key = field === 'mid_observation_jd' ? 'date' : field
+  return [{ key, order }]
 })
 
 const fetchRuns = async () => {
@@ -567,7 +576,7 @@ const resetFilters = () => {
   photometryFilter.value = null
   spectroscopyFilter.value = null
   currentPage.value = 1
-  sortKey.value = 'mid_observation_jd'
+  sortKey.value = '-mid_observation_jd'
   syncQueryAndFetch()
 }
 
@@ -691,8 +700,13 @@ const getCount = (item, keys) => {
   for (const k of keys) {
     const v = item?.[k]
     if (typeof v === 'number') return v
+    // Accept numeric strings (defensive for mixed backends)
+    if (typeof v === 'string') {
+      const s = v.trim()
+      if (s !== '' && !Number.isNaN(Number(s))) return Number(s)
+    }
   }
-  return null
+  return 0
 }
 
 const normalizeTags = (tags) => {
@@ -716,7 +730,7 @@ const { applyQuery, syncQueryAndFetch } = useQuerySync(
     { key: 'status' },
     { key: 'phot', toQuery: (v) => (v === true ? '1' : v === false ? '0' : undefined), fromQuery: (v) => (v === '1' ? true : v === '0' ? false : null) },
     { key: 'spec', toQuery: (v) => (v === true ? '1' : v === false ? '0' : undefined), fromQuery: (v) => (v === '1' ? true : v === '0' ? false : null) },
-    { key: 'sort', defaultValue: 'start_time' },
+    { key: 'sort', defaultValue: '-mid_observation_jd' },
   ],
   fetchRuns
 )

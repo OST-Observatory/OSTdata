@@ -17,13 +17,14 @@ from django.utils.http import http_date
 
 from .serializers import ObjectListSerializer
 
-from obs_run.api.serializers import RunListSerializer, DataFileSerializer
+from obs_run.api.serializers import RunSerializer, DataFileSerializer
 
 from .filter import ObjectFilter
 
 from django.contrib.gis.db.models.functions import Distance
 from django.contrib.gis.geos import Point
 from django.contrib.gis.measure import D
+from django.db.models import Count, Sum, Q
 
 from astropy.coordinates import SkyCoord
 import astropy.units as u
@@ -268,15 +269,31 @@ class getObjectRunViewSet(viewsets.ModelViewSet):
     A ViewSet to get all Observation runs associated with an Object
     """
     queryset = Object.objects.all()
-    serializer_class = RunListSerializer
+    serializer_class = RunSerializer
     permission_classes = [IsAuthenticatedOrReadOnly]
 
     def list(self, request, object_pk):
         obj = Object.objects.get(pk=object_pk)
         if request.user.is_anonymous and not obj.is_public:
             return Response({"detail": "Not found"}, status=404)
-        queryset = obj.observation_run.all()
-        serializer = RunListSerializer(queryset, many=True)
+        # Annotate counts and totals to match RunListSerializer fields
+        queryset = (
+            obj.observation_run.all()
+            .prefetch_related('tags')
+            .annotate(
+                n_fits=Count('datafile', filter=Q(datafile__file_type__exact='FITS')),
+                n_img=Count('datafile', filter=Q(datafile__file_type__exact='JPG'))
+                      + Count('datafile', filter=Q(datafile__file_type__exact='CR2'))
+                      + Count('datafile', filter=Q(datafile__file_type__exact='TIFF')),
+                n_ser=Count('datafile', filter=Q(datafile__file_type__exact='SER')),
+                n_light=Count('datafile', filter=Q(datafile__exposure_type__exact='LI')),
+                n_flat=Count('datafile', filter=Q(datafile__exposure_type__exact='FL')),
+                n_dark=Count('datafile', filter=Q(datafile__exposure_type__exact='DA')),
+                expo_time=Sum('datafile__exptime', filter=Q(datafile__exptime__gt=0)),
+                n_datafiles=Count('datafile'),
+            )
+        )
+        serializer = RunSerializer(queryset, many=True)
         return Response(serializer.data)
 
 

@@ -1,5 +1,5 @@
-from .settings.base import *
-from .settings.base import env  # make linter aware
+from .settings_base import *
+from .settings_base import env  # make linter aware
 import platform  # make linter aware
 
 # Load specific settings for development or production

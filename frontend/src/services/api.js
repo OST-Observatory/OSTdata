@@ -330,23 +330,23 @@ export const api = {
   adminAclGet: () => fetchWithAuth('/users/admin/acl/'),
   adminAclSet: (matrix = {}) => fetchWithAuth('/users/admin/acl/set', { method: 'POST', body: JSON.stringify({ matrix }) }),
 
-  // Admin - System Health
-  adminHealth: () => fetchWithAuth('/runs/admin/health/'),
-  adminMaintenanceCleanup: () => fetchWithAuth('/runs/admin/maintenance/cleanup-downloads/', { method: 'POST' }),
-  adminMaintenanceReconcile: (dryRun = true) => fetchWithAuth('/runs/admin/maintenance/reconcile/', { method: 'POST', body: JSON.stringify({ dry_run: !!dryRun }) }),
+  // Admin - System Health & Maintenance (moved under /api/admin)
+  adminHealth: () => fetchWithAuth('/admin/health/'),
+  adminMaintenanceCleanup: () => fetchWithAuth('/admin/maintenance/cleanup-downloads/', { method: 'POST' }),
+  adminMaintenanceReconcile: (dryRun = true) => fetchWithAuth('/admin/maintenance/reconcile/', { method: 'POST', body: JSON.stringify({ dry_run: !!dryRun }) }),
   adminMaintenanceOrphansHashcheck: (opts = {}) => {
     const body = {
       dry_run: opts.dry_run !== undefined ? !!opts.dry_run : true,
       fix_missing_hashes: opts.fix_missing_hashes !== undefined ? !!opts.fix_missing_hashes : true,
       limit: opts.limit != null ? opts.limit : null,
     }
-    return fetchWithAuth('/runs/admin/maintenance/orphans-hashcheck/', { method: 'POST', body: JSON.stringify(body) })
+    return fetchWithAuth('/admin/maintenance/orphans-hashcheck/', { method: 'POST', body: JSON.stringify(body) })
   },
   // Site-wide Banner
   getBanner: () => fetchWithAuth('/runs/banner/'),
-  adminGetBanner: () => fetchWithAuth('/runs/admin/banner/'),
-  adminSetBanner: (payload = { enabled: true, message: '', level: 'warning' }) => fetchWithAuth('/runs/admin/banner/set', { method: 'POST', body: JSON.stringify(payload) }),
-  adminClearBanner: () => fetchWithAuth('/runs/admin/banner/clear', { method: 'POST' }),
+  adminGetBanner: () => fetchWithAuth('/admin/banner/'),
+  adminSetBanner: (payload = { enabled: true, message: '', level: 'warning' }) => fetchWithAuth('/admin/banner/set', { method: 'POST', body: JSON.stringify(payload) }),
+  adminClearBanner: () => fetchWithAuth('/admin/banner/clear', { method: 'POST' }),
 
   // Admin - Jobs
   adminListDownloadJobs: (params = {}) => fetchWithAuth('/runs/jobs/', { params }),

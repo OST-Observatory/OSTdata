@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 from obs_run.models import ObservationRun
 from objects.models import Object
-from .serializers import RunSerializer, RunListSerializer
+from .serializers import RunSerializer
 from .filter import RunFilter
 from ..plotting import (
     plot_visibility,
@@ -92,9 +92,7 @@ class RunViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         # Prefetch tags and annotate light-weight aggregates for list views
-        base = ObservationRun.objects.all().prefetch_related('tags')
-        # Annotate counts and total exposure time for performance in lists
-        return base.annotate(
+        qs = ObservationRun.objects.all().prefetch_related('tags').annotate(
             n_fits=Count('datafile', filter=Q(datafile__file_type__exact='FITS')),
             n_img=(
                 Count('datafile', filter=Q(datafile__file_type__exact='JPG')) +
@@ -108,6 +106,13 @@ class RunViewSet(viewsets.ModelViewSet):
             expo_time=Sum('datafile__exptime', filter=Q(datafile__exptime__gt=0)),
             n_datafiles=Count('datafile'),
         )
+        # Anonymous users only see public runs
+        try:
+            if not getattr(self.request, 'user', None) or self.request.user.is_anonymous:
+                qs = qs.filter(is_public=True)
+        except Exception:
+            pass
+        return qs
 
     def _has(self, user, codename: str) -> bool:
         try:
@@ -139,17 +144,9 @@ class RunViewSet(viewsets.ModelViewSet):
             return Response({'detail': 'Forbidden'}, status=403)
         return super().destroy(request, *args, **kwargs)
 
-    def get_queryset(self):
-        queryset = ObservationRun.objects.all()
-        if self.request.user.is_anonymous:
-            return queryset.filter(is_public=True)
-        return queryset
+    # (replaced by the combined get_queryset above)
 
     def get_serializer_class(self):
-        if self.action == 'list':
-            return RunListSerializer
-        if self.action == 'retrieve':
-            return RunSerializer
         return RunSerializer
 
     @extend_schema(
@@ -180,11 +177,13 @@ class RunViewSet(viewsets.ModelViewSet):
             elif field not in allowed:
                 queryset = queryset.order_by('mid_observation_jd')
         try:
-            from obs_run.models import ObservationRun  # local import safe
+            from obs_run.models import ObservationRun, DataFile  # local import safe
             from django.db.models import Max
-            latest_hist = ObservationRun.history.aggregate(m=Max('history_date'))['m']
+            latest_run_hist = ObservationRun.history.aggregate(m=Max('history_date'))['m']
+            latest_df_hist = DataFile.history.aggregate(m=Max('history_date'))['m']
             count = queryset.count()
-            sig = f"runs:{count}:{str(latest_hist)}:{hash(request.META.get('QUERY_STRING',''))}"
+            # Include DataFile history in the signature so ETag changes when file counts change
+            sig = f"runs:{count}:{str(latest_run_hist)}:{str(latest_df_hist)}:{hash(request.META.get('QUERY_STRING',''))}"
             etag = f"W/\"{abs(hash(sig))}\""
             if_none_match = request.META.get('HTTP_IF_NONE_MATCH')
             if if_none_match and if_none_match == etag:
@@ -211,8 +210,17 @@ class RunViewSet(viewsets.ModelViewSet):
         try:
             if etag:
                 resp['ETag'] = etag
-            if latest_hist:
-                resp['Last-Modified'] = http_date(int(latest_hist.timestamp()))
+            # Prefer the latest of run/file histories if available
+            try:
+                from django.db.models import Max
+                from obs_run.models import ObservationRun, DataFile
+                latest_run_hist = ObservationRun.history.aggregate(m=Max('history_date'))['m']
+                latest_df_hist = DataFile.history.aggregate(m=Max('history_date'))['m']
+                latest_hist_any = max([d for d in [latest_run_hist, latest_df_hist] if d is not None], default=None)
+            except Exception:
+                latest_hist_any = None
+            if latest_hist_any:
+                resp['Last-Modified'] = http_date(int(latest_hist_any.timestamp()))
             if request.user.is_anonymous:
                 resp['Cache-Control'] = 'public, max-age=60'
         except Exception:
@@ -224,9 +232,14 @@ class RunViewSet(viewsets.ModelViewSet):
         instance = self.get_object()
         try:
             hist = instance.history.order_by('-history_date').values_list('history_date', flat=True).first()
+            # Also include latest change of any related DataFile to avoid stale detail responses
+            from django.db.models import Max
+            from obs_run.models import DataFile
+            df_hist = DataFile.history.filter(observation_run=instance).aggregate(m=Max('history_date'))['m']
+            latest_any = max([d for d in [hist, df_hist] if d is not None], default=None)
         except Exception:
-            hist = None
-        sig = f"run:{instance.pk}:{str(hist)}"
+            latest_any = None
+        sig = f"run:{instance.pk}:{str(latest_any)}"
         etag = f"W/\"{abs(hash(sig))}\""
         if_none_match = request.META.get('HTTP_IF_NONE_MATCH')
         if if_none_match and if_none_match == etag:
@@ -236,8 +249,8 @@ class RunViewSet(viewsets.ModelViewSet):
         try:
             if etag:
                 resp['ETag'] = etag
-            if hist:
-                resp['Last-Modified'] = http_date(int(hist.timestamp()))
+            if latest_any:
+                resp['Last-Modified'] = http_date(int(latest_any.timestamp()))
         except Exception:
             pass
         return resp

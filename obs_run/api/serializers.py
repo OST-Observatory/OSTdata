@@ -22,109 +22,9 @@ from objects.api.serializers import normalize_alias, INSTRUMENT_ALIASES, TELESCO
 # ===============================================================
 
 
-class RunListSerializer(ModelSerializer):
-    tags = SerializerMethodField()
-    href = SerializerMethodField()
-    reduction_status_display = SerializerMethodField()
-    tag_ids = PrimaryKeyRelatedField(
-        many=True,
-        queryset=Tag.objects.all(),
-        read_only=False,
-        source='tags',
-    )
-    # Use annotated fields for list performance; fall back to 0 if missing
-    n_datafiles = ReadOnlyField()
-    n_fits = ReadOnlyField()
-    n_img = ReadOnlyField()
-    n_ser = ReadOnlyField()
-    n_light = ReadOnlyField()
-    n_flat = ReadOnlyField()
-    n_dark = ReadOnlyField()
-    expo_time = ReadOnlyField()
-    start_time = SerializerMethodField()
-    end_time = SerializerMethodField()
-    objects = SerializerMethodField()
+# (RunListSerializer removed; unified into RunSerializer)
 
-    class Meta:
-        model = ObservationRun
-        fields = [
-            'pk',
-            'name',
-            'reduction_status',
-            'reduction_status_display',
-            'tags',
-            'tag_ids',
-            'href',
-            'n_datafiles',
-            'n_fits',
-            'n_img',
-            'n_ser',
-            'n_light',
-            'n_flat',
-            'n_dark',
-            'expo_time',
-            'start_time',
-            'end_time',
-            'photometry',
-            'spectroscopy',
-            'objects',
-        ]
-        read_only_fields = ('pk',)
-
-        datatables_always_serialize = ('href', 'pk')
-
-    def get_tags(self, obj):
-        tags = TagSerializer(obj.tags, many=True).data
-        return tags
-
-    def get_href(self, obj):
-        # Return SPA route instead of Django reverse (legacy templates removed)
-        return f"/observation-runs/{obj.pk}"
-
-    def get_reduction_status_display(self, obj):
-        return obj.get_reduction_status_display()
-
-    # Counts/expo_time are provided via queryset annotations for efficiency
-
-    def get_start_time(self, obj):
-        # Filter JD to avoid files with the default date; return ISO-8601
-        data_files = obj.datafile_set.filter(hjd__gt=2451545).order_by('hjd')
-        if data_files.exists():
-            dt = data_files.first().obs_date
-            try:
-                # If it's a datetime
-                if hasattr(dt, 'isoformat'):
-                    if timezone.is_naive(dt):
-                        dt = timezone.make_aware(dt, timezone.get_current_timezone())
-                    return dt.isoformat()
-                # If it's a string already
-                if isinstance(dt, str):
-                    return dt
-            except Exception:
-                pass
-            return '2000-01-01T00:00:00Z'
-        return '2000-01-01T00:00:00Z'
-
-    def get_end_time(self, obj):
-        # Filter JD to avoid files with the default date; return ISO-8601
-        data_files = obj.datafile_set.filter(hjd__gt=2451545).order_by('-hjd')
-        if data_files.exists():
-            dt = data_files.first().obs_date
-            try:
-                if hasattr(dt, 'isoformat'):
-                    if timezone.is_naive(dt):
-                        dt = timezone.make_aware(dt, timezone.get_current_timezone())
-                    return dt.isoformat()
-                if isinstance(dt, str):
-                    return dt
-            except Exception:
-                pass
-            return '2000-01-01T00:00:00Z'
-        return '2000-01-01T00:00:00Z'
-
-    def get_objects(self, obj):
-        objects = ObjectSimpleSerializer(obj.object_set.all(), many=True).data
-        return objects
+    # (legacy alias getters removed)
 
 
 ################################################################################
@@ -140,12 +40,18 @@ class RunSerializer(ModelSerializer):
     )
     href = SerializerMethodField()
     reduction_status_display = SerializerMethodField()
+    n_datafiles = SerializerMethodField()
     n_fits = SerializerMethodField()
     n_img = SerializerMethodField()
     n_ser = SerializerMethodField()
+    # Exposure-type counts (robust fallback)
+    n_light = SerializerMethodField()
+    n_flat = SerializerMethodField()
+    n_dark = SerializerMethodField()
     expo_time = SerializerMethodField()
     start_time = SerializerMethodField()
     end_time = SerializerMethodField()
+    objects = SerializerMethodField()
 
     owner = ReadOnlyField(source='added_by.username')
 
@@ -163,12 +69,18 @@ class RunSerializer(ModelSerializer):
             'tag_ids',
             'href',
             'owner',
+            'n_datafiles',
             'n_fits',
             'n_img',
             'n_ser',
+            'n_light',
+            'n_flat',
+            'n_dark',
             'expo_time',
             'start_time',
             'end_time',
+            'objects',
+            'mid_observation_jd',
         ]
         read_only_fields = ('pk', 'tags', 'reduction_status_display')
 
@@ -185,28 +97,94 @@ class RunSerializer(ModelSerializer):
     def get_reduction_status_display(self, obj):
         return obj.get_reduction_status_display()
 
+    def _get_annotated_or(self, obj, name, fallback_callable):
+        try:
+            v = getattr(obj, name, None)
+            if isinstance(v, (int, float)) and v >= 0:
+                return int(v)
+        except Exception:
+            pass
+        try:
+            return int(fallback_callable())
+        except Exception:
+            return 0
+
+    def get_n_datafiles(self, obj):
+        return self._get_annotated_or(obj, 'n_datafiles', lambda: obj.datafile_set.count())
+
     def get_n_fits(self, obj):
-        fits = obj.datafile_set.filter(file_type__exact='FITS')
-        return len(fits)
+        return self._get_annotated_or(
+            obj,
+            'n_fits',
+            lambda: obj.datafile_set.filter(file_type__exact='FITS').count(),
+        )
 
     def get_n_img(self, obj):
-        jpegs = obj.datafile_set.filter(file_type__exact='JPG')
-        cr2s = obj.datafile_set.filter(file_type__exact='CR2')
-        return len(jpegs) + len(cr2s)
+        return self._get_annotated_or(
+            obj,
+            'n_img',
+            lambda: (
+                obj.datafile_set.filter(file_type__exact='JPG').count()
+                + obj.datafile_set.filter(file_type__exact='CR2').count()
+                + obj.datafile_set.filter(file_type__exact='TIFF').count()
+            ),
+        )
 
     def get_n_ser(self, obj):
-        sers = obj.datafile_set.filter(file_type__exact='SER')
-        return len(sers)
+        return self._get_annotated_or(
+            obj,
+            'n_ser',
+            lambda: obj.datafile_set.filter(file_type__exact='SER').count(),
+        )
+
+    # Robust exposure-type counters (tolerant to variant values)
+    def _count_exptype(self, obj, codes_or_prefixes):
+        try:
+            # Prefer annotated value if present and positive (detail may also carry annotations)
+            ann_key = codes_or_prefixes.get('ann')
+            if ann_key:
+                v = getattr(obj, ann_key, None)
+                if isinstance(v, (int, float)) and v > 0:
+                    return int(v)
+        except Exception:
+            pass
+        try:
+            qs = obj.datafile_set.all()
+            from django.db.models import Q
+            q = Q()
+            for code in codes_or_prefixes.get('codes', []):
+                q |= Q(exposure_type__iexact=code)
+                q |= Q(exposure_type__iregex=rf'^\\s*{code.lower()}\\s*$')
+            for pref in codes_or_prefixes.get('prefixes', []):
+                q |= Q(exposure_type__istartswith=pref)
+            return qs.filter(q).count()
+        except Exception:
+            return 0
+
+    def get_n_light(self, obj):
+        return self._count_exptype(obj, {'ann': 'n_light', 'codes': ['LI'], 'prefixes': ['LIGHT']})
+
+    def get_n_flat(self, obj):
+        return self._count_exptype(obj, {'ann': 'n_flat', 'codes': ['FL'], 'prefixes': ['FLAT']})
+
+    def get_n_dark(self, obj):
+        return self._count_exptype(obj, {'ann': 'n_dark', 'codes': ['DA'], 'prefixes': ['DARK']})
+
+    # (legacy alias getters removed)
 
     def get_expo_time(self, obj):
+        try:
+            v = getattr(obj, 'expo_time', None)
+            if isinstance(v, (int, float)) and v >= 0:
+                return float(v)
+        except Exception:
+            pass
         data_files = obj.datafile_set.all()
-
-        total_expo_time = 0
+        total_expo_time = 0.0
         for f in data_files:
-            expo_time = f.exptime
+            expo_time = getattr(f, 'exptime', 0) or 0
             if expo_time > 0:
-                total_expo_time += expo_time
-
+                total_expo_time += float(expo_time)
         return total_expo_time
 
     def get_start_time(self, obj):
@@ -242,6 +220,10 @@ class RunSerializer(ModelSerializer):
                 pass
             return '2000-01-01T00:00:00Z'
         return '2000-01-01T00:00:00Z'
+
+    def get_objects(self, obj):
+        objects = ObjectSimpleSerializer(obj.object_set.all(), many=True).data
+        return objects
 
 
 ################################################################################
