@@ -37,6 +37,7 @@ from obs_run.tasks import (
     cleanup_expired_downloads,
     reconcile_filesystem,
     cleanup_orphans_and_hashcheck,
+    scan_missing_filesystem,
 )
 from ostdata.services.health import gather_admin_health
 from obs_run.models import ObservationRun, DataFile
@@ -220,6 +221,11 @@ class AdminOrphansRequestSerializer(serializers.Serializer):
     limit = serializers.IntegerField(required=False, allow_null=True)
 
 
+class AdminScanMissingRequestSerializer(serializers.Serializer):
+    dry_run = serializers.BooleanField(required=False, default=True)
+    limit = serializers.IntegerField(required=False, allow_null=True)
+
+
 @api_view(['POST'])
 @permission_classes([IsAdminUser])
 @extend_schema(summary='Trigger orphans cleanup/hashcheck', request=AdminOrphansRequestSerializer, responses={'202': {'type': 'object'}}, tags=['Admin'])
@@ -247,6 +253,29 @@ def admin_trigger_orphans_hashcheck(request):
         logger.exception("admin_trigger_orphans_hashcheck failed: %s", e)
         return Response({'enqueued': False, 'error': str(e)}, status=400)
 
+
+@api_view(['POST'])
+@permission_classes([IsAdminUser])
+@extend_schema(summary='Trigger scan for missing files (ingest new files from filesystem)', request=AdminScanMissingRequestSerializer, responses={'202': {'type': 'object'}}, tags=['Admin'])
+def admin_trigger_scan_missing(request):
+    if not (request.user.is_superuser or request.user.has_perm('users.acl_maintenance_reconcile')):
+        return Response({'detail': 'Forbidden'}, status=403)
+    payload = request.data if hasattr(request, 'data') else {}
+    try:
+        dry_run = bool(payload.get('dry_run', True))
+    except Exception:
+        dry_run = True
+    try:
+        limit = payload.get('limit', None)
+        limit = int(limit) if (limit is not None and str(limit).strip() != '') else None
+    except Exception:
+        limit = None
+    try:
+        res = scan_missing_filesystem.delay(dry_run=dry_run, limit=limit)
+        return Response({'enqueued': True, 'task_id': getattr(res, 'id', None), 'dry_run': dry_run, 'limit': limit}, status=202)
+    except Exception as e:
+        logger.exception("admin_trigger_scan_missing failed: %s", e)
+        return Response({'enqueued': False, 'error': str(e)}, status=400)
 
 class AdminBannerSetSerializer(serializers.Serializer):
     enabled = serializers.BooleanField(required=False, default=True)

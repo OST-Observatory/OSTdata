@@ -343,6 +343,13 @@ export const api = {
     }
     return fetchWithAuth('/admin/maintenance/orphans-hashcheck/', { method: 'POST', body: JSON.stringify(body) })
   },
+  adminMaintenanceScanMissing: (opts = {}) => {
+    const body = {
+      dry_run: opts.dry_run !== undefined ? !!opts.dry_run : true,
+      limit: opts.limit != null ? opts.limit : null,
+    }
+    return fetchWithAuth('/admin/maintenance/scan-missing/', { method: 'POST', body: JSON.stringify(body) })
+  },
   // Admin - Runs date tools
   adminSetRunDate: (runId, payload = {}) => fetchWithAuth(`/admin/runs/${encodeURIComponent(runId)}/set-date/`, { method: 'POST', body: JSON.stringify(payload) }),
   adminRecomputeRunDate: (runId) => fetchWithAuth(`/admin/runs/${encodeURIComponent(runId)}/recompute-date/`, { method: 'POST' }),

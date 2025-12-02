@@ -256,7 +256,7 @@ const prefetchRoute = async (path: string) => {
 }
 const toggleTheme = () => {
   const newName = isDark.value ? 'ostdata' : 'dark'
-  vuetifyTheme.global.name.value = newName
+  ;(vuetifyTheme as any).change(newName)
   try { localStorage.setItem('theme', newName) } catch {}
 }
 const display = useDisplay()
@@ -394,11 +394,11 @@ onMounted(async () => {
   try {
     const saved = localStorage.getItem('theme')
     if (saved === 'ostdata' || saved === 'dark') {
-      vuetifyTheme.global.name.value = saved
+      ;(vuetifyTheme as any).change(saved)
     } else {
       // Fallback to system preference
       const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
-      vuetifyTheme.global.name.value = prefersDark ? 'dark' : 'ostdata'
+      ;(vuetifyTheme as any).change(prefersDark ? 'dark' : 'ostdata')
     }
   } catch {}
   window.addEventListener('scroll', checkScroll)

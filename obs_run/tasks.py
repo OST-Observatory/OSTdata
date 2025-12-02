@@ -14,6 +14,7 @@ from datetime import timedelta
 import json
 
 from obs_run.models import DownloadJob, DataFile, ObservationRun
+from utilities import add_new_data_file
 
 logger = logging.getLogger(__name__)
 
@@ -433,6 +434,147 @@ def reconcile_filesystem(self, dry_run: bool = False):
         'recovery_failures': recovery_failures,
     }
     _health_set('reconcile_filesystem', result)
+    return result
+
+
+@shared_task(bind=True)
+def scan_missing_filesystem(self, dry_run: bool = True, limit: int | None = None):
+    """Scan DATA_DIRECTORY for files not yet present in the DB and ingest them.
+    - Walk each top-level run directory under DATA_DIRECTORY.
+    - For each recognized file extension, add missing DataFile rows and evaluate metadata.
+    - Creates ObservationRun when the top-level directory has no matching run.
+    """
+    base = (
+        os.environ.get('DATA_DIRECTORY')
+        or os.environ.get('DATA_PATH')
+        or '/archive/ftp/'
+    )
+    # Normalize base
+    base = str(base)
+    try:
+        base = base if base.endswith(os.sep) else (base + os.sep)
+    except Exception:
+        pass
+
+    added = 0
+    checked = 0
+    skipped_known = 0
+    skipped_unknown_type = 0
+    errors = 0
+    runs_created = 0
+    runs_seen = 0
+
+    try:
+        with os.scandir(base) as it:
+            for entry in it:
+                if not entry.is_dir():
+                    continue
+                runs_seen += 1
+                run_name = entry.name
+                run_dir = os.path.join(base, run_name)
+                # Ensure ObservationRun exists
+                try:
+                    run = ObservationRun.objects.get(name=run_name)
+                except ObservationRun.DoesNotExist:
+                    try:
+                        if not dry_run:
+                            run = ObservationRun.objects.create(name=run_name, reduction_status='NE')
+                        else:
+                            run = None
+                        runs_created += 1
+                    except Exception:
+                        run = None
+                        errors += 1
+                # Walk files under the run directory
+                for root, dirs, files in os.walk(run_dir):
+                    for fname in files:
+                        try:
+                            abs_path = os.path.join(root, fname)
+                            checked += 1
+                            # Skip if already tracked
+                            if DataFile.objects.filter(datafile=abs_path).exists():
+                                skipped_known += 1
+                                continue
+                            # Dry-run: estimate whether the file would be accepted by add_new_data_file
+                            if dry_run:
+                                suffix = Path(abs_path).suffix
+                                # Accepted suffixes as per utilities.add_new_data_file mapping
+                                ok = suffix in ['.fit', '.fits', '.FIT', '.FITS',
+                                                '.CR2', '.cr2',
+                                                '.JPG', '.jpg', '.jpeg', '.JPEG',
+                                                '.tiff', '.tif', '.TIF', '.TIFF',
+                                                '.ser', '.SER',
+                                                '.avi', '.AVI',
+                                                '.mov', '.MOV']
+                                if ok:
+                                    added += 1
+                                else:
+                                    skipped_unknown_type += 1
+                                # Respect limit in dry-run as well
+                                if limit and added >= limit:
+                                    result = {
+                                        'dry_run': True,
+                                        'added': added,
+                                        'checked': checked,
+                                        'skipped_known': skipped_known,
+                                        'skipped_unknown_type': skipped_unknown_type,
+                                        'errors': errors,
+                                        'runs_seen': runs_seen,
+                                        'runs_created': runs_created,
+                                    }
+                                    _health_set('scan_missing_filesystem', result)
+                                    return result
+                                continue
+                            # Real ingestion
+                            if run is None:
+                                # If creating the run failed in non-dry mode, skip file
+                                skipped_unknown_type += 1
+                                continue
+                            ok = add_new_data_file(Path(abs_path), run, print_to_terminal=False)
+                            if ok:
+                                added += 1
+                                if limit and added >= limit:
+                                    result = {
+                                        'dry_run': False,
+                                        'added': added,
+                                        'checked': checked,
+                                        'skipped_known': skipped_known,
+                                        'skipped_unknown_type': skipped_unknown_type,
+                                        'errors': errors,
+                                        'runs_seen': runs_seen,
+                                        'runs_created': runs_created,
+                                    }
+                                    _health_set('scan_missing_filesystem', result)
+                                    return result
+                            else:
+                                skipped_unknown_type += 1
+                        except Exception:
+                            errors += 1
+                            continue
+    except Exception as e:
+        _health_error('scan_missing_filesystem', e)
+        return {
+            'dry_run': bool(dry_run),
+            'added': added,
+            'checked': checked,
+            'skipped_known': skipped_known,
+            'skipped_unknown_type': skipped_unknown_type,
+            'errors': errors + 1,
+            'runs_seen': runs_seen,
+            'runs_created': runs_created,
+        }
+
+    result = {
+        'dry_run': bool(dry_run),
+        'added': added,
+        'checked': checked,
+        'skipped_known': skipped_known,
+        'skipped_unknown_type': skipped_unknown_type,
+        'errors': errors,
+        'runs_seen': runs_seen,
+        'runs_created': runs_created,
+    }
+    _health_set('scan_missing_filesystem', result)
     return result
 
 

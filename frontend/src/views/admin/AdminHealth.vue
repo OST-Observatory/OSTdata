@@ -190,7 +190,7 @@
         <v-card>
           <v-card-title class="text-h6">Periodic Tasks</v-card-title>
           <v-card-text>
-            <div v-for="name in ['cleanup_expired_downloads', 'reconcile_filesystem', 'cleanup_orphans_hashcheck']" :key="name" class="mb-3">
+            <div v-for="name in ['cleanup_expired_downloads', 'reconcile_filesystem', 'cleanup_orphans_hashcheck', 'scan_missing_filesystem']" :key="name" class="mb-3">
               <div class="d-flex align-center" style="gap: 8px">
                 <div class="text-subtitle-2">{{ name }}</div>
                 <v-chip
@@ -340,6 +340,17 @@
         { label: 'ambiguous', value: d.ambiguous_matches ?? 0 },
         { label: 'failures', value: d.recovery_failures ?? 0 },
         { label: 'runs_missing', value: d.runs_missing ?? 0 },
+        { label: 'mode', value: d.dry_run ? 'dry' : 'apply' },
+      ]
+    }
+    if (name === 'scan_missing_filesystem') {
+      return [
+        { label: 'added', value: d.added ?? 0 },
+        { label: 'checked', value: d.checked ?? 0 },
+        { label: 'skipped_known', value: d.skipped_known ?? 0 },
+        { label: 'skipped_unknown_type', value: d.skipped_unknown_type ?? 0 },
+        { label: 'runs_seen', value: d.runs_seen ?? 0 },
+        { label: 'runs_created', value: d.runs_created ?? 0 },
         { label: 'mode', value: d.dry_run ? 'dry' : 'apply' },
       ]
     }

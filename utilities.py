@@ -228,6 +228,10 @@ def add_new_data_file(path_to_file, observation_run, print_to_terminal=False):
         file_type = 'TIFF'
     elif suffix in ['.ser', '.SER']:
         file_type = 'SER'
+    elif suffix in ['.avi', '.AVI']:
+        file_type = 'AVI'
+    elif suffix in ['.mov', '.MOV']:
+        file_type = 'MOV'
     else:
         return False
 
