@@ -108,6 +108,10 @@ class ObjectListSerializer(ModelSerializer):
             # DataFiles linked to this object within this run
             df_qs = obj.datafiles.filter(observation_run=run)
             df_science = df_qs.filter(exposure_type='LI')
+            try:
+                n_total = df_qs.count()
+            except Exception:
+                n_total = 0
 
             # Exposure time (sum of positive exptimes) on science frames
             expo_time = 0
@@ -127,8 +131,10 @@ class ObjectListSerializer(ModelSerializer):
                     + df_qs.filter(file_type__exact='TIFF').count()
                 )
                 n_ser = df_qs.filter(file_type__exact='SER').count()
+                n_flat = df_qs.filter(exposure_type__exact='FL').count()
+                n_dark = df_qs.filter(exposure_type__exact='DA').count()
             except Exception:
-                n_fits = n_img = n_ser = 0
+                n_fits = n_img = n_ser = n_flat = n_dark = 0
 
             # Instruments & Telescopes (unique, non-empty) with alias normalization
             try:
@@ -203,6 +209,9 @@ class ObjectListSerializer(ModelSerializer):
                 'n_fits': n_fits,
                 'n_img': n_img,
                 'n_ser': n_ser,
+                'n_flat': n_flat,
+                'n_dark': n_dark,
+                'n_total': n_total,
                 'instruments': instruments,
                 'telescopes': telescopes,
                 'airmass_min': airmass_min,

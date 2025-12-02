@@ -243,7 +243,11 @@
                 <thead>
                   <tr>
                     <th class="text-primary">Date</th>
-                    <th class="text-primary">Nobs</th>
+                    <th class="text-primary">Nobs [FITS/IMG/SER]</th>
+                    <th class="text-primary">Lights</th>
+                    <th class="text-primary">Flats</th>
+                    <th class="text-primary">Darks</th>
+                    <th class="text-primary">Other</th>
                     <th class="text-primary">Exposure Time [s]</th>
                     <th class="text-primary">Tags</th>
                     <th class="text-primary">Status</th>
@@ -257,6 +261,10 @@
                       </router-link>
                     </td>
                     <td>{{ item.n_fits }}/{{ item.n_img }}/{{ item.n_ser }}</td>
+                    <td>{{ getCount(item, ['n_light', 'lights']) }}</td>
+                    <td>{{ getCount(item, ['n_flat', 'flats']) }}</td>
+                    <td>{{ getCount(item, ['n_dark', 'darks']) }}</td>
+                    <td>{{ getOtherCount(item) }}</td>
                     <td>{{ formatExposureTime(item.expo_time) }}</td>
                     <td>
                       <div class="d-flex flex-wrap gap-1">
@@ -272,9 +280,9 @@
                       </div>
                     </td>
                     <td>
-                      <v-icon :color="getStatusColor(item.reduction_status)" size="small">
-                        {{ getStatusIcon(item.reduction_status) }}
-                      </v-icon>
+                      <v-chip :color="getStatusColor(item.reduction_status)" size="small">
+                        {{ item.reduction_status || 'n/a' }}
+                      </v-chip>
                     </td>
                   </tr>
                   <tr v-if="!Array.isArray(observationRuns) || observationRuns.length === 0">
@@ -1011,11 +1019,42 @@ const formatExposureTime = (time) => {
   return time.toFixed(2)
 }
 
+// Count helpers (robust to numeric strings)
+const getCount = (item, keys) => {
+  for (const k of keys) {
+    const v = item?.[k]
+    if (typeof v === 'number') return v
+    if (typeof v === 'string') {
+      const s = v.trim()
+      if (s !== '' && !Number.isNaN(Number(s))) return Number(s)
+    }
+  }
+  return 0
+}
+const getOtherCount = (item) => {
+  const total = getCount(item, ['n_total', 'n_datafiles', 'n_files', 'files'])
+  const li = getCount(item, ['n_light', 'lights'])
+  const fl = getCount(item, ['n_flat', 'flats'])
+  const da = getCount(item, ['n_dark', 'darks'])
+  const other = total - (li + fl + da)
+  return other >= 0 ? other : 0
+}
+
 const formatRunName = (run) => {
-  if (!run.start_time || !run.end_time) return run.name
-  const start = run.start_time.split('.')[0]
-  const end = run.end_time.split(' ')[1]?.split('.')[0] || run.end_time.split('.')[0]
-  return `${start}-${end}`
+  if (!run?.start_time || !run?.end_time) return run?.name
+  const norm = (s) => {
+    if (!s) return ''
+    let x = String(s).split('.')[0].replace('T', ' ').replace('Z', '')
+    const [d, tRaw] = x.split(' ')
+    const t = (tRaw || '')
+    const hm = t.includes(':') ? t.slice(0, 5) : t
+    return { d: d || '', t: hm }
+  }
+  const s = norm(run.start_time)
+  const e = norm(run.end_time)
+  const startStr = s.d ? `${s.d} ${s.t}` : s.t
+  const endStr = e.t
+  return `${startStr}-${endStr}`
 }
 
 const formatRunNameFromId = (name) => {
