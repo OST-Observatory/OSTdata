@@ -199,6 +199,12 @@ class Handler(FileSystemEventHandler):
             # Only treat brand-new top-level run directories as runs
             parts = self._rel_parts(event.src_path)
             if len(parts) == 1:
+                # Skip hidden/system/trash directories
+                name = parts[0]
+                low = name.lower()
+                if name.startswith('.') or low.startswith('trash') or name in ('lost+found',):
+                    logger.info("Ignoring system/trash directory '%s'", name)
+                    return
                 #   Add new observation run
                 add_new_observation_run_wrapper(Path(event.src_path))
             # p = mp.Process(

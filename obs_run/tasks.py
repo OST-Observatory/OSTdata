@@ -469,6 +469,11 @@ def scan_missing_filesystem(self, dry_run: bool = True, limit: int | None = None
             for entry in it:
                 if not entry.is_dir():
                     continue
+                # Skip hidden/system/trash directories at top level
+                name = entry.name
+                low = name.lower()
+                if name.startswith('.') or low.startswith('trash') or name in ('lost+found',):
+                    continue
                 runs_seen += 1
                 run_name = entry.name
                 run_dir = os.path.join(base, run_name)

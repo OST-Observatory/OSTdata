@@ -173,7 +173,7 @@
             </v-tooltip>
           </template>
 
-          <template v-slot:item.date="{ item }">
+          <template v-slot:item.mid_observation_jd="{ item }">
             {{ formatDateTime(item.start_time || item.date, { dateStyle: 'short' }) }}
           </template>
 
@@ -447,7 +447,7 @@ const canDeleteRun = computed(() => authStore.isAdmin || authStore.hasPerm('user
 
 const headers = [
   { title: 'Name', key: 'name', sortable: true },
-  { title: 'Date', key: 'date', sortable: true },
+  { title: 'Date', key: 'mid_observation_jd', sortable: true },
   { title: 'Main Targets', key: 'main_targets', sortable: false },
   { title: 'Photometry', key: 'photometry', sortable: false },
   { title: 'Spectroscopy', key: 'spectroscopy', sortable: false },
@@ -485,13 +485,12 @@ const paginationInfo = computed(() => {
   return `${start}-${end} of ${totalItems.value}`
 })
 
-// Map backend sort key to table header key
+// Map backend sort key to table header key (use raw field names; date column sorts by mid_observation_jd)
 const tableSort = computed(() => {
   const backend = sortKey.value || ''
   const order = backend.startsWith('-') ? 'desc' : 'asc'
   const field = backend.replace('-', '')
-  const key = field === 'mid_observation_jd' ? 'date' : field
-  return [{ key, order }]
+  return [{ key: field, order }]
 })
 
 const fetchRuns = async () => {
@@ -581,8 +580,7 @@ watch([selectedStatus, photometryFilter, spectroscopyFilter], () => {
 const handleSort = (newSortBy) => {
   if (newSortBy.length > 0) {
     const sort = newSortBy[0]
-    const backendKey = sort.key === 'date' ? 'mid_observation_jd' : sort.key
-    sortKey.value = `${sort.order === 'desc' ? '-' : ''}${backendKey}`
+    sortKey.value = `${sort.order === 'desc' ? '-' : ''}${sort.key}`
   } else {
     sortKey.value = 'mid_observation_jd'
   }
@@ -812,7 +810,6 @@ const { applyQuery, syncQueryAndFetch } = useQuerySync(
 )
 
 onMounted(() => {
-  console.log('[Runs] component mounted')
   applyQuery()
   fetchRuns()
 })
@@ -820,28 +817,24 @@ onMounted(() => {
 // Debug: observe selection changes
 watch(selected, (val) => {
   try {
-    console.log('[Runs] selected (watch):', Array.isArray(val) ? val.map(v => v?.pk || v?.id) : val)
   } catch (e) {}
 }, { deep: true })
 
 // Debug: listen to table's update event
 const onRunsSelected = (val) => {
   try {
-    console.log('[Runs] update:selected event:', Array.isArray(val) ? val.map(v => v?.pk || v?.id || v) : val)
   } catch (e) {}
 }
 
 // Debug: table click events
 const onRunsTableClick = (e) => {
   try {
-    console.log('[Runs] table click', e?.target?.tagName, e?.target?.className)
   } catch (e) {}
 }
 
 // Debug: observe data loading
 watch(runs, (val) => {
   try {
-    console.log('[Runs] items loaded:', Array.isArray(val) ? val.length : 0, 'first:', val?.[0] ? Object.keys(val[0]) : null)
   } catch (e) {}
 })
 </script>
