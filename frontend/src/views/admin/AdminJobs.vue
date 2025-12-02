@@ -471,7 +471,6 @@
 
   const onUpdateSelected = (val) => {
     try {
-      console.log('[AdminJobs] selected update ->', val)
     } catch (e) {}
     selected.value = Array.isArray(val) ? val : []
   }
@@ -479,7 +478,6 @@
   // Extra debug: observe selection reactivity
   watch(selected, (val) => {
     try {
-      console.log('[AdminJobs] selected (watch):', Array.isArray(val) ? val.map(v => v?.id || v) : val)
     } catch (e) {}
   }, { deep: true })
 

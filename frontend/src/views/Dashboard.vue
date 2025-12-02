@@ -339,7 +339,6 @@ export default {
         loading.value = true
         error.value = null
         const response = await api.getDashboardStats()
-        console.log('API Response:', response)
         if (response) {
           // Verarbeite die Objektstatistiken
           let objectStats = response.objects
@@ -394,7 +393,6 @@ export default {
             }
           }
 
-          console.log('Updated stats:', stats.value)
         }
       } catch (error) {
         console.error('Error fetching dashboard stats:', error)
