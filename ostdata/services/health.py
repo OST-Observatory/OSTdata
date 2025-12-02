@@ -103,6 +103,74 @@ def gather_admin_health() -> Dict[str, Any]:
         data['redis_error'] = str(e)
     data['redis'] = {'ok': redis_ok, 'latency_ms': redis_latency_ms}
 
+    # Periodic task status from Redis (when broker is Redis)
+    try:
+        periodic = {}
+        broker = data.get('celery', {}).get('broker_url') or ''
+        if broker.startswith('redis') and _redis:
+            from urllib.parse import urlparse
+            u = urlparse(broker)
+            host = u.hostname or '127.0.0.1'
+            port = int(u.port or 6379)
+            db = int((u.path or '/0').lstrip('/') or 0)
+            password = u.password
+            client = _redis.Redis(host=host, port=port, db=db, password=password, socket_timeout=1.0)
+            # Scan keys like health:task:<name>
+            for key in client.scan_iter(match='health:task:*', count=50):
+                try:
+                    name = key.decode('utf-8').split(':', 2)[-1]
+                except Exception:
+                    continue
+                try:
+                    raw = client.hgetall(key)
+                except Exception:
+                    continue
+                item = {}
+                # last_run
+                try:
+                    lr = raw.get(b'last_run')
+                    last_run = lr.decode('utf-8') if lr else None
+                    item['last_run'] = last_run
+                    if last_run:
+                        try:
+                            from datetime import datetime
+                            # Python 3.11: fromisoformat handles offsets
+                            dt = datetime.fromisoformat(last_run)
+                            # Convert to aware timezone.now() for delta
+                            try:
+                                if dt.tzinfo is None:
+                                    dt = dt.replace(tzinfo=timezone.utc)
+                            except Exception:
+                                pass
+                            age = (timezone.now() - dt).total_seconds()
+                            item['age_seconds'] = int(age) if age is not None else None
+                        except Exception:
+                            item['age_seconds'] = None
+                except Exception:
+                    item['last_run'] = None
+                # last_error
+                try:
+                    le = raw.get(b'last_error')
+                    item['last_error'] = le.decode('utf-8') if le else ''
+                except Exception:
+                    item['last_error'] = ''
+                # data (JSON)
+                try:
+                    dj = raw.get(b'data')
+                    if dj:
+                        try:
+                            item['data'] = json.loads(dj.decode('utf-8'))
+                        except Exception:
+                            item['data'] = None
+                    else:
+                        item['data'] = None
+                except Exception:
+                    item['data'] = None
+                periodic[name] = item
+        data['periodic'] = periodic
+    except Exception as e:
+        data['periodic'] = {'error': str(e)}
+
     # AladinLite availability (simple HTTP ping to CDN)
     try:
         import urllib.request  # type: ignore

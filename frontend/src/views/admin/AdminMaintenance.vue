@@ -18,6 +18,66 @@
     </div>
 
     <v-row>
+      <v-col cols="12" md="6" v-if="canReconcile">
+        <v-card class="mb-4">
+          <v-card-title class="text-h6">
+            <div class="d-flex align-center" style="gap: 8px">
+              <span>Scan missing files (ingest)</span>
+              <v-chip
+                size="x-small"
+                :color="taskStatusColor(health.periodic?.scan_missing_filesystem)"
+                variant="flat"
+              >
+                {{ taskStatusLabel(health.periodic?.scan_missing_filesystem) }}
+              </v-chip>
+            </div>
+          </v-card-title>
+          <v-card-text>
+            <div class="text-caption text-medium-emphasis mb-2">
+              Walks the archive under <code>{{ health.settings?.DATA_DIRECTORY || '—' }}</code> to ingest files not yet in the DB (incl. .avi/.mov).
+            </div>
+            <div class="d-flex align-center mb-2" style="gap: 12px; flex-wrap: wrap">
+              <v-switch v-model="scanDryRun" inset hide-details color="primary" :label="`Dry run`" />
+              <v-text-field
+                v-model="scanLimit"
+                label="Limit (optional)"
+                type="number"
+                min="1"
+                density="comfortable"
+                variant="outlined"
+                hide-details
+                style="max-width: 180px"
+              />
+              <v-btn color="primary" prepend-icon="mdi-folder-search" :loading="busy.scan" @click="triggerScanMissing">
+                Run scan
+              </v-btn>
+            </div>
+            <div class="text-caption text-medium-emphasis">
+              Last run:
+              <span v-if="periodic?.scan_missing_filesystem?.last_run">
+                {{ formatRelative(periodic.scan_missing_filesystem.last_run, periodic.scan_missing_filesystem.age_seconds) }}
+              </span>
+              <span v-else>—</span>
+            </div>
+            <div v-if="health.periodic?.scan_missing_filesystem?.data" class="mt-2">
+              <div class="text-caption text-medium-emphasis">Summary</div>
+              <div class="text-caption">
+                added: {{ health.periodic.scan_missing_filesystem.data.added ?? 0 }},
+                checked: {{ health.periodic.scan_missing_filesystem.data.checked ?? 0 }},
+                skipped_known: {{ health.periodic.scan_missing_filesystem.data.skipped_known ?? 0 }},
+                skipped_unknown_type: {{ health.periodic.scan_missing_filesystem.data.skipped_unknown_type ?? 0 }},
+                runs_seen: {{ health.periodic.scan_missing_filesystem.data.runs_seen ?? 0 }},
+                runs_created: {{ health.periodic.scan_missing_filesystem.data.runs_created ?? 0 }},
+                mode: {{ health.periodic.scan_missing_filesystem.data.dry_run ? 'dry' : 'apply' }}
+              </div>
+            </div>
+            <div v-if="health.periodic?.scan_missing_filesystem?.last_error" class="text-error text-caption mt-1">
+              {{ health.periodic.scan_missing_filesystem.last_error }}
+            </div>
+          </v-card-text>
+        </v-card>
+      </v-col>
+
       <v-col cols="12" md="6" v-if="canCleanup">
         <v-card class="mb-4">
           <v-card-title class="text-h6">
@@ -115,7 +175,7 @@
         </v-card>
       </v-col>
 
-      <v-col cols="12" md="12" v-if="canOrphans">
+      <v-col cols="12" md="6" v-if="canOrphans">
         <v-card class="mb-4">
           <v-card-title class="text-h6">
             <div class="d-flex align-center" style="gap: 8px">
@@ -234,7 +294,7 @@ import { useAuthStore } from '@/store/auth'
 const notify = useNotifyStore()
 const auth = useAuthStore()
 const loading = ref(false)
-const busy = ref({ cleanup: false, reconcile: false, orphans: false, banner: false })
+const busy = ref({ cleanup: false, reconcile: false, scan: false, orphans: false, banner: false })
 const health = ref({ periodic: {}, settings: {} })
 const periodic = computed(() => (health.value && health.value.periodic) ? health.value.periodic : {})
 const dryRun = ref(true)
@@ -244,6 +304,8 @@ let intervalId = null
 const orphDryRun = ref(true)
 const orphFixMissing = ref(true)
 const orphLimit = ref('')
+const scanDryRun = ref(true)
+const scanLimit = ref('')
 
 const canCleanup = computed(() => auth.isAdmin || auth.hasPerm('users.acl_maintenance_cleanup') || auth.hasPerm('acl_maintenance_cleanup'))
 const canReconcile = computed(() => auth.isAdmin || auth.hasPerm('users.acl_maintenance_reconcile') || auth.hasPerm('acl_maintenance_reconcile'))
@@ -361,6 +423,24 @@ const triggerReconcile = async () => {
     notify.error('Failed to enqueue reconcile')
   } finally {
     busy.value.reconcile = false
+    setTimeout(refreshHealth, 1500)
+  }
+}
+
+const triggerScanMissing = async () => {
+  busy.value.scan = true
+  try {
+    const limitVal = parseInt(String(scanLimit.value), 10)
+    const opts = {
+      dry_run: !!scanDryRun.value,
+      limit: Number.isFinite(limitVal) && limitVal > 0 ? limitVal : null,
+    }
+    await api.adminMaintenanceScanMissing(opts)
+    notify.success(`Scan enqueued (${opts.dry_run ? 'dry' : 'apply'})`)
+  } catch (e) {
+    notify.error('Failed to enqueue scan')
+  } finally {
+    busy.value.scan = false
     setTimeout(refreshHealth, 1500)
   }
 }

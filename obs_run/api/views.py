@@ -76,6 +76,7 @@ def get_datafile_thumbnail(request, pk):
     """
     Return a PNG thumbnail for the given DataFile.
     FITS uses ZScale + asinh stretch; JPG/TIFF are thumbnailed directly.
+    Videos (SER/AVI/MOV) are not supported for thumbnail generation.
     Optional query params: w (int, default 512)
     """
     try:
@@ -101,6 +102,8 @@ def get_datafile_thumbnail(request, pk):
 
     # Determine FITS by type or extension (fallback)
     is_fits = (file_type == 'FITS') or (file_path.suffix.lower() in ['.fits', '.fit', '.fts'])
+    # Treat video-like types as unsupported for thumbnails
+    is_video = (file_type in ('SER', 'AVI', 'MOV')) or (file_path.suffix.lower() in ['.ser', '.avi', '.mov'])
 
     try:
         # FITS handling with zscale
@@ -141,6 +144,8 @@ def get_datafile_thumbnail(request, pk):
                 img.save(buf, format='PNG')
                 buf.seek(0)
                 return HttpResponse(buf.getvalue(), content_type='image/png')
+        elif is_video:
+            return Response({"detail": "Preview not supported for video files"}, status=400)
         else:
             # Non-FITS: try PIL thumbnail
             if Image is None:

@@ -1,6 +1,7 @@
 from astropy.time import Time
 
 from datetime import datetime
+import os
 
 import pytz
 
@@ -72,6 +73,33 @@ def analyze_image(datafile):
     datafile.exptime = exptime
     datafile.naxis1 = naxis1
     datafile.naxis2 = naxis2
+
+    datafile.save()
+
+############################################################################
+
+def analyze_video(datafile):
+    '''
+        Minimal metadata extraction for generic video files (.avi, .mov).
+        Uses filesystem modification time as observation timestamp.
+    '''
+    try:
+        mtime = os.path.getmtime(datafile.datafile)
+    except Exception:
+        # Fallback to a constant default if mtime can't be read
+        obs_date = '2000-01-01 00:00:00'
+        jd = Time(obs_date, format='iso', scale='utc').jd
+    else:
+        t = Time(mtime, format='unix', scale='utc')
+        obs_date = t.to_datetime().strftime("%Y-%m-%d %H:%M:%S")
+        jd = t.jd
+
+    datafile.exposure_type = 'UK'
+    datafile.hjd = jd
+    datafile.obs_date = obs_date
+    datafile.exptime = -1.
+    datafile.naxis1 = -1
+    datafile.naxis2 = -1
 
     datafile.save()
 

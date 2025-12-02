@@ -214,6 +214,9 @@
           <template v-slot:item.n_dark="{ item }">
             {{ getCount(item, ['n_dark', 'n_darks', 'darks']) ?? '—' }}
           </template>
+          <template v-slot:item.other="{ item }">
+            {{ getOtherCount(item) }}
+          </template>
 
           <template v-slot:item.tags="{ item }">
             <div class="d-flex flex-wrap gap-1">
@@ -451,6 +454,7 @@ const headers = [
   { title: 'Lights', key: 'n_light', sortable: true },
   { title: 'Flats', key: 'n_flat', sortable: true },
   { title: 'Darks', key: 'n_dark', sortable: true },
+  { title: 'Other', key: 'other', sortable: false },
   { title: 'Tags', key: 'tags', sortable: false },
   { title: 'Status', key: 'status', sortable: false },
   { title: 'Actions', key: 'actions', sortable: false },
@@ -770,6 +774,15 @@ const getCount = (item, keys) => {
     }
   }
   return 0
+}
+
+const getOtherCount = (item) => {
+  const total = getCount(item, ['n_datafiles', 'n_files', 'files', 'n_total'])
+  const li = getCount(item, ['n_light', 'n_lights', 'lights'])
+  const fl = getCount(item, ['n_flat', 'n_flats', 'flats'])
+  const da = getCount(item, ['n_dark', 'n_darks', 'darks'])
+  const other = total - (li + fl + da)
+  return other >= 0 ? other : 0
 }
 
 const normalizeTags = (tags) => {
