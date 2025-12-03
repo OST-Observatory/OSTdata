@@ -75,7 +75,8 @@ async function fetchWithAuth(url, options = {}) {
     throw error
   }
 
-  if (!response.ok) {
+  const acceptable = Array.isArray(options.acceptableStatus) ? options.acceptableStatus : []
+  if (!response.ok && !acceptable.includes(response.status)) {
     const error = new Error(`API error: ${response.status}`)
     error.status = response.status
     try {
@@ -92,7 +93,12 @@ async function fetchWithAuth(url, options = {}) {
     throw error
   }
 
-  return await response.json()
+  // Try JSON; if no JSON body (e.g., 204 No Content), return empty object
+  try {
+    return await response.json()
+  } catch {
+    return {}
+  }
 }
 
 export const api = {
@@ -109,7 +115,7 @@ export const api = {
   getObservationRuns: (params) => fetchWithAuth('/runs/runs/', { params }),
   getAllObservationRuns: () => fetchWithAuth('/runs/runs/?limit=1000'),  // Get all runs for filtering
   updateObservationRun: (id, data) => fetchWithAuth(`/runs/runs/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }),
-  deleteObservationRun: (id) => fetchWithAuth(`/runs/runs/${id}/`, { method: 'DELETE' }),
+  deleteObservationRun: (id) => fetchWithAuth(`/runs/runs/${id}/`, { method: 'DELETE', acceptableStatus: [404] }),
   // getRunDataFiles: deprecated in favor of paged datafiles endpoint
   getRunDataFilesPaged: (runId, params = {}) => {
     const queryParams = {

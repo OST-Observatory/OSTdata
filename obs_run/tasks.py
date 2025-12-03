@@ -556,6 +556,22 @@ def scan_missing_filesystem(self, dry_run: bool = True, limit: int | None = None
                         except Exception:
                             errors += 1
                             continue
+                # After scanning this run directory, recompute mid_observation_jd
+                try:
+                    if not dry_run and run is not None:
+                        qs = DataFile.objects.filter(observation_run=run, hjd__gt=2451545)
+                        a = qs.order_by('hjd').values_list('hjd', flat=True).first()
+                        b = qs.order_by('-hjd').values_list('hjd', flat=True).first()
+                        if a is None and b is None:
+                            run.mid_observation_jd = 0.0
+                        elif a is None or b is None:
+                            run.mid_observation_jd = float(a or b or 0.0)
+                        else:
+                            run.mid_observation_jd = float(a + (b - a) / 2.0)
+                        run.save(update_fields=['mid_observation_jd'])
+                except Exception:
+                    # Do not fail the whole task on recompute errors
+                    errors += 1
     except Exception as e:
         _health_error('scan_missing_filesystem', e)
         return {
