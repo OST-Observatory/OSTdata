@@ -509,6 +509,8 @@ WATCH_IGNORED_SUFFIXES=.filepart,.bck,.swp
 WATCH_CREATED_DELAY_SECONDS=20
 # Optional stability window (seconds): file size must remain unchanged
 WATCH_STABILITY_SECONDS=0
+# Use polling instead of inotify (set to 1 for some network mounts, e.g. NFS/CIFS)
+WATCH_USE_POLLING=0
 ```
 
 Run the watcher (manual):

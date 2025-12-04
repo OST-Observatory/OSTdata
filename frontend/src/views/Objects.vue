@@ -1039,7 +1039,6 @@ const radiusRules = [
 ]
 
 onMounted(() => {
-  console.log('[Objects] component mounted')
   applyQuerySync()
   fetchObjects()
   fetchObservationRuns()
@@ -1048,28 +1047,24 @@ onMounted(() => {
 // Debug: observe selection changes
 watch(selected, (val) => {
   try {
-    console.log('[Objects] selected (watch):', Array.isArray(val) ? val.map(v => v?.pk || v?.id) : val)
   } catch (e) {}
 }, { deep: true })
 
 // Debug: listen to table's update event
 const onObjectsSelected = (val) => {
   try {
-    console.log('[Objects] update:selected event:', Array.isArray(val) ? val.map(v => v?.pk || v?.id || v) : val)
   } catch (e) {}
 }
 
 // Debug: table click events
 const onObjectsTableClick = (e) => {
   try {
-    console.log('[Objects] table click', e?.target?.tagName, e?.target?.className)
   } catch (e) {}
 }
 
 // Debug: observe data loading
 watch(objects, (val) => {
   try {
-    console.log('[Objects] items loaded:', Array.isArray(val) ? val.length : 0, 'first:', val?.[0] ? Object.keys(val[0]) : null)
   } catch (e) {}
 })
 

@@ -5,6 +5,7 @@ from pathlib import Path
 import time
 
 from watchdog.observers import Observer
+from watchdog.observers.polling import PollingObserver
 from watchdog.events import FileSystemEventHandler
 
 import threading
@@ -23,9 +24,11 @@ from utilities import (
     compute_file_hash,
 )
 
-# sys.path.append('../')
-os.environ["DJANGO_SETTINGS_MODULE"] = "ostdata.settings"
-django.setup()
+"""
+This module is imported by the Django management command `watch_data`.
+Django is already configured in that execution context, so we must NOT
+override DJANGO_SETTINGS_MODULE or call django.setup() here at import time.
+"""
 
 from obs_run.models import ObservationRun, DataFile
 
@@ -45,6 +48,7 @@ WATCH_DEBOUNCE_SECONDS = env.float('WATCH_DEBOUNCE_SECONDS', default=2.0)
 WATCH_IGNORED_SUFFIXES = [s.strip() for s in env('WATCH_IGNORED_SUFFIXES', default='.filepart,.bck,.swp').split(',') if s.strip()]
 WATCH_CREATED_DELAY_SECONDS = env.float('WATCH_CREATED_DELAY_SECONDS', default=20.0)
 WATCH_STABILITY_SECONDS = env.float('WATCH_STABILITY_SECONDS', default=0.0)
+WATCH_USE_POLLING = env.bool('WATCH_USE_POLLING', default=False)
 
 
 def add_new_observation_run_wrapper(data_path):
@@ -143,7 +147,8 @@ def observation_run_statistic_update(observation_run):
 class Watcher:
 
     def __init__(self, directory):
-        self.observer = Observer()
+        # Use polling for filesystems without inotify support (e.g., some network mounts)
+        self.observer = PollingObserver() if WATCH_USE_POLLING else Observer()
         self.directory_to_watch = directory
 
     def run(self):
