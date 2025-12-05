@@ -63,7 +63,9 @@ def add_new_observation_run_wrapper(data_path):
     logger.info(f"Start evaluation of {data_path} directory")
 
     #   Analyse directory and add adds associated data
-    add_new_observation_run(data_path)
+    #   Important: when a pre-filled directory is moved into the watch root,
+    #   no file-created events are generated for existing files. Ingest now.
+    add_new_observation_run(data_path, add_data_files=True)
 
 
 def add_new_data_file_wrapper(file_path, directory_to_monitor):
@@ -367,7 +369,18 @@ class Handler(FileSystemEventHandler):
                                 elif count > 1:
                                     logger.warning('Multiple DB candidates match content hash; skipping ambiguous move recovery.')
                                 else:
-                                    logger.warning('File move cannot be applied (no matching DataFile).')
+                                    # No match: treat this as a newly added file under an existing run
+                                    if dst_parts:
+                                        try:
+                                            run_name = dst_parts[0]
+                                            observation_run = ObservationRun.objects.get(name=run_name)
+                                            add_new_data_file(p, observation_run)
+                                            observation_run_statistic_update(observation_run)
+                                            logger.info('Ingested new file after move into run %s: %s', run_name, str(p))
+                                        except ObservationRun.DoesNotExist:
+                                            logger.warning('Moved file is not under a known run: %s', event.dest_path)
+                                    else:
+                                        logger.warning('File move cannot be applied (no matching DataFile).')
                             else:
                                 logger.warning('File move destination does not exist.')
                         except Exception:
