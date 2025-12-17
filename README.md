@@ -511,6 +511,8 @@ WATCH_CREATED_DELAY_SECONDS=20
 WATCH_STABILITY_SECONDS=0
 # Use polling instead of inotify (set to 1 for some network mounts, e.g. NFS/CIFS)
 WATCH_USE_POLLING=0
+# Polling interval in seconds (only used when WATCH_USE_POLLING=1)
+WATCH_POLLING_INTERVAL=1.0
 ```
 
 Run the watcher (manual):

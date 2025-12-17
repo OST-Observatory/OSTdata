@@ -49,6 +49,7 @@ WATCH_IGNORED_SUFFIXES = [s.strip() for s in env('WATCH_IGNORED_SUFFIXES', defau
 WATCH_CREATED_DELAY_SECONDS = env.float('WATCH_CREATED_DELAY_SECONDS', default=20.0)
 WATCH_STABILITY_SECONDS = env.float('WATCH_STABILITY_SECONDS', default=0.0)
 WATCH_USE_POLLING = env.bool('WATCH_USE_POLLING', default=False)
+WATCH_POLLING_INTERVAL = env.float('WATCH_POLLING_INTERVAL', default=1.0)  # Polling interval in seconds
 
 
 def add_new_observation_run_wrapper(data_path):
@@ -150,10 +151,28 @@ class Watcher:
 
     def __init__(self, directory):
         # Use polling for filesystems without inotify support (e.g., some network mounts)
-        self.observer = PollingObserver() if WATCH_USE_POLLING else Observer()
+        if WATCH_USE_POLLING:
+            self.observer = PollingObserver(timeout=WATCH_POLLING_INTERVAL)
+            self._mode = 'polling'
+        else:
+            self.observer = Observer()
+            self._mode = 'inotify'
         self.directory_to_watch = directory
 
     def run(self):
+        # Log startup configuration
+        logger.info("=" * 60)
+        logger.info("Watcher starting...")
+        logger.info("  Directory: %s", self.directory_to_watch)
+        logger.info("  Mode: %s", self._mode)
+        if self._mode == 'polling':
+            logger.info("  Polling interval: %.1f seconds", WATCH_POLLING_INTERVAL)
+        logger.info("  Debounce: %.1f seconds", WATCH_DEBOUNCE_SECONDS)
+        logger.info("  Created delay: %.1f seconds", WATCH_CREATED_DELAY_SECONDS)
+        logger.info("  Stability check: %.1f seconds", WATCH_STABILITY_SECONDS)
+        logger.info("  Ignored suffixes: %s", WATCH_IGNORED_SUFFIXES)
+        logger.info("=" * 60)
+
         event_handler = Handler(self.directory_to_watch)
         self.observer.schedule(
             event_handler,
@@ -161,14 +180,7 @@ class Watcher:
             recursive=True,
         )
         self.observer.start()
-        # try:
-        #     while True:
-        #         time.sleep(5)
-        # except:
-        #     self.observer.stop()
-        #     print("Error")
-
-        # self.observer.join()
+        logger.info("Watcher is now running and monitoring for changes...")
 
         try:
             while self.observer.is_alive():
@@ -176,6 +188,7 @@ class Watcher:
         finally:
             self.observer.stop()
             self.observer.join()
+            logger.info("Watcher stopped.")
 
 
 class Handler(FileSystemEventHandler):
@@ -202,7 +215,7 @@ class Handler(FileSystemEventHandler):
 
     def on_created(self, event):
         if event.is_directory:
-            logger.info(f"Directory created - {event.src_path}")
+            logger.info("[EVENT:CREATED:DIR] %s", event.src_path)
             # Only treat brand-new top-level run directories as runs
             parts = self._rel_parts(event.src_path)
             if len(parts) == 1:
@@ -210,97 +223,99 @@ class Handler(FileSystemEventHandler):
                 name = parts[0]
                 low = name.lower()
                 if name.startswith('.') or low.startswith('trash') or name in ('lost+found',):
-                    logger.info("Ignoring system/trash directory '%s'", name)
+                    logger.info("[SKIP] Ignoring system/trash directory '%s'", name)
                     return
-                #   Add new observation run
+                logger.info("[ACTION] Creating new observation run for '%s'", name)
                 add_new_observation_run_wrapper(Path(event.src_path))
-            # p = mp.Process(
-            #     target=add_new_observation_run_wrapper,
-            #     args=(Path(event.src_path),),
-            # )
-            # p.start()
-
         else:
             suffix = Path(event.src_path).suffix
-            if suffix not in WATCH_IGNORED_SUFFIXES:
-                logger.info(f"File created - {event.src_path}")
-
-                #   Add new data file instance
+            if suffix in WATCH_IGNORED_SUFFIXES:
+                logger.debug("[SKIP] Ignored suffix %s for %s", suffix, event.src_path)
+            else:
+                logger.info("[EVENT:CREATED:FILE] %s", event.src_path)
+                logger.info("[ACTION] Adding new data file...")
                 add_new_data_file_wrapper(
                     Path(event.src_path),
                     self.directory_to_monitor,
                 )
-                # p = mp.Process(
-                #     target=add_new_data_file_wrapper,
-                #     args=(Path(event.src_path), self.directory_to_monitor,),
-                # )
-                # p.start()
 
     def on_deleted(self, event):
-        # print('IN DELETE')
         if event.is_directory:
-            logger.info(f"Directory deleted - {event.src_path}")
+            logger.info("[EVENT:DELETED:DIR] %s", event.src_path)
             #   Delete observation run when a top-level run folder is removed
             parts = self._rel_parts(event.src_path)
             if len(parts) == 1:
                 run_name = parts[0]
                 try:
                     observation_run = ObservationRun.objects.get(name=run_name)
+                    logger.info("[ACTION] Deleting observation run '%s' from DB", run_name)
                     observation_run.delete()
+                    logger.info("[SUCCESS] Observation run '%s' deleted", run_name)
                 except ObservationRun.DoesNotExist:
-                    logger.warning(f"Run not found for deletion: {run_name}")
-
+                    logger.warning("[WARN] Run not found for deletion: %s", run_name)
         else:
             suffix = Path(event.src_path).suffix
-            if suffix not in WATCH_IGNORED_SUFFIXES:
-                logger.info(f"File deleted - {event.src_path}")
+            if suffix in WATCH_IGNORED_SUFFIXES:
+                logger.debug("[SKIP] Ignored suffix %s for %s", suffix, event.src_path)
+                return
 
-                #   Delete data file object (robust to path variations and missing rows)
-                deleted_run = None
+            logger.info("[EVENT:DELETED:FILE] %s", event.src_path)
+
+            #   Delete data file object (robust to path variations and missing rows)
+            deleted_run = None
+            deleted_file_id = None
+            try:
+                # Try exact path first
+                data_file = DataFile.objects.get(datafile=event.src_path)
+                deleted_run = data_file.observation_run
+                deleted_file_id = data_file.pk
+                logger.info("[ACTION] Deleting DataFile #%s from DB (exact path match)", deleted_file_id)
+                data_file.delete()
+                logger.info("[SUCCESS] DataFile #%s deleted", deleted_file_id)
+            except DataFile.DoesNotExist:
+                # Try realpath (symlinks)
                 try:
-                    # Try exact path first
-                    data_file = DataFile.objects.get(datafile=event.src_path)
+                    real = os.path.realpath(event.src_path)
+                    data_file = DataFile.objects.get(datafile=real)
                     deleted_run = data_file.observation_run
+                    deleted_file_id = data_file.pk
+                    logger.info("[ACTION] Deleting DataFile #%s from DB (realpath match)", deleted_file_id)
                     data_file.delete()
+                    logger.info("[SUCCESS] DataFile #%s deleted", deleted_file_id)
                 except DataFile.DoesNotExist:
-                    # Try realpath (symlinks)
+                    # Fallback: endswith match by relative path under the monitored directory
                     try:
-                        real = os.path.realpath(event.src_path)
-                        data_file = DataFile.objects.get(datafile=real)
-                        deleted_run = data_file.observation_run
-                        data_file.delete()
-                    except DataFile.DoesNotExist:
-                        # Fallback: endswith match by relative path under the monitored directory
-                        try:
-                            rel = os.path.relpath(event.src_path, self.directory_to_monitor)
-                            # Normalize to OS separators
-                            rel = rel.strip(os.sep)
-                            if rel:
-                                qs = DataFile.objects.filter(datafile__endswith=os.sep + rel)
-                                count = qs.count()
-                                if count == 1:
-                                    df = qs.first()
-                                    deleted_run = df.observation_run
-                                    df.delete()
-                                elif count > 1:
-                                    logger.warning("Multiple DataFile rows match deleted path suffix '%s'; skipping delete", rel)
-                        except Exception:
-                            pass
-
-                # Update run statistics after file deletion
-                if deleted_run:
-                    try:
-                        observation_run_statistic_update(deleted_run)
-                        logger.info(f"Updated statistics for run '{deleted_run.name}' after file deletion")
+                        rel = os.path.relpath(event.src_path, self.directory_to_monitor)
+                        rel = rel.strip(os.sep)
+                        if rel:
+                            qs = DataFile.objects.filter(datafile__endswith=os.sep + rel)
+                            count = qs.count()
+                            if count == 1:
+                                df = qs.first()
+                                deleted_run = df.observation_run
+                                deleted_file_id = df.pk
+                                logger.info("[ACTION] Deleting DataFile #%s from DB (suffix match)", deleted_file_id)
+                                df.delete()
+                                logger.info("[SUCCESS] DataFile #%s deleted", deleted_file_id)
+                            elif count > 1:
+                                logger.warning("[WARN] Multiple DataFile rows (%d) match deleted path suffix '%s'; skipping delete", count, rel)
                     except Exception as e:
-                        logger.warning(f"Failed to update run statistics after file deletion: {e}")
-                else:
-                    # If we reach here, we didn't find a corresponding DB row; log and continue
-                    logger.info("No DataFile row found for deleted path '%s'; nothing to delete", event.src_path)
+                        logger.exception("[ERROR] Exception during fallback path matching: %s", e)
+
+            # Update run statistics after file deletion
+            if deleted_run:
+                try:
+                    observation_run_statistic_update(deleted_run)
+                    logger.info("[ACTION] Updated statistics for run '%s' after file deletion", deleted_run.name)
+                except Exception as e:
+                    logger.warning("[WARN] Failed to update run statistics after file deletion: %s", e)
+            elif deleted_file_id is None:
+                # If we reach here, we didn't find a corresponding DB row
+                logger.info("[INFO] No DataFile row found for deleted path '%s'; nothing to delete from DB", event.src_path)
 
     def on_moved(self, event):
         if event.is_directory:
-            logger.info(f"Directory moved - {event.src_path} -> {event.dest_path}")
+            logger.info("[EVENT:MOVED:DIR] %s -> %s", event.src_path, event.dest_path)
             #   Only handle top-level run directory renames/moves
             src_parts = self._rel_parts(event.src_path)
             dst_parts = self._rel_parts(event.dest_path)
@@ -310,10 +325,11 @@ class Handler(FileSystemEventHandler):
                 try:
                     observation_run = ObservationRun.objects.get(name=src_run)
                 except ObservationRun.DoesNotExist:
-                    logger.warning(f"Run not found for rename: {src_run}")
+                    logger.warning("[WARN] Run not found for rename: %s", src_run)
                     return
 
                 # Update run name
+                logger.info("[ACTION] Renaming run '%s' -> '%s'", src_run, dst_run)
                 observation_run.name = dst_run
                 observation_run.save()
 
@@ -328,73 +344,79 @@ class Handler(FileSystemEventHandler):
                         df.save(update_fields=['datafile'])
                         n += 1
                     except Exception as e:
-                        logger.error(f"Failed to update path for df {df.pk}: {e}")
-                logger.info(f"Updated run name and {n} file paths from '{src_run}' to '{dst_run}'")
+                        logger.error("[ERROR] Failed to update path for df %s: %s", df.pk, e)
+                logger.info("[SUCCESS] Updated run name and %d file paths from '%s' to '%s'", n, src_run, dst_run)
         else:
             suffix = Path(event.src_path).suffix
-            if suffix not in WATCH_IGNORED_SUFFIXES:
-                logger.info(f"File moved - {event.src_path} -> {event.dest_path}")
+            if suffix in WATCH_IGNORED_SUFFIXES:
+                logger.debug("[SKIP] Ignored suffix %s for moved file", suffix)
+                return
 
-                #   Find and update data file
+            logger.info("[EVENT:MOVED:FILE] %s -> %s", event.src_path, event.dest_path)
+
+            #   Find and update data file
+            try:
+                data_file = DataFile.objects.get(datafile=event.src_path)
+                logger.info("[ACTION] Updating DataFile #%s path to new location", data_file.pk)
+                data_file.datafile = event.dest_path
                 try:
-                    data_file = DataFile.objects.get(datafile=event.src_path)
-                    data_file.datafile = event.dest_path
+                    p = Path(event.dest_path)
+                    data_file.file_size = p.stat().st_size if p.exists() else 0
+                    try:
+                        data_file.content_hash = compute_file_hash(p) if p.exists() else ''
+                    except Exception:
+                        pass
+                    data_file.save(update_fields=['datafile', 'file_size', 'content_hash'])
+                except Exception:
+                    data_file.save(update_fields=['datafile'])
+                logger.info("[SUCCESS] DataFile #%s path updated", data_file.pk)
+            except DataFile.DoesNotExist:
+                # If a move was missed earlier, try to see if the destination already exists
+                try:
+                    DataFile.objects.get(datafile=event.dest_path)
+                    logger.info('[INFO] Destination path already tracked; skipping update.')
+                except DataFile.DoesNotExist:
+                    # Optional: try to match by hash if destination exists
                     try:
                         p = Path(event.dest_path)
-                        data_file.file_size = p.stat().st_size if p.exists() else 0
-                        try:
-                            data_file.content_hash = compute_file_hash(p) if p.exists() else ''
-                        except Exception:
-                            pass
-                        data_file.save(update_fields=['datafile', 'file_size', 'content_hash'])
-                    except Exception:
-                        data_file.save(update_fields=['datafile'])
-                except DataFile.DoesNotExist:
-                    # If a move was missed earlier, try to see if the destination already exists
-                    try:
-                        DataFile.objects.get(datafile=event.dest_path)
-                        logger.info('Destination path already tracked; skipping update.')
-                    except DataFile.DoesNotExist:
-                        # Optional: try to match by hash if destination exists
-                        try:
-                            p = Path(event.dest_path)
-                            if p.exists() and p.is_file():
-                                h = compute_file_hash(p)
-                                size = p.stat().st_size
-                                # Restrict search to files within the same destination run when possible
-                                dst_parts = self._rel_parts(event.dest_path)
-                                qs = DataFile.objects.filter(content_hash=h, file_size=size)
-                                if dst_parts:
-                                    dst_run = dst_parts[0]
-                                    dst_prefix = self._abs_from_parts([dst_run]) + os.sep
-                                    qs = qs.filter(datafile__startswith=dst_prefix)
-                                count = qs.count()
-                                if count == 1:
-                                    match = qs.first()
-                                    match.datafile = event.dest_path
-                                    match.save(update_fields=['datafile'])
-                                    logger.info('Matched moved file by content hash to DataFile #%s', match.pk)
-                                elif count > 1:
-                                    logger.warning('Multiple DB candidates match content hash; skipping ambiguous move recovery.')
-                                else:
-                                    # No match: treat this as a newly added file under an existing run
-                                    if dst_parts:
-                                        try:
-                                            run_name = dst_parts[0]
-                                            observation_run = ObservationRun.objects.get(name=run_name)
-                                            add_new_data_file(p, observation_run)
-                                            observation_run_statistic_update(observation_run)
-                                            logger.info('Ingested new file after move into run %s: %s', run_name, str(p))
-                                        except ObservationRun.DoesNotExist:
-                                            logger.warning('Moved file is not under a known run: %s', event.dest_path)
-                                    else:
-                                        logger.warning('File move cannot be applied (no matching DataFile).')
+                        if p.exists() and p.is_file():
+                            h = compute_file_hash(p)
+                            size = p.stat().st_size
+                            # Restrict search to files within the same destination run when possible
+                            dst_parts = self._rel_parts(event.dest_path)
+                            qs = DataFile.objects.filter(content_hash=h, file_size=size)
+                            if dst_parts:
+                                dst_run = dst_parts[0]
+                                dst_prefix = self._abs_from_parts([dst_run]) + os.sep
+                                qs = qs.filter(datafile__startswith=dst_prefix)
+                            count = qs.count()
+                            if count == 1:
+                                match = qs.first()
+                                match.datafile = event.dest_path
+                                match.save(update_fields=['datafile'])
+                                logger.info('[SUCCESS] Matched moved file by content hash to DataFile #%s', match.pk)
+                            elif count > 1:
+                                logger.warning('[WARN] Multiple DB candidates (%d) match content hash; skipping ambiguous move recovery.', count)
                             else:
-                                logger.warning('File move destination does not exist.')
-                        except Exception:
-                            logger.warning('File move cannot be applied (no matching DataFile).')
-                except Exception as e:
-                    logger.exception('File move cannot be applied...')
+                                # No match: treat this as a newly added file under an existing run
+                                if dst_parts:
+                                    try:
+                                        run_name = dst_parts[0]
+                                        observation_run = ObservationRun.objects.get(name=run_name)
+                                        logger.info('[ACTION] Ingesting new file after move into run %s: %s', run_name, str(p))
+                                        add_new_data_file(p, observation_run)
+                                        observation_run_statistic_update(observation_run)
+                                        logger.info('[SUCCESS] Ingested new file after move into run %s', run_name)
+                                    except ObservationRun.DoesNotExist:
+                                        logger.warning('[WARN] Moved file is not under a known run: %s', event.dest_path)
+                                else:
+                                    logger.warning('[WARN] File move cannot be applied (no matching DataFile).')
+                        else:
+                            logger.warning('[WARN] File move destination does not exist: %s', event.dest_path)
+                    except Exception as e:
+                        logger.warning('[WARN] File move cannot be applied (no matching DataFile): %s', e)
+            except Exception as e:
+                logger.exception('[ERROR] File move cannot be applied: %s', e)
 
     def on_modified(self, event):
         if event.is_directory:
@@ -403,6 +425,7 @@ class Handler(FileSystemEventHandler):
         if suffix in WATCH_IGNORED_SUFFIXES:
             return
         # Debounce: coalesce rapid successive modifications of the same file
+        logger.debug("[EVENT:MODIFIED:FILE] %s (scheduling debounced processing)", event.src_path)
         self._schedule_modified(event.src_path)
 
     def _schedule_modified(self, abs_path, delay=None):
@@ -419,14 +442,14 @@ class Handler(FileSystemEventHandler):
         timer.start()
 
     def _process_modified(self, abs_path):
-        logger.info(f"File modified (debounced) - {abs_path}")
+        logger.info("[EVENT:MODIFIED:FILE] %s (debounced, now processing)", abs_path)
         # Extra small wait to ensure file is closed by writers
         time.sleep(1)
         try:
             self._process_modified_once(abs_path)
 
         except Exception as e:
-            logger.exception('File modification cannot be applied...')
+            logger.exception('[ERROR] File modification cannot be applied: %s', e)
         finally:
             # Clear debounce entry
             try:
@@ -444,6 +467,8 @@ class Handler(FileSystemEventHandler):
             try:
                 #   Find data file object
                 data_file = DataFile.objects.get(datafile=abs_path)
+
+                logger.info("[ACTION] Re-evaluating modified DataFile #%s", data_file.pk)
 
                 #   Delete old object relations (will be recreated)
                 objects = data_file.object_set.all()
@@ -463,9 +488,11 @@ class Handler(FileSystemEventHandler):
                 #   Update observation run statistics
                 observation_run_statistic_update(observation_run)
 
+                logger.info("[SUCCESS] DataFile #%s re-evaluated", data_file.pk)
                 return
             except Exception as e:
                 last_exc = e
+                logger.debug("[RETRY] Attempt %d/%d failed for %s: %s", i+1, attempts, abs_path, e)
                 time.sleep(backoff)
         if last_exc:
             raise last_exc
