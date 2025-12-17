@@ -816,3 +816,134 @@ def cleanup_orphans_and_hashcheck(self, dry_run: bool = True, fix_missing_hashes
     }
     _health_set('cleanup_orphans_hashcheck', result)
     return result
+
+
+@shared_task(bind=True, max_retries=2, default_retry_delay=60)
+def refresh_dashboard_stats(self):
+    """
+    Background task to pre-compute and cache dashboard statistics.
+    
+    This task uses aggregation queries for efficiency and caches the results.
+    Can be scheduled via Celery Beat (e.g., every 15-30 minutes) or triggered manually.
+    
+    Cache keys:
+    - dashboard_stats_v2: Main stats (30 min TTL)
+    - dashboard_storage_size: Storage size (2 hour TTL)
+    """
+    from django.core.cache import cache
+    from django.db.models import Count, Q
+    from datetime import datetime, timedelta
+    from django.utils.timezone import make_aware
+    from objects.models import Object
+    import environ
+    from obs_run.auxil import get_size_dir
+    
+    try:
+        dtime_naive = datetime.now() - timedelta(days=7)
+        aware_datetime = make_aware(dtime_naive)
+        
+        # === FILES: Single aggregated query ===
+        file_stats = DataFile.objects.aggregate(
+            total=Count('pk'),
+            bias=Count('pk', filter=Q(exposure_type='BI')),
+            darks=Count('pk', filter=Q(exposure_type='DA')),
+            flats=Count('pk', filter=Q(exposure_type='FL')),
+            lights=Count('pk', filter=Q(exposure_type='LI')),
+            waves=Count('pk', filter=Q(exposure_type='WA')),
+            fits=Count('pk', filter=Q(file_type='FITS')),
+            jpeg=Count('pk', filter=Q(file_type='JPG')),
+            cr2=Count('pk', filter=Q(file_type='CR2')),
+            tiff=Count('pk', filter=Q(file_type='TIFF')),
+            ser=Count('pk', filter=Q(file_type='SER')),
+        )
+        files_7d_count = DataFile.history.filter(history_date__gte=aware_datetime).count()
+        
+        # === OBJECTS: Single aggregated query ===
+        object_stats = Object.objects.aggregate(
+            total=Count('pk'),
+            galaxies=Count('pk', filter=Q(object_type='GA')),
+            star_clusters=Count('pk', filter=Q(object_type='SC')),
+            nebulae=Count('pk', filter=Q(object_type='NE')),
+            stars=Count('pk', filter=Q(object_type='ST')),
+            solar_system=Count('pk', filter=Q(object_type='SO')),
+            other=Count('pk', filter=Q(object_type='OT')),
+            unknown=Count('pk', filter=Q(object_type='UK')),
+        )
+        objects_7d_count = Object.history.filter(history_date__gte=aware_datetime).count()
+        
+        # === RUNS: Single aggregated query ===
+        run_stats = ObservationRun.objects.aggregate(
+            total=Count('pk'),
+            partly_reduced=Count('pk', filter=Q(reduction_status='PR')),
+            fully_reduced=Count('pk', filter=Q(reduction_status='FR')),
+            reduction_error=Count('pk', filter=Q(reduction_status='ER')),
+            not_reduced=Count('pk', filter=Q(reduction_status='NE')),
+        )
+        runs_7d_count = ObservationRun.history.filter(history_date__gte=aware_datetime).count()
+        
+        # === STORAGE SIZE ===
+        env = environ.Env()
+        environ.Env.read_env()
+        data_path = env("DATA_DIRECTORY", default='/archive/ftp/')
+        try:
+            storage_size = get_size_dir(data_path) * pow(1000, -4)
+        except Exception:
+            storage_size = 0
+        
+        # Build stats dict
+        stats = {
+            'files': {
+                'total': file_stats['total'] or 0,
+                'total_last_week': files_7d_count,
+                'bias': file_stats['bias'] or 0,
+                'darks': file_stats['darks'] or 0,
+                'flats': file_stats['flats'] or 0,
+                'lights': file_stats['lights'] or 0,
+                'waves': file_stats['waves'] or 0,
+                'fits': file_stats['fits'] or 0,
+                'jpeg': file_stats['jpeg'] or 0,
+                'cr2': file_stats['cr2'] or 0,
+                'tiff': file_stats['tiff'] or 0,
+                'ser': file_stats['ser'] or 0,
+                'storage_size': storage_size,
+            },
+            'objects': {
+                'total': object_stats['total'] or 0,
+                'total_last_week': objects_7d_count,
+                'galaxies': object_stats['galaxies'] or 0,
+                'star_clusters': object_stats['star_clusters'] or 0,
+                'nebulae': object_stats['nebulae'] or 0,
+                'stars': object_stats['stars'] or 0,
+                'solar_system': object_stats['solar_system'] or 0,
+                'other': object_stats['other'] or 0,
+                'unknown': object_stats['unknown'] or 0,
+            },
+            'runs': {
+                'total': run_stats['total'] or 0,
+                'total_last_week': runs_7d_count,
+                'partly_reduced': run_stats['partly_reduced'] or 0,
+                'fully_reduced': run_stats['fully_reduced'] or 0,
+                'reduction_error': run_stats['reduction_error'] or 0,
+                'not_reduced': run_stats['not_reduced'] or 0,
+            }
+        }
+        
+        # Cache results
+        cache.set('dashboard_stats_v2', stats, timeout=1800)  # 30 min
+        cache.set('dashboard_storage_size', storage_size, timeout=7200)  # 2 hours
+        
+        result = {
+            'files_total': stats['files']['total'],
+            'objects_total': stats['objects']['total'],
+            'runs_total': stats['runs']['total'],
+            'storage_size_tb': storage_size,
+        }
+        _health_set('refresh_dashboard_stats', result)
+        logger.info("Dashboard stats refreshed: %s files, %s objects, %s runs", 
+                    stats['files']['total'], stats['objects']['total'], stats['runs']['total'])
+        return result
+        
+    except Exception as e:
+        _health_error('refresh_dashboard_stats', e)
+        logger.error("Failed to refresh dashboard stats: %s", e)
+        raise self.retry(exc=e)

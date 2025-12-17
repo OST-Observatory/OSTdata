@@ -287,6 +287,51 @@
           </v-card-text>
         </v-card>
       </v-col>
+      <v-col cols="12" md="6" v-if="canReconcile">
+        <v-card class="mb-4">
+          <v-card-title class="text-h6">
+            <div class="d-flex align-center" style="gap: 8px">
+              <span>Refresh Dashboard Stats</span>
+              <v-chip
+                size="x-small"
+                :color="taskStatusColor(periodic?.refresh_dashboard_stats)"
+                variant="flat"
+              >
+                {{ taskStatusLabel(periodic?.refresh_dashboard_stats) }}
+              </v-chip>
+            </div>
+          </v-card-title>
+          <v-card-text>
+            <div class="text-caption text-medium-emphasis mb-2">
+              Pre-compute and cache dashboard statistics (file counts, object types, storage size). Useful for large archives.
+            </div>
+            <div class="mb-2">
+              <v-btn color="primary" prepend-icon="mdi-chart-box-outline" :loading="busy.dashboardStats" @click="triggerDashboardStats">
+                Refresh now
+              </v-btn>
+            </div>
+            <div class="text-caption text-medium-emphasis">
+              Last run:
+              <span v-if="periodic?.refresh_dashboard_stats?.last_run">
+                {{ formatRelative(periodic.refresh_dashboard_stats.last_run, periodic.refresh_dashboard_stats.age_seconds) }}
+              </span>
+              <span v-else>—</span>
+            </div>
+            <div v-if="periodic?.refresh_dashboard_stats?.data" class="mt-2">
+              <div class="text-caption text-medium-emphasis">Summary</div>
+              <div class="text-caption">
+                files: {{ periodic.refresh_dashboard_stats.data.files?.total ?? '—' }},
+                objects: {{ periodic.refresh_dashboard_stats.data.objects?.total ?? '—' }},
+                runs: {{ periodic.refresh_dashboard_stats.data.runs?.total ?? '—' }},
+                storage: {{ periodic.refresh_dashboard_stats.data.storage_size_tb ? periodic.refresh_dashboard_stats.data.storage_size_tb.toFixed(2) + ' TB' : '—' }}
+              </div>
+            </div>
+            <div v-if="periodic?.refresh_dashboard_stats?.last_error" class="text-error text-caption mt-1">
+              {{ periodic.refresh_dashboard_stats.last_error }}
+            </div>
+          </v-card-text>
+        </v-card>
+      </v-col>
     </v-row>
     <v-row>
       <v-col cols="12" md="12" v-if="canBanner">
@@ -343,7 +388,7 @@ import { useAuthStore } from '@/store/auth'
 const notify = useNotifyStore()
 const auth = useAuthStore()
 const loading = ref(false)
-const busy = ref({ cleanup: false, reconcile: false, scan: false, orphans: false, orphanObj: false, banner: false })
+const busy = ref({ cleanup: false, reconcile: false, scan: false, orphans: false, orphanObj: false, banner: false, dashboardStats: false })
 const health = ref({ periodic: {}, settings: {} })
 const periodic = computed(() => (health.value && health.value.periodic) ? health.value.periodic : {})
 const dryRun = ref(true)
@@ -505,6 +550,19 @@ const triggerOrphanObjects = async () => {
     notify.error('Failed to enqueue orphan objects cleanup')
   } finally {
     busy.value.orphanObj = false
+    setTimeout(refreshHealth, 1500)
+  }
+}
+
+const triggerDashboardStats = async () => {
+  busy.value.dashboardStats = true
+  try {
+    await api.adminMaintenanceRefreshDashboardStats()
+    notify.success('Dashboard stats refresh enqueued')
+  } catch (e) {
+    notify.error('Failed to enqueue dashboard stats refresh')
+  } finally {
+    busy.value.dashboardStats = false
     setTimeout(refreshHealth, 1500)
   }
 }

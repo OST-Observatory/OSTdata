@@ -363,5 +363,24 @@ def banner_info(request):
     return Response(data)
 
 
+@api_view(['POST'])
+@permission_classes([IsAdminUser])
+@extend_schema(summary='Trigger dashboard stats refresh', responses={'202': {'type': 'object'}}, tags=['Admin'])
+def admin_trigger_refresh_dashboard_stats(request):
+    """
+    Manually trigger a background refresh of dashboard statistics.
+    The stats are cached for 30 minutes, storage size for 2 hours.
+    """
+    if not (request.user.is_superuser or request.user.has_perm('users.acl_maintenance_reconcile')):
+        return Response({'detail': 'Forbidden'}, status=403)
+    try:
+        from obs_run.tasks import refresh_dashboard_stats
+        res = refresh_dashboard_stats.delay()
+        return Response({'enqueued': True, 'task_id': getattr(res, 'id', None)}, status=202)
+    except Exception as e:
+        logger.exception("admin_trigger_refresh_dashboard_stats failed: %s", e)
+        return Response({'enqueued': False, 'error': str(e)}, status=400)
+
+
 
 

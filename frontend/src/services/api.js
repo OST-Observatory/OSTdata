@@ -362,6 +362,7 @@ export const api = {
     }
     return fetchWithAuth('/admin/maintenance/orphan-objects/', { method: 'POST', body: JSON.stringify(body) })
   },
+  adminMaintenanceRefreshDashboardStats: () => fetchWithAuth('/admin/maintenance/refresh-dashboard-stats/', { method: 'POST' }),
   // Admin - Runs date tools
   adminSetRunDate: (runId, payload = {}) => fetchWithAuth(`/admin/runs/${encodeURIComponent(runId)}/set-date/`, { method: 'POST', body: JSON.stringify(payload) }),
   adminRecomputeRunDate: (runId) => fetchWithAuth(`/admin/runs/${encodeURIComponent(runId)}/recompute-date/`, { method: 'POST' }),

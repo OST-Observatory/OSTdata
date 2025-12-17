@@ -587,6 +587,26 @@ ENABLE_FS_RECONCILE=true
 
 Ensure Celery Beat is running (see Celery section). The task runs daily at 03:00 by default and logs a summary.
 
+### Optional dashboard stats pre-computation (Celery Beat)
+
+The dashboard page aggregates statistics across all files, objects, and runs. On large archives (100k+ files), this can be slow on first load. To keep the dashboard snappy, enable background pre-computation:
+
+```
+ENABLE_DASHBOARD_STATS_REFRESH=true
+```
+
+This schedules a Celery Beat task that runs every 30 minutes and caches the results:
+
+- Main stats (file counts, object types, run statuses): cached for 30 minutes
+- Storage size (filesystem walk): cached for 2 hours
+
+The dashboard endpoint will serve cached data when available, falling back to on-demand computation if the cache is empty.
+
+You can trigger a manual refresh via:
+
+- **Admin UI**: Navigate to Admin → Maintenance and click "Refresh now" on the "Refresh Dashboard Stats" card.
+- **Admin API**: `POST /api/admin/maintenance/refresh-dashboard-stats/`
+
 ## Async Download Jobs (Celery)
 
 This project supports asynchronous preparation of ZIP archives for data files using Celery. You can run tasks synchronously (eager mode, no Redis needed) or with Redis for real async behavior. Production notes included below.
@@ -799,6 +819,16 @@ Frontend behavior (Data Files tables):
       - Ensure Celery Beat is running (see service example above). Jobs completed by the worker are given an expiry based on `DOWNLOAD_JOB_TTL_HOURS`.
     
     - Alternative: a cron job that deletes ZIPs older than N days in your temp directory.
+  
+  - Dashboard stats pre-computation (recommended for large archives):
+    
+    - Enable background refresh of dashboard statistics:
+      
+      ```
+      ENABLE_DASHBOARD_STATS_REFRESH=true
+      ```
+    
+    - This caches aggregated counts and storage size, significantly speeding up dashboard load times.
 
 - Security:
   

@@ -166,6 +166,13 @@ if env.bool('ENABLE_DOWNLOAD_CLEANUP', default=False):
         'schedule': crontab(minute='15', hour='*/1'),
         'args': (),
     }
+if env.bool('ENABLE_DASHBOARD_STATS_REFRESH', default=False):
+    # Pre-compute dashboard stats in background (default: every 30 min)
+    CELERY_BEAT_SCHEDULE['refresh_dashboard_stats'] = {
+        'task': 'obs_run.tasks.refresh_dashboard_stats',
+        'schedule': crontab(minute='*/30'),
+        'args': (),
+    }
 
 DOWNLOAD_JOB_TTL_HOURS = env.int('DOWNLOAD_JOB_TTL_HOURS', default=72)
 
