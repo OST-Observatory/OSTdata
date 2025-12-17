@@ -1,6 +1,6 @@
 <template>
   <v-container fluid>
-    <h1 class="text-h4 mb-2">{{ object?.name || 'Object' }}</h1>
+    <h1 class="text-h4 mb-2">{{ displayTitle }}</h1>
     <!-- <v-row>
       <v-col cols="12">
         <v-card>
@@ -735,6 +735,27 @@ const internalIdentifiers = computed(() => {
     .filter(alias => alias.info_from_header)
     .map(alias => alias.name)
     .join(', ')
+})
+
+// Extract SIMBAD common name from "NAME xyz" alias pattern
+const simbadCommonName = computed(() => {
+  const identifiers = object.value?.identifiers || object.value?.identifier_set || []
+  const nameAlias = identifiers.find(id => id?.name?.startsWith('NAME '))
+  if (nameAlias) {
+    return nameAlias.name.replace(/^NAME\s+/, '')
+  }
+  return null
+})
+
+// Display title: "internal name (SIMBAD name)" or just "internal name"
+// Only show SIMBAD name if it differs from the internal name
+const displayTitle = computed(() => {
+  const name = object.value?.name || 'Object'
+  const simbadName = simbadCommonName.value
+  if (simbadName && simbadName.toLowerCase() !== name.toLowerCase()) {
+    return `${name} (${simbadName})`
+  }
+  return name
 })
 
 const objectTypeOptions = [

@@ -286,14 +286,14 @@
           </template>
           <!-- Name column with link -->
           <template v-slot:item.name="{ item }">
-            <v-tooltip :text="item.name" location="top">
+            <v-tooltip :text="getDisplayName(item)" location="top">
               <template #activator="{ props }">
                 <router-link
                   v-bind="props"
                   :to="`/objects/${item.pk}`"
                   class="text-decoration-none primary--text table-link cell-truncate"
                 >
-                  {{ item.name }}
+                  {{ getDisplayName(item) }}
                 </router-link>
               </template>
             </v-tooltip>
@@ -725,6 +725,26 @@ const normalizeTags = (tags) => {
     })
   }
   return []
+}
+
+// Extract SIMBAD common name from "NAME xyz" alias pattern
+const getSimbadCommonName = (item) => {
+  const identifiers = item?.identifiers || item?.identifier_set || []
+  const nameAlias = identifiers.find(id => id?.name?.startsWith('NAME '))
+  if (nameAlias) {
+    return nameAlias.name.replace(/^NAME\s+/, '')
+  }
+  return null
+}
+
+// Display name: "internal name (SIMBAD name)" if different, else just "internal name"
+const getDisplayName = (item) => {
+  const name = item?.name || 'Object'
+  const simbadName = getSimbadCommonName(item)
+  if (simbadName && simbadName.toLowerCase() !== name.toLowerCase()) {
+    return `${name} (${simbadName})`
+  }
+  return name
 }
 
 const formatRA = (ra) => {
