@@ -643,6 +643,80 @@ def cleanup_expired_downloads(self):
 
 
 @shared_task(bind=True)
+def cleanup_orphan_objects(self, dry_run: bool = True):
+    """Clean up Objects that have no associated DataFiles.
+    
+    After files are deleted, Objects may become "orphaned" with no
+    remaining DataFile associations. This task finds and removes them.
+    Also recalculates first_hjd for Objects that still have DataFiles.
+    """
+    from django.db.models import Count
+    from objects.models import Object
+    
+    objects_checked = 0
+    orphans_found = 0
+    orphans_deleted = 0
+    first_hjd_updated = 0
+    observation_run_cleaned = 0
+    
+    # Find Objects with zero DataFiles
+    orphans = Object.objects.annotate(df_count=Count('datafiles')).filter(df_count=0)
+    orphans_found = orphans.count()
+    
+    if not dry_run:
+        # Delete orphan Objects
+        for obj in orphans:
+            try:
+                # Also clean up the M2M relation to observation_run before deleting
+                obj.observation_run.clear()
+                obj.delete()
+                orphans_deleted += 1
+            except Exception as e:
+                logger.warning("Failed to delete orphan Object #%s: %s", obj.pk, e)
+    
+    # For remaining Objects, recalculate first_hjd based on current DataFiles
+    remaining = Object.objects.annotate(df_count=Count('datafiles')).filter(df_count__gt=0)
+    objects_checked = remaining.count()
+    
+    for obj in remaining:
+        try:
+            # Get the earliest HJD from associated DataFiles
+            valid_files = obj.datafiles.filter(hjd__gt=2451545).order_by('hjd')
+            if valid_files.exists():
+                new_first_hjd = valid_files.first().hjd
+            else:
+                new_first_hjd = 0.0
+            
+            if obj.first_hjd != new_first_hjd:
+                if not dry_run:
+                    obj.first_hjd = new_first_hjd
+                    obj.save(update_fields=['first_hjd'])
+                first_hjd_updated += 1
+            
+            # Also clean up observation_run M2M if no DataFiles remain for that run
+            for run in list(obj.observation_run.all()):
+                has_files_in_run = obj.datafiles.filter(observation_run=run).exists()
+                if not has_files_in_run:
+                    if not dry_run:
+                        obj.observation_run.remove(run)
+                    observation_run_cleaned += 1
+        except Exception as e:
+            logger.warning("Failed to update Object #%s: %s", obj.pk, e)
+    
+    result = {
+        'dry_run': bool(dry_run),
+        'objects_checked': objects_checked,
+        'orphans_found': orphans_found,
+        'orphans_deleted': orphans_deleted,
+        'first_hjd_updated': first_hjd_updated,
+        'observation_run_cleaned': observation_run_cleaned,
+    }
+    _health_set('cleanup_orphan_objects', result)
+    logger.info("Cleanup orphan objects complete: %s", result)
+    return result
+
+
+@shared_task(bind=True)
 def cleanup_orphans_and_hashcheck(self, dry_run: bool = True, fix_missing_hashes: bool = True, limit: int | None = None):
     """Scan DataFiles for orphans/missing files and hash drift.
     - Orphans: DataFile with missing observation_run or file path does not exist → delete (when not dry_run).

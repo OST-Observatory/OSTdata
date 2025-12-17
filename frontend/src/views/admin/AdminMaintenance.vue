@@ -238,6 +238,55 @@
           </v-card-text>
         </v-card>
       </v-col>
+
+      <v-col cols="12" md="6" v-if="canOrphans">
+        <v-card class="mb-4">
+          <v-card-title class="text-h6">
+            <div class="d-flex align-center" style="gap: 8px">
+              <span>Cleanup Orphan Objects</span>
+              <v-chip
+                size="x-small"
+                :color="taskStatusColor(periodic?.cleanup_orphan_objects)"
+                variant="flat"
+              >
+                {{ taskStatusLabel(periodic?.cleanup_orphan_objects) }}
+              </v-chip>
+            </div>
+          </v-card-title>
+          <v-card-text>
+            <div class="text-caption text-medium-emphasis mb-2">
+              Removes Objects that have no associated DataFiles (orphans after file deletions). Also recalculates first_hjd and cleans stale observation_run links.
+            </div>
+            <div class="d-flex align-center mb-2" style="gap: 12px; flex-wrap: wrap">
+              <v-switch v-model="orphObjDryRun" inset hide-details color="primary" :label="`Dry run`" />
+              <v-btn color="primary" prepend-icon="mdi-account-remove" :loading="busy.orphanObj" @click="triggerOrphanObjects">
+                Run cleanup
+              </v-btn>
+            </div>
+            <div class="text-caption text-medium-emphasis">
+              Last run:
+              <span v-if="periodic?.cleanup_orphan_objects?.last_run">
+                {{ formatRelative(periodic.cleanup_orphan_objects.last_run, periodic.cleanup_orphan_objects.age_seconds) }}
+              </span>
+              <span v-else>—</span>
+            </div>
+            <div v-if="periodic?.cleanup_orphan_objects?.data" class="mt-2">
+              <div class="text-caption text-medium-emphasis">Summary</div>
+              <div class="text-caption">
+                objects_checked: {{ periodic.cleanup_orphan_objects.data.objects_checked ?? 0 }},
+                orphans_found: {{ periodic.cleanup_orphan_objects.data.orphans_found ?? 0 }},
+                orphans_deleted: {{ periodic.cleanup_orphan_objects.data.orphans_deleted ?? 0 }},
+                first_hjd_updated: {{ periodic.cleanup_orphan_objects.data.first_hjd_updated ?? 0 }},
+                run_links_cleaned: {{ periodic.cleanup_orphan_objects.data.observation_run_cleaned ?? 0 }},
+                mode: {{ periodic.cleanup_orphan_objects.data.dry_run ? 'dry' : 'apply' }}
+              </div>
+            </div>
+            <div v-if="periodic?.cleanup_orphan_objects?.last_error" class="text-error text-caption mt-1">
+              {{ periodic.cleanup_orphan_objects.last_error }}
+            </div>
+          </v-card-text>
+        </v-card>
+      </v-col>
     </v-row>
     <v-row>
       <v-col cols="12" md="12" v-if="canBanner">
@@ -294,7 +343,7 @@ import { useAuthStore } from '@/store/auth'
 const notify = useNotifyStore()
 const auth = useAuthStore()
 const loading = ref(false)
-const busy = ref({ cleanup: false, reconcile: false, scan: false, orphans: false, banner: false })
+const busy = ref({ cleanup: false, reconcile: false, scan: false, orphans: false, orphanObj: false, banner: false })
 const health = ref({ periodic: {}, settings: {} })
 const periodic = computed(() => (health.value && health.value.periodic) ? health.value.periodic : {})
 const dryRun = ref(true)
@@ -306,6 +355,7 @@ const orphFixMissing = ref(true)
 const orphLimit = ref('')
 const scanDryRun = ref(true)
 const scanLimit = ref('')
+const orphObjDryRun = ref(true)
 
 const canCleanup = computed(() => auth.isAdmin || auth.hasPerm('users.acl_maintenance_cleanup') || auth.hasPerm('acl_maintenance_cleanup'))
 const canReconcile = computed(() => auth.isAdmin || auth.hasPerm('users.acl_maintenance_reconcile') || auth.hasPerm('acl_maintenance_reconcile'))
@@ -441,6 +491,20 @@ const triggerScanMissing = async () => {
     notify.error('Failed to enqueue scan')
   } finally {
     busy.value.scan = false
+    setTimeout(refreshHealth, 1500)
+  }
+}
+
+const triggerOrphanObjects = async () => {
+  busy.value.orphanObj = true
+  try {
+    const opts = { dry_run: !!orphObjDryRun.value }
+    await api.adminMaintenanceOrphanObjects(opts)
+    notify.success(`Orphan objects cleanup enqueued (${opts.dry_run ? 'dry' : 'apply'})`)
+  } catch (e) {
+    notify.error('Failed to enqueue orphan objects cleanup')
+  } finally {
+    busy.value.orphanObj = false
     setTimeout(refreshHealth, 1500)
   }
 }

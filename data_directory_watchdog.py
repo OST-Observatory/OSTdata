@@ -256,39 +256,47 @@ class Handler(FileSystemEventHandler):
                 logger.info(f"File deleted - {event.src_path}")
 
                 #   Delete data file object (robust to path variations and missing rows)
+                deleted_run = None
                 try:
                     # Try exact path first
                     data_file = DataFile.objects.get(datafile=event.src_path)
+                    deleted_run = data_file.observation_run
                     data_file.delete()
-                    return
                 except DataFile.DoesNotExist:
-                    pass
-                # Try realpath (symlinks)
-                try:
-                    real = os.path.realpath(event.src_path)
-                    data_file = DataFile.objects.get(datafile=real)
-                    data_file.delete()
-                    return
-                except DataFile.DoesNotExist:
-                    pass
-                # Fallback: endswith match by relative path under the monitored directory
-                try:
-                    rel = os.path.relpath(event.src_path, self.directory_to_monitor)
-                    # Normalize to OS separators
-                    rel = rel.strip(os.sep)
-                    if rel:
-                        qs = DataFile.objects.filter(datafile__endswith=os.sep + rel)
-                        count = qs.count()
-                        if count == 1:
-                            qs.first().delete()
-                            return
-                        elif count > 1:
-                            logger.warning("Multiple DataFile rows match deleted path suffix '%s'; skipping delete", rel)
-                            return
-                except Exception:
-                    pass
-                # If we reach here, we didn't find a corresponding DB row; log and continue
-                logger.info("No DataFile row found for deleted path '%s'; nothing to delete", event.src_path)
+                    # Try realpath (symlinks)
+                    try:
+                        real = os.path.realpath(event.src_path)
+                        data_file = DataFile.objects.get(datafile=real)
+                        deleted_run = data_file.observation_run
+                        data_file.delete()
+                    except DataFile.DoesNotExist:
+                        # Fallback: endswith match by relative path under the monitored directory
+                        try:
+                            rel = os.path.relpath(event.src_path, self.directory_to_monitor)
+                            # Normalize to OS separators
+                            rel = rel.strip(os.sep)
+                            if rel:
+                                qs = DataFile.objects.filter(datafile__endswith=os.sep + rel)
+                                count = qs.count()
+                                if count == 1:
+                                    df = qs.first()
+                                    deleted_run = df.observation_run
+                                    df.delete()
+                                elif count > 1:
+                                    logger.warning("Multiple DataFile rows match deleted path suffix '%s'; skipping delete", rel)
+                        except Exception:
+                            pass
+
+                # Update run statistics after file deletion
+                if deleted_run:
+                    try:
+                        observation_run_statistic_update(deleted_run)
+                        logger.info(f"Updated statistics for run '{deleted_run.name}' after file deletion")
+                    except Exception as e:
+                        logger.warning(f"Failed to update run statistics after file deletion: {e}")
+                else:
+                    # If we reach here, we didn't find a corresponding DB row; log and continue
+                    logger.info("No DataFile row found for deleted path '%s'; nothing to delete", event.src_path)
 
     def on_moved(self, event):
         if event.is_directory:

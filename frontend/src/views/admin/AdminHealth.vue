@@ -190,7 +190,7 @@
         <v-card>
           <v-card-title class="text-h6">Periodic Tasks</v-card-title>
           <v-card-text>
-            <div v-for="name in ['cleanup_expired_downloads', 'reconcile_filesystem', 'cleanup_orphans_hashcheck', 'scan_missing_filesystem']" :key="name" class="mb-3">
+            <div v-for="name in ['cleanup_expired_downloads', 'reconcile_filesystem', 'cleanup_orphans_hashcheck', 'scan_missing_filesystem', 'cleanup_orphan_objects']" :key="name" class="mb-3">
               <div class="d-flex align-center" style="gap: 8px">
                 <div class="text-subtitle-2">{{ name }}</div>
                 <v-chip
@@ -351,6 +351,16 @@
         { label: 'skipped_unknown_type', value: d.skipped_unknown_type ?? 0 },
         { label: 'runs_seen', value: d.runs_seen ?? 0 },
         { label: 'runs_created', value: d.runs_created ?? 0 },
+        { label: 'mode', value: d.dry_run ? 'dry' : 'apply' },
+      ]
+    }
+    if (name === 'cleanup_orphan_objects') {
+      return [
+        { label: 'objects_checked', value: d.objects_checked ?? 0 },
+        { label: 'orphans_found', value: d.orphans_found ?? 0 },
+        { label: 'orphans_deleted', value: d.orphans_deleted ?? 0 },
+        { label: 'first_hjd_updated', value: d.first_hjd_updated ?? 0 },
+        { label: 'run_links_cleaned', value: d.observation_run_cleaned ?? 0 },
         { label: 'mode', value: d.dry_run ? 'dry' : 'apply' },
       ]
     }

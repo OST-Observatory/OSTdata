@@ -38,6 +38,7 @@ from obs_run.tasks import (
     reconcile_filesystem,
     cleanup_orphans_and_hashcheck,
     scan_missing_filesystem,
+    cleanup_orphan_objects,
 )
 from ostdata.services.health import gather_admin_health
 from obs_run.models import ObservationRun, DataFile
@@ -275,6 +276,35 @@ def admin_trigger_scan_missing(request):
         return Response({'enqueued': True, 'task_id': getattr(res, 'id', None), 'dry_run': dry_run, 'limit': limit}, status=202)
     except Exception as e:
         logger.exception("admin_trigger_scan_missing failed: %s", e)
+        return Response({'enqueued': False, 'error': str(e)}, status=400)
+
+
+class AdminOrphanObjectsRequestSerializer(serializers.Serializer):
+    dry_run = serializers.BooleanField(required=False, default=True)
+
+
+@api_view(['POST'])
+@permission_classes([IsAdminUser])
+@extend_schema(
+    summary='Cleanup orphan Objects (no DataFiles)',
+    description='Finds and removes Objects that have no associated DataFiles. Also recalculates first_hjd and cleans stale observation_run M2M links.',
+    request=AdminOrphanObjectsRequestSerializer,
+    responses={'202': {'type': 'object'}},
+    tags=['Admin']
+)
+def admin_trigger_orphan_objects(request):
+    if not (request.user.is_superuser or request.user.has_perm('users.acl_maintenance_orphans')):
+        return Response({'detail': 'Forbidden'}, status=403)
+    payload = request.data if hasattr(request, 'data') else {}
+    try:
+        dry_run = bool(payload.get('dry_run', True))
+    except Exception:
+        dry_run = True
+    try:
+        res = cleanup_orphan_objects.delay(dry_run=dry_run)
+        return Response({'enqueued': True, 'task_id': getattr(res, 'id', None), 'dry_run': dry_run}, status=202)
+    except Exception as e:
+        logger.exception("admin_trigger_orphan_objects failed: %s", e)
         return Response({'enqueued': False, 'error': str(e)}, status=400)
 
 class AdminBannerSetSerializer(serializers.Serializer):
