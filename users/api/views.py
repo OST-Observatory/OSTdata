@@ -456,3 +456,4 @@ def admin_acl_set(request):
             to_add = list(Permission.objects.filter(id__in=[perm_map[c] for c in codes]))
             grp.permissions.add(*to_add)
     return admin_acl_get(request)
+    
