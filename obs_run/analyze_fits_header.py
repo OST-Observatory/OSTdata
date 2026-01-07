@@ -2,6 +2,7 @@ import numpy as np
 
 from astropy.time import Time
 from astropy.coordinates.angles import Angle
+from obs_run.utils import should_allow_auto_update
 
 
 ############################################################################
@@ -244,7 +245,7 @@ def analyze_fits(datafile):
     #   Extract info from Header
     header_data = extract_fits_header_info(header)
 
-    #   Set basic values
+    #   Set basic values (check override flags for protected fields)
     datafile.hjd = header_data.get('hjd', 2400000.)
     datafile.obs_date = header_data.get('obs_date', '2000-00-00')
     datafile.exptime = header_data.get('exptime', 0.)
@@ -252,8 +253,12 @@ def analyze_fits(datafile):
     datafile.dec = header_data.get('dec', -1)
     datafile.naxis1 = header_data.get('naxis1', 0.)
     datafile.naxis2 = header_data.get('naxis2', 0.)
-    datafile.instrument = header_data.get('instrument', 'Unknown')
-    datafile.telescope = header_data.get('telescope', 'Unknown')
+    
+    # Check override flags before setting protected fields
+    if should_allow_auto_update(datafile, 'instrument'):
+        datafile.instrument = header_data.get('instrument', 'Unknown')
+    if should_allow_auto_update(datafile, 'telescope'):
+        datafile.telescope = header_data.get('telescope', 'Unknown')
     datafile.air_mass = header_data.get('air_mass', -1)
     datafile.ambient_temperature = header_data.get('ambient_temperature', -1)
     datafile.dewpoint = header_data.get('dewpoint', -1)
@@ -306,14 +311,15 @@ def analyze_fits(datafile):
         'LIGHT': 'LI',
     }
 
-    #   Sanitize image type
-    img_type = header_data.get('imagetyp', 'UK')
-    for key, value in img_types.items():
-        if key == img_type:
-            datafile.exposure_type = value
-            break
-    else:
-        datafile.exposure_type = 'UK'
+    #   Sanitize image type (check override flag)
+    if should_allow_auto_update(datafile, 'exposure_type'):
+        img_type = header_data.get('imagetyp', 'UK')
+        for key, value in img_types.items():
+            if key == img_type:
+                datafile.exposure_type = value
+                break
+        else:
+            datafile.exposure_type = 'UK'
 
     #   Set object name
     if datafile.exposure_type in ['UK', 'LI']:
@@ -347,7 +353,7 @@ def analyze_fits(datafile):
             lower = header_instr.strip().lower()
             if any(g in lower for g in generic_markers):
                 assign_inferred = True
-    if assign_inferred:
+    if assign_inferred and should_allow_auto_update(datafile, 'instrument'):
         datafile.instrument = inferred
 
     datafile.save()

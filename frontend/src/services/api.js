@@ -373,6 +373,9 @@ export const api = {
   // Admin - Runs date tools
   adminSetRunDate: (runId, payload = {}) => fetchWithAuth(`/admin/runs/${encodeURIComponent(runId)}/set-date/`, { method: 'POST', body: JSON.stringify(payload) }),
   adminRecomputeRunDate: (runId) => fetchWithAuth(`/admin/runs/${encodeURIComponent(runId)}/recompute-date/`, { method: 'POST' }),
+  adminClearOverrideFlag: (modelType, instanceId, fieldName) => fetchWithAuth(`/admin/override-flags/${encodeURIComponent(modelType)}/${encodeURIComponent(instanceId)}/${encodeURIComponent(fieldName)}/clear/`, { method: 'POST' }),
+  adminClearAllOverrides: (modelType, instanceId) => fetchWithAuth(`/admin/override-flags/${encodeURIComponent(modelType)}/${encodeURIComponent(instanceId)}/clear-all/`, { method: 'POST' }),
+  adminListOverrideFlags: () => fetchWithAuth('/admin/override-flags/list/'),
   // Site-wide Banner
   getBanner: () => fetchWithAuth('/runs/banner/'),
   adminGetBanner: () => fetchWithAuth('/admin/banner/'),

@@ -79,6 +79,19 @@ class Object(models.Model):
     # tags = models.ManyToManyField(Tag, related_name='objects', blank=True)
     tags = models.ManyToManyField(Tag, blank=True)
 
+    #   Override flags to prevent automatic tasks from overwriting user changes
+    name_override = models.BooleanField(default=False)
+    is_public_override = models.BooleanField(default=False)
+    ra_override = models.BooleanField(default=False)
+    dec_override = models.BooleanField(default=False)
+    first_hjd_override = models.BooleanField(default=False)
+    is_main_override = models.BooleanField(default=False)
+    photometry_override = models.BooleanField(default=False)
+    spectroscopy_override = models.BooleanField(default=False)
+    simbad_resolved_override = models.BooleanField(default=False)
+    object_type_override = models.BooleanField(default=False)
+    note_override = models.BooleanField(default=False)
+
     #   Bookkeeping
     history = HistoricalRecords()
     # added_on      = models.DateTimeField(auto_now_add=True)

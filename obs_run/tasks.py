@@ -14,6 +14,7 @@ from datetime import timedelta
 import json
 
 from obs_run.models import DownloadJob, DataFile, ObservationRun
+from obs_run.utils import should_allow_auto_update
 from utilities import add_new_data_file
 
 logger = logging.getLogger(__name__)
@@ -557,18 +558,20 @@ def scan_missing_filesystem(self, dry_run: bool = True, limit: int | None = None
                             errors += 1
                             continue
                 # After scanning this run directory, recompute mid_observation_jd
+                # Only if override flag is not set
                 try:
                     if not dry_run and run is not None:
-                        qs = DataFile.objects.filter(observation_run=run, hjd__gt=2451545)
-                        a = qs.order_by('hjd').values_list('hjd', flat=True).first()
-                        b = qs.order_by('-hjd').values_list('hjd', flat=True).first()
-                        if a is None and b is None:
-                            run.mid_observation_jd = 0.0
-                        elif a is None or b is None:
-                            run.mid_observation_jd = float(a or b or 0.0)
-                        else:
-                            run.mid_observation_jd = float(a + (b - a) / 2.0)
-                        run.save(update_fields=['mid_observation_jd'])
+                        if should_allow_auto_update(run, 'mid_observation_jd'):
+                            qs = DataFile.objects.filter(observation_run=run, hjd__gt=2451545)
+                            a = qs.order_by('hjd').values_list('hjd', flat=True).first()
+                            b = qs.order_by('-hjd').values_list('hjd', flat=True).first()
+                            if a is None and b is None:
+                                run.mid_observation_jd = 0.0
+                            elif a is None or b is None:
+                                run.mid_observation_jd = float(a or b or 0.0)
+                            else:
+                                run.mid_observation_jd = float(a + (b - a) / 2.0)
+                            run.save(update_fields=['mid_observation_jd'])
                 except Exception:
                     # Do not fail the whole task on recompute errors
                     errors += 1

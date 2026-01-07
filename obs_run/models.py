@@ -74,6 +74,15 @@ class ObservationRun(models.Model):
     # tags = models.ManyToManyField(Tag, related_name='runs', blank=True)
     tags = models.ManyToManyField(Tag, blank=True)
 
+    #   Override flags to prevent automatic tasks from overwriting user changes
+    name_override = models.BooleanField(default=False)
+    is_public_override = models.BooleanField(default=False)
+    reduction_status_override = models.BooleanField(default=False)
+    photometry_override = models.BooleanField(default=False)
+    spectroscopy_override = models.BooleanField(default=False)
+    note_override = models.BooleanField(default=False)
+    mid_observation_jd_override = models.BooleanField(default=False)
+
     #   Bookkeeping
     history = HistoricalRecords()
 
@@ -224,6 +233,14 @@ class DataFile(models.Model):
         choices=parameter_status_possibilities,
         default='FIT',
     )
+
+    #   Override flags to prevent automatic tasks from overwriting user changes
+    exposure_type_override = models.BooleanField(default=False)
+    spectroscopy_override = models.BooleanField(default=False)
+    spectrograph_override = models.BooleanField(default=False)
+    instrument_override = models.BooleanField(default=False)
+    telescope_override = models.BooleanField(default=False)
+    status_parameters_override = models.BooleanField(default=False)
 
     #   Get information
     def set_info(self):

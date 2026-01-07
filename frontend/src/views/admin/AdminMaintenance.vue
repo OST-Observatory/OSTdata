@@ -334,6 +334,154 @@
       </v-col>
     </v-row>
     <v-row>
+      <v-col cols="12" md="12" v-if="auth.isAdmin">
+        <v-card class="mb-4">
+          <v-card-title class="text-h6">
+            <div class="d-flex align-center justify-space-between" style="width: 100%">
+              <span>Override Flags Overview</span>
+              <v-btn color="primary" variant="outlined" prepend-icon="mdi-refresh" size="small" :loading="busy.overrideFlags" @click="loadOverrideFlags">
+                Refresh
+              </v-btn>
+            </div>
+          </v-card-title>
+          <v-card-text>
+            <div class="text-caption text-medium-emphasis mb-2">
+              List of all instances (runs, datafiles, objects) that have override flags set. Click on an item to navigate to its detail page.
+            </div>
+            <v-skeleton-loader v-if="loadingOverrideFlags" type="table"></v-skeleton-loader>
+            <template v-else>
+              <div v-if="overrideFlagsData && (overrideFlagsData.run?.count > 0 || overrideFlagsData.datafile?.count > 0 || overrideFlagsData.object?.count > 0)">
+                <!-- Observation Runs -->
+                <div v-if="overrideFlagsData.run?.count > 0" class="mb-4">
+                  <h3 class="text-subtitle-1 mb-2">Observation Runs ({{ overrideFlagsData.run.count }})</h3>
+                  <v-table density="compact">
+                    <thead>
+                      <tr>
+                        <th class="text-primary">ID</th>
+                        <th class="text-primary">Name</th>
+                        <th class="text-primary">Override Fields</th>
+                        <th class="text-primary">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="item in overrideFlagsData.run.items" :key="`run-${item.id}`">
+                        <td>{{ item.id }}</td>
+                        <td>
+                          <router-link :to="`/observation-runs/${item.id}`" class="text-decoration-none primary--text">
+                            {{ item.name }}
+                          </router-link>
+                        </td>
+                        <td>
+                          <div class="d-flex flex-wrap gap-1">
+                            <v-chip v-for="field in item.override_fields" :key="field" size="x-small" color="warning" variant="outlined">
+                              {{ field }}
+                            </v-chip>
+                          </div>
+                        </td>
+                        <td>
+                          <v-btn
+                            size="x-small"
+                            variant="text"
+                            icon="mdi-refresh"
+                            @click="clearAllOverrides('run', item.id)"
+                            :loading="clearingOverrides[`run-${item.id}`]"
+                            aria-label="Clear all override flags"
+                          ></v-btn>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </v-table>
+                </div>
+
+                <!-- Data Files -->
+                <div v-if="overrideFlagsData.datafile?.count > 0" class="mb-4">
+                  <h3 class="text-subtitle-1 mb-2">Data Files ({{ overrideFlagsData.datafile.count }})</h3>
+                  <v-table density="compact">
+                    <thead>
+                      <tr>
+                        <th class="text-primary">ID</th>
+                        <th class="text-primary">Name</th>
+                        <th class="text-primary">Override Fields</th>
+                        <th class="text-primary">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="item in overrideFlagsData.datafile.items" :key="`datafile-${item.id}`">
+                        <td>{{ item.id }}</td>
+                        <td>{{ item.name }}</td>
+                        <td>
+                          <div class="d-flex flex-wrap gap-1">
+                            <v-chip v-for="field in item.override_fields" :key="field" size="x-small" color="warning" variant="outlined">
+                              {{ field }}
+                            </v-chip>
+                          </div>
+                        </td>
+                        <td>
+                          <v-btn
+                            size="x-small"
+                            variant="text"
+                            icon="mdi-refresh"
+                            @click="clearAllOverrides('datafile', item.id)"
+                            :loading="clearingOverrides[`datafile-${item.id}`]"
+                            aria-label="Clear all override flags"
+                          ></v-btn>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </v-table>
+                </div>
+
+                <!-- Objects -->
+                <div v-if="overrideFlagsData.object?.count > 0" class="mb-4">
+                  <h3 class="text-subtitle-1 mb-2">Objects ({{ overrideFlagsData.object.count }})</h3>
+                  <v-table density="compact">
+                    <thead>
+                      <tr>
+                        <th class="text-primary">ID</th>
+                        <th class="text-primary">Name</th>
+                        <th class="text-primary">Override Fields</th>
+                        <th class="text-primary">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="item in overrideFlagsData.object.items" :key="`object-${item.id}`">
+                        <td>{{ item.id }}</td>
+                        <td>
+                          <router-link :to="`/objects/${item.id}`" class="text-decoration-none primary--text">
+                            {{ item.name }}
+                          </router-link>
+                        </td>
+                        <td>
+                          <div class="d-flex flex-wrap gap-1">
+                            <v-chip v-for="field in item.override_fields" :key="field" size="x-small" color="warning" variant="outlined">
+                              {{ field }}
+                            </v-chip>
+                          </div>
+                        </td>
+                        <td>
+                          <v-btn
+                            size="x-small"
+                            variant="text"
+                            icon="mdi-refresh"
+                            @click="clearAllOverrides('object', item.id)"
+                            :loading="clearingOverrides[`object-${item.id}`]"
+                            aria-label="Clear all override flags"
+                          ></v-btn>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </v-table>
+                </div>
+              </div>
+              <div v-else class="text-caption text-medium-emphasis">
+                No override flags set.
+              </div>
+            </template>
+          </v-card-text>
+        </v-card>
+      </v-col>
+    </v-row>
+    <v-row>
       <v-col cols="12" md="12" v-if="canBanner">
         <v-card class="mb-4">
           <v-card-title class="text-h6">Site-wide Banner</v-card-title>
@@ -388,8 +536,11 @@ import { useAuthStore } from '@/store/auth'
 const notify = useNotifyStore()
 const auth = useAuthStore()
 const loading = ref(false)
-const busy = ref({ cleanup: false, reconcile: false, scan: false, orphans: false, orphanObj: false, banner: false, dashboardStats: false })
+const busy = ref({ cleanup: false, reconcile: false, scan: false, orphans: false, orphanObj: false, banner: false, dashboardStats: false, overrideFlags: false })
 const health = ref({ periodic: {}, settings: {} })
+const overrideFlagsData = ref(null)
+const loadingOverrideFlags = ref(false)
+const clearingOverrides = ref({})
 const periodic = computed(() => (health.value && health.value.periodic) ? health.value.periodic : {})
 const dryRun = ref(true)
 const autoRefresh = ref(true)
@@ -607,10 +758,38 @@ const humanBytes = (n) => {
   return `${v.toFixed(i === 0 ? 0 : 1)} ${units[i]}`
 }
 
+const loadOverrideFlags = async () => {
+  loadingOverrideFlags.value = true
+  busy.value.overrideFlags = true
+  try {
+    overrideFlagsData.value = await api.adminListOverrideFlags()
+  } catch (e) {
+    try { notify.error('Failed to load override flags') } catch {}
+  } finally {
+    loadingOverrideFlags.value = false
+    busy.value.overrideFlags = false
+  }
+}
+
+const clearAllOverrides = async (modelType, instanceId) => {
+  const key = `${modelType}-${instanceId}`
+  clearingOverrides.value[key] = true
+  try {
+    await api.adminClearAllOverrides(modelType, instanceId)
+    notify.success('All override flags cleared')
+    await loadOverrideFlags()
+  } catch (e) {
+    notify.error('Failed to clear override flags')
+  } finally {
+    clearingOverrides.value[key] = false
+  }
+}
+
 onMounted(() => {
   refreshHealth()
   schedule()
   loadBanner()
+  loadOverrideFlags()
 })
 onBeforeUnmount(() => {
   clear()

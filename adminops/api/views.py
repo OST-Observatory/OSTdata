@@ -42,6 +42,7 @@ from obs_run.tasks import (
 )
 from ostdata.services.health import gather_admin_health
 from obs_run.models import ObservationRun, DataFile
+from objects.models import Object
 
 
 # -------------------- Banner helpers (Redis) --------------------
@@ -147,8 +148,13 @@ def admin_run_set_date(request, run_id: int):
     if jd is None:
         return Response({'detail': 'jd or iso required'}, status=400)
     try:
+        from obs_run.utils import check_and_set_override, get_override_field_name
+        old_jd = run.mid_observation_jd
         run.mid_observation_jd = float(jd)
-        run.save(update_fields=['mid_observation_jd'])
+        override_fields = ['mid_observation_jd']
+        if check_and_set_override(run, 'mid_observation_jd', run.mid_observation_jd, old_jd):
+            override_fields.append(get_override_field_name('mid_observation_jd'))
+        run.save(update_fields=override_fields)
         return Response({'pk': run.pk, 'name': run.name, 'mid_observation_jd': run.mid_observation_jd})
     except Exception as e:
         logger.exception("Failed to set mid_observation_jd for run %s: %s", run_id, e)
@@ -179,6 +185,202 @@ def admin_run_recompute_date(request, run_id: int):
     except Exception as e:
         logger.exception("Failed to recompute mid_observation_jd for run %s: %s", run_id, e)
         return Response({'detail': str(e)}, status=400)
+
+@extend_schema(summary='Clear override flag for a specific field', tags=['Admin'])
+@api_view(['POST'])
+@permission_classes([IsAdminUser])
+def admin_clear_override_flag(request, model_type: str, instance_id: int, field_name: str):
+    """
+    Clear a single override flag for a specific field.
+    model_type: 'run', 'datafile', or 'object'
+    instance_id: ID of the instance
+    field_name: Name of the field (e.g., 'mid_observation_jd')
+    """
+    if not (request.user.is_superuser or request.user.has_perm('users.acl_runs_edit')):
+        return Response({'detail': 'Forbidden'}, status=403)
+    
+    from obs_run.utils import get_override_field_name
+    
+    # Map model types
+    model_map = {
+        'run': ObservationRun,
+        'datafile': DataFile,
+        'object': Object,
+    }
+    
+    if model_type.lower() not in model_map:
+        return Response({'detail': f'Invalid model_type: {model_type}'}, status=400)
+    
+    model_class = model_map[model_type.lower()]
+    
+    try:
+        instance = model_class.objects.get(pk=instance_id)
+    except model_class.DoesNotExist:
+        return Response({'detail': f'{model_type} not found'}, status=404)
+    
+    override_field_name = get_override_field_name(field_name)
+    if not hasattr(instance, override_field_name):
+        return Response({'detail': f'Override field {override_field_name} does not exist'}, status=400)
+    
+    try:
+        setattr(instance, override_field_name, False)
+        instance.save(update_fields=[override_field_name])
+        return Response({
+            'success': True,
+            'model_type': model_type,
+            'instance_id': instance_id,
+            'field_name': field_name,
+            'override_flag': override_field_name,
+        })
+    except Exception as e:
+        logger.exception("Failed to clear override flag: %s", e)
+        return Response({'detail': str(e)}, status=400)
+
+@extend_schema(summary='Clear all override flags for an instance', tags=['Admin'])
+@api_view(['POST'])
+@permission_classes([IsAdminUser])
+def admin_clear_all_overrides(request, model_type: str, instance_id: int):
+    """
+    Clear all override flags for a specific instance.
+    model_type: 'run', 'datafile', or 'object'
+    instance_id: ID of the instance
+    """
+    if not (request.user.is_superuser or request.user.has_perm('users.acl_runs_edit')):
+        return Response({'detail': 'Forbidden'}, status=403)
+    
+    from obs_run.utils import get_override_field_name
+    
+    # Map model types and their overrideable fields
+    model_configs = {
+        'run': {
+            'model': ObservationRun,
+            'fields': ['name', 'is_public', 'reduction_status', 'photometry', 
+                      'spectroscopy', 'note', 'mid_observation_jd'],
+        },
+        'datafile': {
+            'model': DataFile,
+            'fields': ['exposure_type', 'spectroscopy', 'spectrograph', 
+                      'instrument', 'telescope', 'status_parameters'],
+        },
+        'object': {
+            'model': Object,
+            'fields': ['name', 'is_public', 'ra', 'dec', 'first_hjd', 
+                      'is_main', 'photometry', 'spectroscopy', 
+                      'simbad_resolved', 'object_type', 'note'],
+        },
+    }
+    
+    if model_type.lower() not in model_configs:
+        return Response({'detail': f'Invalid model_type: {model_type}'}, status=400)
+    
+    config = model_configs[model_type.lower()]
+    model_class = config['model']
+    fields = config['fields']
+    
+    try:
+        instance = model_class.objects.get(pk=instance_id)
+    except model_class.DoesNotExist:
+        return Response({'detail': f'{model_type} not found'}, status=404)
+    
+    cleared_flags = []
+    update_fields = []
+    
+    for field_name in fields:
+        override_field_name = get_override_field_name(field_name)
+        if hasattr(instance, override_field_name):
+            current_value = getattr(instance, override_field_name, False)
+            if current_value:
+                setattr(instance, override_field_name, False)
+                update_fields.append(override_field_name)
+                cleared_flags.append(field_name)
+    
+    if update_fields:
+        instance.save(update_fields=update_fields)
+    
+    return Response({
+        'success': True,
+        'model_type': model_type,
+        'instance_id': instance_id,
+        'cleared_flags': cleared_flags,
+        'count': len(cleared_flags),
+    })
+
+@extend_schema(summary='List all instances with override flags', tags=['Admin'])
+@api_view(['GET'])
+@permission_classes([IsAdminUser])
+def admin_list_override_flags(request):
+    """
+    List all instances (runs, datafiles, objects) that have any override flags set.
+    Returns a summary grouped by model type.
+    """
+    if not (request.user.is_superuser or request.user.has_perm('users.acl_runs_edit')):
+        return Response({'detail': 'Forbidden'}, status=403)
+    
+    from obs_run.utils import get_override_field_name
+    
+    # Map model types and their overrideable fields
+    model_configs = {
+        'run': {
+            'model': ObservationRun,
+            'fields': ['name', 'is_public', 'reduction_status', 'photometry', 
+                      'spectroscopy', 'note', 'mid_observation_jd'],
+            'name_field': 'name',
+        },
+        'datafile': {
+            'model': DataFile,
+            'fields': ['exposure_type', 'spectroscopy', 'spectrograph', 
+                      'instrument', 'telescope', 'status_parameters'],
+            'name_field': 'datafile',
+        },
+        'object': {
+            'model': Object,
+            'fields': ['name', 'is_public', 'ra', 'dec', 'first_hjd', 
+                      'is_main', 'photometry', 'spectroscopy', 
+                      'simbad_resolved', 'object_type', 'note'],
+            'name_field': 'name',
+        },
+    }
+    
+    result = {}
+    
+    for model_type, config in model_configs.items():
+        model_class = config['model']
+        fields = config['fields']
+        name_field = config['name_field']
+        
+        # Build Q filter for any override flag being True
+        from django.db.models import Q
+        override_filters = Q()
+        for field_name in fields:
+            override_field_name = get_override_field_name(field_name)
+            if hasattr(model_class, override_field_name):
+                override_filters |= Q(**{override_field_name: True})
+        
+        # Get instances with any override flags
+        instances = model_class.objects.filter(override_filters).select_related()[:100]  # Limit to 100 for performance
+        
+        items = []
+        for instance in instances:
+            override_fields = []
+            for field_name in fields:
+                override_field_name = get_override_field_name(field_name)
+                if hasattr(instance, override_field_name):
+                    if getattr(instance, override_field_name, False):
+                        override_fields.append(field_name)
+            
+            if override_fields:
+                items.append({
+                    'id': instance.pk,
+                    'name': getattr(instance, name_field, str(instance.pk)),
+                    'override_fields': override_fields,
+                })
+        
+        result[model_type] = {
+            'count': len(items),
+            'items': items,
+        }
+    
+    return Response(result)
 
 class AdminReconcileRequestSerializer(serializers.Serializer):
     dry_run = serializers.BooleanField(required=False, default=True)

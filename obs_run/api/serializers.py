@@ -81,8 +81,28 @@ class RunSerializer(ModelSerializer):
             'end_time',
             'objects',
             'mid_observation_jd',
+            'is_public',
+            # Override flags (read-only for normal users, editable for admins)
+            'name_override',
+            'is_public_override',
+            'reduction_status_override',
+            'photometry_override',
+            'spectroscopy_override',
+            'note_override',
+            'mid_observation_jd_override',
         ]
         read_only_fields = ('pk', 'tags', 'reduction_status_display')
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Make override flags read-only for non-admin users
+        request = self.context.get('request')
+        if request and not (request.user.is_superuser or request.user.has_perm('users.acl_runs_edit')):
+            for field_name in ['name_override', 'is_public_override', 'reduction_status_override',
+                             'photometry_override', 'spectroscopy_override', 'note_override',
+                             'mid_observation_jd_override']:
+                if field_name in self.fields:
+                    self.fields[field_name].read_only = True
 
     def get_href(self, obj):
         # Return SPA route instead of Django reverse (legacy templates removed)
@@ -299,9 +319,27 @@ class DataFileSerializer(ModelSerializer):
             'dec_dms',
             'status_parameters',
             'spectrograph',
+            'spectroscopy',
+            # Override flags (read-only for normal users, editable for admins)
+            'exposure_type_override',
+            'spectroscopy_override',
+            'spectrograph_override',
+            'instrument_override',
+            'telescope_override',
+            'status_parameters_override',
         ]
         # read_only_fields = ('pk', 'added_by')
         read_only_fields = ('pk',)
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Make override flags read-only for non-admin users
+        request = self.context.get('request')
+        if request and not (request.user.is_superuser or request.user.has_perm('users.acl_runs_edit')):
+            for field_name in ['exposure_type_override', 'spectroscopy_override', 'spectrograph_override',
+                             'instrument_override', 'telescope_override', 'status_parameters_override']:
+                if field_name in self.fields:
+                    self.fields[field_name].read_only = True
 
     def get_tags(self, obj):
         tags = TagSerializer(obj.tags, many=True).data
@@ -336,6 +374,31 @@ class DataFileSerializer(ModelSerializer):
 
     def get_observation_run_name(self, obj):
         return obj.observation_run.name
+
+    def update(self, instance, validated_data):
+        """Override update to set override flags for user changes."""
+        from obs_run.utils import check_and_set_override, get_override_field_name
+        
+        # Track changes and set override flags
+        override_fields = []
+        fields_to_check = ['exposure_type', 'spectroscopy', 'spectrograph', 
+                          'instrument', 'telescope', 'status_parameters']
+        
+        for field_name in fields_to_check:
+            if field_name in validated_data:
+                old_value = getattr(instance, field_name, None)
+                new_value = validated_data[field_name]
+                if check_and_set_override(instance, field_name, new_value, old_value):
+                    override_fields.append(get_override_field_name(field_name))
+        
+        # Perform the update
+        instance = super().update(instance, validated_data)
+        
+        # Save override flags if any were set
+        if override_fields:
+            instance.save(update_fields=override_fields)
+        
+        return instance
 
     # Override to_representation to normalize instrument/telescope aliases
     def to_representation(self, instance):

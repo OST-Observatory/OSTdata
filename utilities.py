@@ -26,6 +26,7 @@ django.setup()
 
 from objects.models import Object
 from obs_run.models import ObservationRun, DataFile
+from obs_run.utils import should_allow_auto_update
 logger = logging.getLogger(__name__)
 
 import time
@@ -378,6 +379,18 @@ def evaluate_data_file(data_file, observation_run, print_to_terminal=False):
                 print('Object already known (target: {})'.format(target))
             obj = objs.first()
             # Extra safety: if not in bbox case, also try exact/iexact name match
+            # Update object fields only if override flags allow it
+            if obj:
+                if should_allow_auto_update(obj, 'is_main'):
+                    obj.is_main = True
+                obj.save()
+                # Update first_hjd only if override flag allows
+                if should_allow_auto_update(obj, 'first_hjd'):
+                    if (obj.first_hjd == 0. or
+                            obj.first_hjd == -1. or
+                            data_file.hjd < obj.first_hjd):
+                        obj.first_hjd = data_file.hjd
+                        obj.save(update_fields=['first_hjd'])
         else:
             obj = None
             # # Fallback 1: strict name match
@@ -394,14 +407,25 @@ def evaluate_data_file(data_file, observation_run, print_to_terminal=False):
         if obj is not None:
             obj.datafiles.add(data_file)
             obj.observation_run.add(observation_run)
-            obj.is_main = True
+            
+            # Update object fields only if override flags allow it
+            update_fields = []
+            
+            if should_allow_auto_update(obj, 'is_main'):
+                obj.is_main = True
+                update_fields.append('is_main')
 
             #   Update JD the object was first observed
-            if (obj.first_hjd == 0. or
-                    obj.first_hjd > data_file.hjd):
-                obj.first_hjd = data_file.hjd
+            if should_allow_auto_update(obj, 'first_hjd'):
+                if (obj.first_hjd == 0. or
+                        obj.first_hjd > data_file.hjd):
+                    obj.first_hjd = data_file.hjd
+                    update_fields.append('first_hjd')
 
-            obj.save()
+            if update_fields:
+                obj.save(update_fields=update_fields)
+            else:
+                obj.save()
 
             #   Set datafile target name to Simbad resolved name
             if obj.simbad_resolved:
@@ -553,7 +577,7 @@ def evaluate_data_file(data_file, observation_run, print_to_terminal=False):
                 if main_id:
                     object_name = str(main_id)
 
-            #     Make a new object
+            #     Make a new object (new objects don't have override flags set)
             obj = Object(
                 name=object_name,
                 ra=object_ra,

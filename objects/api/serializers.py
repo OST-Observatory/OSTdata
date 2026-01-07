@@ -60,8 +60,35 @@ class ObjectListSerializer(ModelSerializer):
             'n_light',
             'light_expo_time',
             'note',
+            'is_public',
+            'object_type',
+            'first_hjd',
+            # Override flags (read-only for normal users, editable for admins)
+            'name_override',
+            'is_public_override',
+            'ra_override',
+            'dec_override',
+            'first_hjd_override',
+            'is_main_override',
+            'photometry_override',
+            'spectroscopy_override',
+            'simbad_resolved_override',
+            'object_type_override',
+            'note_override',
         ]
         read_only_fields = ('pk',)
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Make override flags read-only for non-admin users
+        request = self.context.get('request')
+        if request and not (request.user.is_superuser or request.user.has_perm('users.acl_objects_edit')):
+            for field_name in ['name_override', 'is_public_override', 'ra_override', 'dec_override',
+                             'first_hjd_override', 'is_main_override', 'photometry_override',
+                             'spectroscopy_override', 'simbad_resolved_override', 'object_type_override',
+                             'note_override']:
+                if field_name in self.fields:
+                    self.fields[field_name].read_only = True
 
 
     def get_observation_run(self, obj):

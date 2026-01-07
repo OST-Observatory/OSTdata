@@ -147,7 +147,7 @@
           </v-card-text>
         </v-card>
       </v-col>
-      
+
       <!-- Aladin Lite Sky Map -->
       <v-col cols="12" md="3">
         <v-card class="uniform-height">
@@ -158,6 +158,241 @@
             </div>
             <div v-show="!aladinLoading" id="aladin-lite-div" style="width: 100%; height: 265px;"></div>
           </v-card-text>
+        </v-card>
+      </v-col>
+    </v-row>
+
+    <!-- Override Flags (Admin only) -->
+    <v-row v-if="isAdmin" @click="expandOverrideFlagsIfCollapsed" :class="{ 'expand-clickable': !showOverrideFlags }">
+      <v-col cols="12">
+        <v-card class="mb-4">
+          <v-card-title class="d-flex justify-space-between align-center">
+            Override Flags
+            <div class="d-flex align-center" style="gap: 8px">
+              <v-btn
+                v-if="hasAnyOverride"
+                prepend-icon="mdi-refresh"
+                size="default"
+                variant="outlined"
+                color="warning"
+                aria-label="Clear all override flags"
+                @click.stop="clearAllOverrides"
+                :loading="clearingOverrides"
+                :disabled="!showOverrideFlags"
+                class="override-clear-btn"
+              >
+                Clear all
+              </v-btn>
+              <v-btn
+                :icon="showOverrideFlags ? 'mdi-eye-off' : 'mdi-eye'"
+                size="small"
+                variant="text"
+                @click.stop="toggleOverrideFlags"
+                :aria-label="showOverrideFlags ? 'Collapse section' : 'Expand section'"
+                :aria-expanded="showOverrideFlags ? 'true' : 'false'"
+                aria-controls="override-flags-section"
+              ></v-btn>
+            </div>
+          </v-card-title>
+          <v-card-subtitle v-if="!showOverrideFlags" class="text-caption text-secondary px-4 pt-0 pb-2">
+            Click anywhere on this section to expand.
+          </v-card-subtitle>
+          <v-expand-transition>
+            <div v-show="showOverrideFlags" id="override-flags-section">
+              <v-card-text>
+                <v-list density="compact">
+                  <v-list-item v-if="object?.name_override">
+                    <template v-slot:prepend>
+                      <v-icon>mdi-lock</v-icon>
+                    </template>
+                    <v-list-item-title>Name</v-list-item-title>
+                    <template v-slot:append>
+                      <v-btn
+                        icon="mdi-close-circle"
+                        size="x-small"
+                        variant="text"
+                        color="warning"
+                        @click.stop="clearSingleOverride('name')"
+                        :loading="clearingSingleOverride['name']"
+                        aria-label="Clear name override"
+                      ></v-btn>
+                    </template>
+                  </v-list-item>
+                  <v-list-item v-if="object?.is_public_override">
+                    <template v-slot:prepend>
+                      <v-icon>mdi-lock</v-icon>
+                    </template>
+                    <v-list-item-title>Public</v-list-item-title>
+                    <template v-slot:append>
+                      <v-btn
+                        icon="mdi-close-circle"
+                        size="x-small"
+                        variant="text"
+                        color="warning"
+                        @click.stop="clearSingleOverride('is_public')"
+                        :loading="clearingSingleOverride['is_public']"
+                        aria-label="Clear public override"
+                      ></v-btn>
+                    </template>
+                  </v-list-item>
+                  <v-list-item v-if="object?.ra_override">
+                    <template v-slot:prepend>
+                      <v-icon>mdi-lock</v-icon>
+                    </template>
+                    <v-list-item-title>RA</v-list-item-title>
+                    <template v-slot:append>
+                      <v-btn
+                        icon="mdi-close-circle"
+                        size="x-small"
+                        variant="text"
+                        color="warning"
+                        @click.stop="clearSingleOverride('ra')"
+                        :loading="clearingSingleOverride['ra']"
+                        aria-label="Clear RA override"
+                      ></v-btn>
+                    </template>
+                  </v-list-item>
+                  <v-list-item v-if="object?.dec_override">
+                    <template v-slot:prepend>
+                      <v-icon>mdi-lock</v-icon>
+                    </template>
+                    <v-list-item-title>Dec</v-list-item-title>
+                    <template v-slot:append>
+                      <v-btn
+                        icon="mdi-close-circle"
+                        size="x-small"
+                        variant="text"
+                        color="warning"
+                        @click.stop="clearSingleOverride('dec')"
+                        :loading="clearingSingleOverride['dec']"
+                        aria-label="Clear Dec override"
+                      ></v-btn>
+                    </template>
+                  </v-list-item>
+                  <v-list-item v-if="object?.first_hjd_override">
+                    <template v-slot:prepend>
+                      <v-icon>mdi-lock</v-icon>
+                    </template>
+                    <v-list-item-title>First HJD</v-list-item-title>
+                    <template v-slot:append>
+                      <v-btn
+                        icon="mdi-close-circle"
+                        size="x-small"
+                        variant="text"
+                        color="warning"
+                        @click.stop="clearSingleOverride('first_hjd')"
+                        :loading="clearingSingleOverride['first_hjd']"
+                        aria-label="Clear First HJD override"
+                      ></v-btn>
+                    </template>
+                  </v-list-item>
+                  <v-list-item v-if="object?.is_main_override">
+                    <template v-slot:prepend>
+                      <v-icon>mdi-lock</v-icon>
+                    </template>
+                    <v-list-item-title>Main</v-list-item-title>
+                    <template v-slot:append>
+                      <v-btn
+                        icon="mdi-close-circle"
+                        size="x-small"
+                        variant="text"
+                        color="warning"
+                        @click.stop="clearSingleOverride('is_main')"
+                        :loading="clearingSingleOverride['is_main']"
+                        aria-label="Clear Main override"
+                      ></v-btn>
+                    </template>
+                  </v-list-item>
+                  <v-list-item v-if="object?.photometry_override">
+                    <template v-slot:prepend>
+                      <v-icon>mdi-lock</v-icon>
+                    </template>
+                    <v-list-item-title>Photometry</v-list-item-title>
+                    <template v-slot:append>
+                      <v-btn
+                        icon="mdi-close-circle"
+                        size="x-small"
+                        variant="text"
+                        color="warning"
+                        @click.stop="clearSingleOverride('photometry')"
+                        :loading="clearingSingleOverride['photometry']"
+                        aria-label="Clear photometry override"
+                      ></v-btn>
+                    </template>
+                  </v-list-item>
+                  <v-list-item v-if="object?.spectroscopy_override">
+                    <template v-slot:prepend>
+                      <v-icon>mdi-lock</v-icon>
+                    </template>
+                    <v-list-item-title>Spectroscopy</v-list-item-title>
+                    <template v-slot:append>
+                      <v-btn
+                        icon="mdi-close-circle"
+                        size="x-small"
+                        variant="text"
+                        color="warning"
+                        @click.stop="clearSingleOverride('spectroscopy')"
+                        :loading="clearingSingleOverride['spectroscopy']"
+                        aria-label="Clear spectroscopy override"
+                      ></v-btn>
+                    </template>
+                  </v-list-item>
+                  <v-list-item v-if="object?.simbad_resolved_override">
+                    <template v-slot:prepend>
+                      <v-icon>mdi-lock</v-icon>
+                    </template>
+                    <v-list-item-title>SIMBAD</v-list-item-title>
+                    <template v-slot:append>
+                      <v-btn
+                        icon="mdi-close-circle"
+                        size="x-small"
+                        variant="text"
+                        color="warning"
+                        @click.stop="clearSingleOverride('simbad_resolved')"
+                        :loading="clearingSingleOverride['simbad_resolved']"
+                        aria-label="Clear SIMBAD override"
+                      ></v-btn>
+                    </template>
+                  </v-list-item>
+                  <v-list-item v-if="object?.object_type_override">
+                    <template v-slot:prepend>
+                      <v-icon>mdi-lock</v-icon>
+                    </template>
+                    <v-list-item-title>Type</v-list-item-title>
+                    <template v-slot:append>
+                      <v-btn
+                        icon="mdi-close-circle"
+                        size="x-small"
+                        variant="text"
+                        color="warning"
+                        @click.stop="clearSingleOverride('object_type')"
+                        :loading="clearingSingleOverride['object_type']"
+                        aria-label="Clear Type override"
+                      ></v-btn>
+                    </template>
+                  </v-list-item>
+                  <v-list-item v-if="object?.note_override">
+                    <template v-slot:prepend>
+                      <v-icon>mdi-lock</v-icon>
+                    </template>
+                    <v-list-item-title>Note</v-list-item-title>
+                    <template v-slot:append>
+                      <v-btn
+                        icon="mdi-close-circle"
+                        size="x-small"
+                        variant="text"
+                        color="warning"
+                        @click.stop="clearSingleOverride('note')"
+                        :loading="clearingSingleOverride['note']"
+                        aria-label="Clear note override"
+                      ></v-btn>
+                    </template>
+                  </v-list-item>
+                  <v-list-item v-if="!hasAnyOverride" title="No overrides" class="text-secondary" />
+                </v-list>
+              </v-card-text>
+            </div>
+          </v-expand-transition>
         </v-card>
       </v-col>
     </v-row>
@@ -682,6 +917,9 @@ import { useNotifyStore } from '@/store/notify'
 const route = useRoute()
 const authStore = useAuthStore()
 const notify = useNotifyStore()
+const isAdmin = computed(() => authStore.isAdmin)
+const clearingOverrides = ref(false)
+const clearingSingleOverride = ref({})
 
 // Reactive data
 const object = ref(null)
@@ -988,6 +1226,57 @@ const saveTags = async () => {
     try { notify.success('Tags updated') } catch {}
   } catch (error) {
     console.error('Error saving tags:', error)
+  }
+}
+
+// Override flags
+const hasAnyOverride = computed(() => {
+  if (!object.value) return false
+  return !!(object.value.name_override || object.value.is_public_override || 
+           object.value.ra_override || object.value.dec_override ||
+           object.value.first_hjd_override || object.value.is_main_override ||
+           object.value.photometry_override || object.value.spectroscopy_override ||
+           object.value.simbad_resolved_override || object.value.object_type_override ||
+           object.value.note_override)
+})
+
+// Collapsible Override Flags
+const showOverrideFlags = ref(false)
+const toggleOverrideFlags = () => {
+  showOverrideFlags.value = !showOverrideFlags.value
+}
+const expandOverrideFlagsIfCollapsed = () => {
+  if (!showOverrideFlags.value) {
+    showOverrideFlags.value = true
+  }
+}
+
+const clearSingleOverride = async (fieldName) => {
+  if (!isAdmin.value || !object.value?.pk) return
+  const key = fieldName
+  clearingSingleOverride.value[key] = true
+  try {
+    await api.adminClearOverrideFlag('object', object.value.pk, fieldName)
+    notify.success(`Override flag for ${fieldName} cleared`)
+    await loadObject()
+  } catch (e) {
+    notify.error(`Failed to clear override flag for ${fieldName}`)
+  } finally {
+    clearingSingleOverride.value[key] = false
+  }
+}
+
+const clearAllOverrides = async () => {
+  if (!isAdmin.value || !object.value?.pk) return
+  clearingOverrides.value = true
+  try {
+    await api.adminClearAllOverrides('object', object.value.pk)
+    notify.success('All override flags cleared')
+    await loadObject()
+  } catch (e) {
+    notify.error('Failed to clear override flags')
+  } finally {
+    clearingOverrides.value = false
   }
 }
 
@@ -1537,5 +1826,11 @@ watch(object, (val) => {
   overflow: hidden;
   text-overflow: ellipsis;
   vertical-align: bottom;
+}
+
+.override-clear-btn {
+  min-height: 30px;
+  padding-top: 5px;
+  padding-bottom: 5px;
 }
 </style> 

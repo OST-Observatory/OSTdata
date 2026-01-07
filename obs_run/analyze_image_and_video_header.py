@@ -8,6 +8,7 @@ import pytz
 import exifread
 
 from .ser_parser import SERParser
+from obs_run.utils import should_allow_auto_update
 
 ############################################################################
 
@@ -66,8 +67,9 @@ def analyze_image(datafile):
         except:
             naxis2 = -1
 
-    #   Set values
-    datafile.exposure_type = 'UK'
+    #   Set values (check override flag for exposure_type)
+    if should_allow_auto_update(datafile, 'exposure_type'):
+        datafile.exposure_type = 'UK'
     datafile.hjd = jd
     datafile.obs_date = obs_date
     datafile.exptime = exptime
@@ -94,7 +96,8 @@ def analyze_video(datafile):
         obs_date = t.to_datetime().strftime("%Y-%m-%d %H:%M:%S")
         jd = t.jd
 
-    datafile.exposure_type = 'UK'
+    if should_allow_auto_update(datafile, 'exposure_type'):
+        datafile.exposure_type = 'UK'
     datafile.hjd = jd
     datafile.obs_date = obs_date
     datafile.exptime = -1.
@@ -134,8 +137,9 @@ def analyze_ser(datafile):
     naxis1 = float(header['ImageWidth'])
     naxis2 = float(header['ImageHeight'])
 
-    #   Set values
-    datafile.exposure_type = 'UK'
+    #   Set values (check override flag for exposure_type)
+    if should_allow_auto_update(datafile, 'exposure_type'):
+        datafile.exposure_type = 'UK'
     datafile.hjd = jd
     datafile.obs_date = obs_date
     datafile.exptime = -1.

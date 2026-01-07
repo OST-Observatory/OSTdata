@@ -167,12 +167,60 @@ class ObjectViewSet(viewsets.ModelViewSet):
     def update(self, request, *args, **kwargs):
         if not self._has(request.user, 'acl_objects_edit'):
             return Response({'detail': 'Forbidden'}, status=status.HTTP_403_FORBIDDEN)
-        return super().update(request, *args, **kwargs)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data)
+        serializer.is_valid(raise_exception=True)
+        
+        # Track changes and set override flags
+        from obs_run.utils import check_and_set_override, get_override_field_name
+        override_fields = []
+        fields_to_check = ['name', 'is_public', 'ra', 'dec', 'first_hjd', 
+                          'is_main', 'photometry', 'spectroscopy', 
+                          'simbad_resolved', 'object_type', 'note']
+        
+        for field_name in fields_to_check:
+            if field_name in serializer.validated_data:
+                old_value = getattr(instance, field_name, None)
+                new_value = serializer.validated_data[field_name]
+                if check_and_set_override(instance, field_name, new_value, old_value):
+                    override_fields.append(get_override_field_name(field_name))
+        
+        serializer.save()
+        
+        # Save override flags if any were set
+        if override_fields:
+            instance.save(update_fields=override_fields)
+        
+        return Response(serializer.data)
 
     def partial_update(self, request, *args, **kwargs):
         if not self._has(request.user, 'acl_objects_edit'):
             return Response({'detail': 'Forbidden'}, status=status.HTTP_403_FORBIDDEN)
-        return super().partial_update(request, *args, **kwargs)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        
+        # Track changes and set override flags
+        from obs_run.utils import check_and_set_override, get_override_field_name
+        override_fields = []
+        fields_to_check = ['name', 'is_public', 'ra', 'dec', 'first_hjd', 
+                          'is_main', 'photometry', 'spectroscopy', 
+                          'simbad_resolved', 'object_type', 'note']
+        
+        for field_name in fields_to_check:
+            if field_name in serializer.validated_data:
+                old_value = getattr(instance, field_name, None)
+                new_value = serializer.validated_data[field_name]
+                if check_and_set_override(instance, field_name, new_value, old_value):
+                    override_fields.append(get_override_field_name(field_name))
+        
+        serializer.save()
+        
+        # Save override flags if any were set
+        if override_fields:
+            instance.save(update_fields=override_fields)
+        
+        return Response(serializer.data)
 
     def destroy(self, request, *args, **kwargs):
         if not self._has(request.user, 'acl_objects_delete'):
