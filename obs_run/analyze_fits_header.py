@@ -112,6 +112,64 @@ def extract_fits_header_info(header):
     data['wind_speed'] = header.get('AOCWIND', -1)
     data['wind_direction'] = header.get('AOCWINDD', -1)
 
+    # Camera parameters (for dark matching)
+    # CCD temperature
+    ccd_temp = header.get('CCD-TEMP', None) or header.get('SET-TEMP', None) or \
+               header.get('CCDTEMP', None) or header.get('TEMPERAT', None)
+    if ccd_temp is not None:
+        try:
+            data['ccd_temp'] = float(ccd_temp)
+        except Exception:
+            data['ccd_temp'] = -999
+    else:
+        data['ccd_temp'] = -999
+
+    # Gain
+    gain = header.get('GAIN', None) or header.get('ISO', None)
+    if gain is not None:
+        try:
+            data['gain'] = float(gain)
+        except Exception:
+            data['gain'] = -1
+    else:
+        data['gain'] = -1
+
+    # EGAIN 
+    egain = header.get('EGAIN', None)
+    if egain is not None:
+        try:
+            data['egain'] = float(egain)
+        except Exception:
+            data['egain'] = -1
+    else:
+        data['egain'] = -1
+
+    # PEDESTAL
+    pedestal = header.get('PEDESTAL', None)
+    if pedestal is not None:
+        try:
+            data['pedestal'] = int(float(pedestal))
+        except Exception:
+            data['pedestal'] = -1
+    else:
+        data['pedestal'] = -1
+
+    # Offset
+    offset = header.get('OFFSET', None) or header.get('BLKLEVEL', None) or \
+             header.get('BRIGHTNESS', None)
+    if offset is not None:
+        try:
+            data['offset'] = int(float(offset))
+        except Exception:
+            data['offset'] = -1
+    else:
+        data['offset'] = -1
+
+    # Readout mode
+    readout_mode = header.get('READOUTM', None) or header.get('READMODE', None) or \
+                   header.get('RDMODE', None)
+    data['readout_mode'] = str(readout_mode).strip() if readout_mode else ''
+
     return data
 
 
@@ -205,6 +263,16 @@ def analyze_fits(datafile):
     datafile.wind_direction = header_data.get('wind_direction', -1)
     datafile.focal_length = header_data.get('focal_length', -1)
     datafile.pixel_size = header_data.get('pixel_size', -1)
+
+    # Camera parameters
+    datafile.ccd_temp = header_data.get('ccd_temp', -999)
+    datafile.gain = header_data.get('gain', -1)
+    datafile.egain = header_data.get('egain', -1)
+    datafile.pedestal = header_data.get('pedestal', -1)
+    datafile.offset = header_data.get('offset', -1)
+    datafile.readout_mode = header_data.get('readout_mode', '')
+    datafile.binning_x = header_data.get('binning_x', 1)
+    datafile.binning_y = header_data.get('binning_y', 1)
 
     #   Calculate chip size in mm
     if datafile.pixel_size in [0, -1] and datafile.focal_length in [0, -1]:

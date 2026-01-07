@@ -166,6 +166,16 @@ class DataFile(models.Model):
     obs_date = models.CharField(max_length=50, default='')
     exptime = models.FloatField(default=-1)
 
+    #   Camera parameters (for dark matching)
+    ccd_temp = models.FloatField(default=-999)      # sensor temperature in °C
+    gain = models.FloatField(default=-1)           
+    egain = models.FloatField(default=-1)         
+    pedestal = models.IntegerField(default=-1)       
+    offset = models.IntegerField(default=-1)       
+    readout_mode = models.CharField(max_length=50, default='') 
+    binning_x = models.IntegerField(default=1)     
+    binning_y = models.IntegerField(default=1)     
+
     #   Image parameters
     naxis1 = models.FloatField(default=-1)
     naxis2 = models.FloatField(default=-1)
@@ -297,6 +307,10 @@ class DataFile(models.Model):
             models.Index(fields=['instrument'], name='df_instrument_idx'),
             models.Index(fields=['telescope'], name='df_telescope_idx'),
             models.Index(fields=['main_target'], name='df_main_target_idx'),
+            models.Index(fields=['ccd_temp'], name='df_ccd_temp_idx'),
+            models.Index(fields=['gain'], name='df_gain_idx'),
+            models.Index(fields=['egain'], name='df_egain_idx'),
+            models.Index(fields=['binning_x', 'binning_y'], name='df_binning_idx'),
         ]
 
 

@@ -9,6 +9,9 @@ from .runs import (
     get_observing_conditions,
     get_sky_fov,
     get_time_distribution,
+    dark_finder_search,
+    parse_fits_header,
+    get_instruments,
 )
 from .views import (
     DataFileViewSet,
@@ -67,5 +70,9 @@ urlpatterns = [
     path('jobs/batch/cancel', batch_cancel_download_jobs, name='download_jobs_batch_cancel'),
     path('jobs/batch/extend-expiry', batch_extend_jobs_expiry, name='download_jobs_batch_extend_expiry'),
     path('jobs/batch/expire-now', batch_expire_jobs_now, name='download_jobs_batch_expire_now'),
+    # Dark Finder endpoints
+    path('dark-finder/', dark_finder_search, name='dark_finder_search'),
+    path('parse-fits-header/', parse_fits_header, name='parse_fits_header'),
+    path('instruments/', get_instruments, name='get_instruments'),
     path('', include(router.urls) ),
 ]

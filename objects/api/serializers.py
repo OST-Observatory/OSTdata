@@ -11,48 +11,11 @@ from rest_framework.serializers import (
 from objects.models import Object
 from tags.models import Tag
 from tags.api.serializers import TagSerializer
+from obs_run.utils import normalize_alias, INSTRUMENT_ALIASES, TELESCOPE_ALIASES
 
 # ===============================================================
 #   OBJECTS
 # ===============================================================
-
-# Simple alias maps to normalize common instrument/telescope names
-INSTRUMENT_ALIASES = {
-    'sbig st-8 3 ccd camera': 'ST-8',
-    'sbig st-8': 'ST-8',
-    'sbig st8': 'ST-8',
-    'st-8': 'ST-8',
-    'st8': 'ST-8',
-    'QHYCCD-Cameras-Capture': 'QHY600M or QHY268M',
-    'QHY600M': 'QHY600M',
-    'QHY268M': 'QHY268M',
-    'QHY600': 'QHY600M',
-    'QHY268': 'QHY268M',
-    'SBIG ST-i CCD Camera': 'ST-i',
-    'SBIG ST-i': 'ST-i',
-    'SBIG ST-i CCD': 'ST-i',
-    'SBIG ST-i CCD Camera': 'ST-i',
-    'SBIG ST-i CCD Camera': 'ST-i',
-}
-
-TELESCOPE_ALIASES = {
-    'meade lx200': 'LX200',
-    'lx200': 'LX200',
-    'sky-watcher': 'SkyWatcher',
-    'Planewave CDK20': 'CDK20',
-}
-
-
-# Normalize alias maps to lowercase keys for robust, case-insensitive lookup
-INSTRUMENT_ALIASES = { (k.strip().lower() if isinstance(k, str) else k): v for k, v in INSTRUMENT_ALIASES.items() }
-TELESCOPE_ALIASES  = { (k.strip().lower() if isinstance(k, str) else k): v for k, v in TELESCOPE_ALIASES.items() }
-
-
-def normalize_alias(name: str, aliases: dict) -> str:
-    if not name:
-        return name
-    key = str(name).strip().lower()
-    return aliases.get(key, name)
 
 
 class ObjectListSerializer(ModelSerializer):

@@ -362,7 +362,7 @@
         <v-card>
           <v-card-title class="d-flex justify-space-between align-center">
             <span class="d-flex align-center">
-              Data Files ({{ filteredDataFiles.length }})
+            Data Files ({{ filteredDataFiles.length }})
               <v-progress-circular v-if="loadingDataFiles" indeterminate size="16" width="2" class="ml-2" />
             </span>
             <v-btn

@@ -7,8 +7,14 @@ const API_BASE_URL = import.meta.env?.VITE_API_BASE || '/api'
 async function fetchWithAuth(url, options = {}) {
   const authStore = useAuthStore()
   const headers = {
-    'Content-Type': 'application/json',
     ...options.headers
+  }
+
+  // Only set Content-Type if not FormData (browser will set it automatically for FormData)
+  if (!(options.body instanceof FormData)) {
+    if (!headers['Content-Type'] && !headers['content-type']) {
+      headers['Content-Type'] = 'application/json'
+    }
   }
 
   if (authStore.token) {
@@ -46,7 +52,8 @@ async function fetchWithAuth(url, options = {}) {
 
   const response = await fetch(fullUrl, {
     ...options,
-    headers
+    headers,
+    credentials: 'include', // Include cookies for session authentication
   })
 
   // Global 401 handling: clear auth and redirect to login
@@ -378,4 +385,20 @@ export const api = {
   adminBatchCancelJobs: (ids = []) => fetchWithAuth('/runs/jobs/batch/cancel', { method: 'POST', body: JSON.stringify({ ids }) }),
   adminBatchExtendJobsExpiry: (ids = [], hours = 48) => fetchWithAuth('/runs/jobs/batch/extend-expiry', { method: 'POST', body: JSON.stringify({ ids, hours }) }),
   adminBatchExpireJobsNow: (ids = []) => fetchWithAuth('/runs/jobs/batch/expire-now', { method: 'POST', body: JSON.stringify({ ids }) }),
+
+  // Dark Finder
+  darkFinderSearch: (params) => fetchWithAuth('/runs/dark-finder/', { 
+    method: 'POST', 
+    body: JSON.stringify(params) 
+  }),
+  parseFitsHeader: (file) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    return fetchWithAuth('/runs/parse-fits-header/', { 
+      method: 'POST', 
+      body: formData,
+      headers: {} // Kein Content-Type für FormData
+    })
+  },
+  getInstruments: () => fetchWithAuth('/runs/instruments/'),
 }

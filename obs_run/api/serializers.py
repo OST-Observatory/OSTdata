@@ -14,7 +14,7 @@ from obs_run.models import ObservationRun, DataFile
 from tags.models import Tag
 from tags.api.serializers import TagSerializer
 from objects.api.simple_serializers import ObjectSimpleSerializer
-from objects.api.serializers import normalize_alias, INSTRUMENT_ALIASES, TELESCOPE_ALIASES
+from obs_run.utils import normalize_alias, INSTRUMENT_ALIASES, TELESCOPE_ALIASES
 
 
 # ===============================================================

@@ -11,12 +11,13 @@ from django.db import connection
 from django.utils.http import http_date
 from django.utils.timezone import make_aware
 from rest_framework import viewsets
-from rest_framework.decorators import api_view
+from rest_framework.decorators import api_view, permission_classes, parser_classes
 from rest_framework.filters import OrderingFilter
 from rest_framework.pagination import PageNumberPagination
-from rest_framework.permissions import IsAuthenticatedOrReadOnly
+from rest_framework.permissions import IsAuthenticatedOrReadOnly, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
+from rest_framework.parsers import MultiPartParser, FormParser
 from django_filters.rest_framework import DjangoFilterBackend
 from django.db.models import Count, Sum, Q
 from drf_spectacular.utils import extend_schema, OpenApiParameter, extend_schema_view, OpenApiExample
@@ -25,6 +26,7 @@ logger = logging.getLogger(__name__)
 
 from obs_run.models import ObservationRun
 from objects.models import Object
+from obs_run.utils import normalize_alias, INSTRUMENT_ALIASES
 from .serializers import RunSerializer
 from .filter import RunFilter
 from ..plotting import (
@@ -505,5 +507,317 @@ def getDashboardStats(request):
 # Throttle dashboard stats modestly
 getDashboardStats.throttle_classes = [ScopedRateThrottle]
 getDashboardStats.throttle_scope = 'stats'
+
+
+@extend_schema(
+    summary='Find matching dark frames',
+    request={
+        'application/json': {
+            'type': 'object',
+            'properties': {
+                'exptime': {'type': 'number', 'description': 'Exposure time in seconds'},
+                'exptime_tolerance': {'type': 'number', 'default': 0, 'description': 'Tolerance for exposure time'},
+                'ccd_temp': {'type': 'number', 'description': 'CCD temperature in °C'},
+                'temp_tolerance': {'type': 'number', 'default': 2, 'description': 'Tolerance for temperature in °C'},
+                'instrument': {'type': 'string', 'description': 'Instrument name'},
+                'naxis1': {'type': 'integer', 'description': 'Image width in pixels'},
+                'naxis2': {'type': 'integer', 'description': 'Image height in pixels'},
+                'gain': {'type': 'number', 'default': -1, 'description': 'Gain (optional)'},
+                'egain': {'type': 'number', 'default': -1, 'description': 'EGAIN (optional)'},
+                'pedestal': {'type': 'integer', 'default': -1, 'description': 'PEDESTAL (optional)'},
+                'offset': {'type': 'integer', 'default': -1, 'description': 'Offset (optional)'},
+                'binning_x': {'type': 'integer', 'default': 1, 'description': 'X-binning'},
+                'binning_y': {'type': 'integer', 'default': 1, 'description': 'Y-binning'},
+                'limit': {'type': 'integer', 'default': 20, 'maximum': 100, 'description': 'Maximum number of results'},
+            },
+            'required': ['exptime', 'ccd_temp', 'instrument', 'naxis1', 'naxis2'],
+        }
+    },
+    tags=['Dark Finder'],
+)
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def dark_finder_search(request):
+    """
+    Find matching dark frames based on camera parameters.
+    Uses INSTRUMENT_ALIASES for instrument name normalization.
+    """
+    try:
+        data = request.data if hasattr(request, 'data') else {}
+        
+        # Required parameters
+        exptime = float(data.get('exptime', 0))
+        ccd_temp = float(data.get('ccd_temp', -999))
+        instrument = str(data.get('instrument', '')).strip()
+        naxis1 = int(data.get('naxis1', 0))
+        naxis2 = int(data.get('naxis2', 0))
+        
+        # Optional parameters with defaults
+        exptime_tolerance = float(data.get('exptime_tolerance', 0))
+        temp_tolerance = float(data.get('temp_tolerance', 2))
+        gain = float(data.get('gain', -1)) if data.get('gain') is not None else -1
+        egain = float(data.get('egain', -1)) if data.get('egain') is not None else -1
+        pedestal = int(data.get('pedestal', -1)) if data.get('pedestal') is not None else -1
+        offset = int(data.get('offset', -1)) if data.get('offset') is not None else -1
+        binning_x = int(data.get('binning_x', 1))
+        binning_y = int(data.get('binning_y', 1))
+        limit = min(int(data.get('limit', 20)), 100)  # Max 100
+        
+        # Normalize instrument using INSTRUMENT_ALIASES
+        normalized_instrument = normalize_alias(instrument, INSTRUMENT_ALIASES)
+        
+        # Build query for dark frames
+        queryset = DataFile.objects.filter(
+            exposure_type='DA',
+            observation_run__is_public=True
+        )
+        
+        # Find all possible instrument variants
+        possible_instruments = [normalized_instrument]
+        for key, value in INSTRUMENT_ALIASES.items():
+            if value == normalized_instrument:
+                possible_instruments.append(key)
+        
+        # Filter by instrument (case-insensitive)
+        queryset = queryset.filter(
+            Q(instrument__iexact=normalized_instrument) |
+            Q(instrument__in=possible_instruments)
+        )
+        
+        # Filter by exposure time with tolerance
+        if exptime_tolerance > 0:
+            queryset = queryset.filter(
+                exptime__gte=exptime - exptime_tolerance,
+                exptime__lte=exptime + exptime_tolerance
+            )
+        else:
+            queryset = queryset.filter(exptime=exptime)
+        
+        # Filter by CCD temperature with tolerance
+        queryset = queryset.filter(
+            ccd_temp__gte=ccd_temp - temp_tolerance,
+            ccd_temp__lte=ccd_temp + temp_tolerance
+        )
+        
+        # Filter by image dimensions
+        queryset = queryset.filter(naxis1=naxis1, naxis2=naxis2)
+        
+        # Filter by binning
+        queryset = queryset.filter(binning_x=binning_x, binning_y=binning_y)
+        
+        # Optional filters
+        if gain > 0:
+            queryset = queryset.filter(gain=gain)
+        if egain > 0:
+            queryset = queryset.filter(egain=egain)
+        if pedestal > 0:
+            queryset = queryset.filter(pedestal=pedestal)
+        if offset > 0:
+            queryset = queryset.filter(offset=offset)
+        
+        # Order by newest first (highest HJD)
+        queryset = queryset.order_by('-hjd')[:limit]
+        
+        # Serialize results
+        results = []
+        for df in queryset:
+            results.append({
+                'id': df.pk,
+                'filename': Path(df.datafile).name,
+                'observation_run': df.observation_run.name if df.observation_run else None,
+                'observation_run_id': df.observation_run.pk if df.observation_run else None,
+                'obs_date': df.obs_date,
+                'hjd': df.hjd,
+                'exptime': df.exptime,
+                'ccd_temp': df.ccd_temp,
+                'instrument': df.instrument,
+                'gain': df.gain,
+                'egain': df.egain,
+                'pedestal': df.pedestal,
+                'offset': df.offset,
+                'binning_x': df.binning_x,
+                'binning_y': df.binning_y,
+            })
+        
+        return Response({'results': results, 'count': len(results)})
+        
+    except Exception as e:
+        logger.exception("dark_finder_search failed: %s", e)
+        return Response({'error': str(e)}, status=400)
+
+
+@extend_schema(
+    summary='Parse FITS header from uploaded file',
+    request={
+        'multipart/form-data': {
+            'type': 'object',
+            'properties': {
+                'file': {'type': 'string', 'format': 'binary', 'description': 'FITS file'},
+            },
+        }
+    },
+    tags=['Dark Finder'],
+)
+@api_view(['POST'])
+@parser_classes([MultiPartParser, FormParser])
+@permission_classes([IsAuthenticated])
+def parse_fits_header(request):
+    """
+    Parse FITS header from uploaded file and extract camera parameters.
+    Security: Only reads header (first ~30KB), does not store file.
+    """
+    MAX_FILE_SIZE = 100 * 1024 * 1024  # 100MB (increased for larger FITS files)
+    # FITS headers are 2880 bytes per block, read at least 3 blocks (8640 bytes) to be safe
+    MAX_HEADER_SIZE = 3 * 2880  # 8640 bytes
+    
+    tmp_path = None
+    try:
+        if 'file' not in request.FILES:
+            return Response({'error': 'No file provided'}, status=400)
+        
+        uploaded_file = request.FILES['file']
+        
+        # Check file size
+        if uploaded_file.size > MAX_FILE_SIZE:
+            return Response({'error': f'File too large (max {MAX_FILE_SIZE} bytes)'}, status=400)
+        
+        # Reset file pointer to beginning (in case it was already read)
+        uploaded_file.seek(0)
+        
+        # For small files, read the entire file; for larger files, read only header
+        # This ensures astropy can properly parse the file structure
+        if uploaded_file.size <= MAX_FILE_SIZE:
+            # Read entire file if it's within size limit
+            file_bytes = uploaded_file.read()
+        else:
+            # For very large files, read only header portion
+            file_bytes = uploaded_file.read(MAX_HEADER_SIZE)
+        
+        if len(file_bytes) < 80:  # Minimum FITS header card size
+            return Response({'error': 'File too small or invalid'}, status=400)
+        
+        # Validate FITS signature (first 8 bytes should be "SIMPLE  " or "SIMPLE=T")
+        if not (file_bytes.startswith(b'SIMPLE  ') or file_bytes.startswith(b'SIMPLE=T')):
+            # Try to decode first bytes for better error message
+            try:
+                first_bytes = file_bytes[:80].decode('ascii', errors='replace')
+            except Exception:
+                first_bytes = 'binary data'
+            return Response({
+                'error': f'Invalid FITS file signature. First bytes: {first_bytes[:20]}...'
+            }, status=400)
+        
+        header = None
+        # Try to use BytesIO first (more efficient, no temp file)
+        try:
+            from io import BytesIO
+            file_obj = BytesIO(file_bytes)
+            # Read header directly from BytesIO
+            header = fits.getheader(file_obj, 0, ignore_missing_simple=True)
+            logger.debug("Successfully read FITS header using BytesIO")
+        except Exception as bytesio_error:
+            # Fallback to temporary file if BytesIO doesn't work
+            logger.warning("BytesIO approach failed, using temp file: %s", bytesio_error)
+            import tempfile
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.fits', mode='wb') as tmp_file:
+                tmp_file.write(file_bytes)
+                tmp_path = tmp_file.name
+            
+            try:
+                # Read header from temp file
+                header = fits.getheader(tmp_path, 0, ignore_missing_simple=True)
+                logger.debug("Successfully read FITS header from temp file")
+            except Exception as header_error:
+                logger.exception("Failed to parse FITS header from temp file: %s", header_error)
+                error_msg = str(header_error)
+                # Clean up temp file before returning error
+                if tmp_path:
+                    try:
+                        os.unlink(tmp_path)
+                    except Exception:
+                        pass
+                return Response({
+                    'error': f'Failed to parse FITS header: {error_msg}'
+                }, status=400)
+            finally:
+                # Clean up temp file
+                if tmp_path:
+                    try:
+                        os.unlink(tmp_path)
+                    except Exception:
+                        pass
+        
+        if header is None:
+            return Response({
+                'error': 'Failed to read FITS header: unknown error'
+            }, status=400)
+        
+        try:
+            # Extract parameters using existing function
+            from obs_run.analyze_fits_header import extract_fits_header_info
+            header_data = extract_fits_header_info(header)
+            
+            # Return in same format as dark_finder_search request
+            result = {
+                'exptime': header_data.get('exptime', -1),
+                'ccd_temp': header_data.get('ccd_temp', -999),
+                'instrument': header_data.get('instrument', ''),
+                'naxis1': int(header_data.get('naxis1', 0)),
+                'naxis2': int(header_data.get('naxis2', 0)),
+                'gain': header_data.get('gain', -1),
+                'egain': header_data.get('egain', -1),
+                'pedestal': header_data.get('pedestal', -1),
+                'offset': header_data.get('offset', -1),
+                'binning_x': header_data.get('binning_x', 1),
+                'binning_y': header_data.get('binning_y', 1),
+            }
+            
+            return Response(result)
+            
+        except Exception as extract_error:
+            logger.exception("Failed to extract header info: %s", extract_error)
+            return Response({
+                'error': f'Failed to extract header information: {str(extract_error)}'
+            }, status=400)
+                
+    except Exception as e:
+        logger.exception("parse_fits_header failed: %s", e)
+        return Response({
+            'error': f'Upload failed: {str(e)}'
+        }, status=400)
+
+
+@extend_schema(
+    summary='Get list of available instruments',
+    tags=['Dark Finder'],
+)
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_instruments(request):
+    """
+    Get list of unique instrument names from DataFile, normalized via INSTRUMENT_ALIASES.
+    """
+    try:
+        # Get all unique, non-empty instrument values
+        instruments_raw = DataFile.objects.exclude(
+            instrument__isnull=True
+        ).exclude(
+            instrument=''
+        ).values_list('instrument', flat=True).distinct()
+        
+        # Normalize and deduplicate
+        instruments_normalized = set()
+        for inst in instruments_raw:
+            normalized = normalize_alias(inst, INSTRUMENT_ALIASES)
+            instruments_normalized.add(normalized)
+        
+        # Sort alphabetically
+        instruments_sorted = sorted(instruments_normalized)
+        
+        return Response({'instruments': instruments_sorted})
+        
+    except Exception as e:
+        logger.exception("get_instruments failed: %s", e)
+        return Response({'error': str(e)}, status=400)
 
 

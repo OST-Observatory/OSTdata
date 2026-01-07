@@ -90,6 +90,12 @@ const routes = [
     name: 'reset-password',
     component: () => import('../views/ResetPassword.vue'),
     meta: { title: 'Reset Password', description: 'Request a password reset link by email.' }
+  },
+  {
+    path: '/dark-finder',
+    name: 'DarkFinder',
+    component: () => import('../views/DarkFinder.vue'),
+    meta: { requiresAuth: true, title: 'Dark Finder', description: 'Find matching dark frames from the archive.' }
   }
 ]
 

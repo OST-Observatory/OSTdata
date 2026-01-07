@@ -420,6 +420,8 @@ def evaluate_data_file(data_file, observation_run, print_to_terminal=False):
 
         #   Handling of Solar system objects
         elif obj is None and target in solar_system:
+            if print_to_terminal:
+                print('New object (target: {})'.format(target))
             #     Make a new object
             obj = Object(
                 name=target,
@@ -437,6 +439,8 @@ def evaluate_data_file(data_file, observation_run, print_to_terminal=False):
 
         #   Handling of special targets
         elif obj is None and target in special_targets:
+            if print_to_terminal:
+                print('New object (target: {})'.format(target))
             #     Make a new object
             obj = Object(
                 name=target,

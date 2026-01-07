@@ -60,6 +60,11 @@
         <v-tooltip activator="parent" location="bottom">Tags</v-tooltip>
       </v-btn>
 
+      <v-btn icon to="/dark-finder" aria-label="Open Dark Finder" class="on-secondary nav-btn nav-gap" :class="{ 'nav-active': isActive('/dark-finder') }" :aria-current="isActive('/dark-finder') ? 'page' : undefined" @mouseenter="prefetchRoute('/dark-finder')">
+        <v-icon>mdi-image-filter-black-white</v-icon>
+        <v-tooltip activator="parent" location="bottom">Dark Frame Finder</v-tooltip>
+      </v-btn>
+
       <v-btn v-if="isAdmin" icon to="/admin" aria-label="Open Admin" class="on-secondary nav-btn nav-gap" :class="{ 'nav-active': isActive('/admin') }" :aria-current="isActive('/admin') ? 'page' : undefined">
         <v-icon>mdi-shield-account</v-icon>
         <v-tooltip activator="parent" location="bottom">Admin</v-tooltip>
@@ -122,6 +127,7 @@
           <v-list-item to="/observation-runs" :aria-current="isActive('/observation-runs') ? 'page' : undefined"><v-list-item-title>Observation runs</v-list-item-title></v-list-item>
           <v-list-item to="/objects" :aria-current="isActive('/objects') ? 'page' : undefined"><v-list-item-title>Objects</v-list-item-title></v-list-item>
           <v-list-item to="/tags" :aria-current="isActive('/tags') ? 'page' : undefined"><v-list-item-title>Tags</v-list-item-title></v-list-item>
+          <v-list-item to="/dark-finder" :aria-current="isActive('/dark-finder') ? 'page' : undefined"><v-list-item-title>Dark Frame Finder</v-list-item-title></v-list-item>
           <template v-if="isAdmin">
             <v-list-item to="/admin" :aria-current="isActive('/admin') ? 'page' : undefined"><v-list-item-title>Admin</v-list-item-title></v-list-item>
           </template>
@@ -249,6 +255,8 @@ const prefetchRoute = async (path: string) => {
       await import('../../views/ObservationRuns.vue')
     } else if (path === '/tags') {
       await import('../../views/Tags.vue')
+    } else if (path === '/dark-finder') {
+      await import('../../views/DarkFinder.vue')
     } else if (path === '/admin') {
       await import('../../views/Admin.vue')
     }
@@ -342,6 +350,7 @@ const buildCrumbs = (): Crumb[] => {
     '/objects': 'Objects',
     '/observation-runs': 'Observation Runs',
     '/tags': 'Tags',
+    '/dark-finder': 'Dark Frame Finder',
   }
   const segments = route.path.split('/').filter(Boolean)
   let acc = ''
