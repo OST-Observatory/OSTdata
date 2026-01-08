@@ -90,11 +90,30 @@ def _query_object_variants(name: str):
     _add_neg_cache(name)
     return None
 
-def _query_region_safe(ra_deg: float, dec_deg: float, radius_str: str = '0d5m0s'):
+def _query_region_safe(ra_deg: float, dec_deg: float, radius_str: str = '0d5m0s', row_limit: int = 10):
+    """
+    Query SIMBAD region search safely with rate limiting.
+    
+    Parameters
+    ----------
+    ra_deg : float
+        Right ascension in degrees
+    dec_deg : float
+        Declination in degrees
+    radius_str : str
+        Search radius in SIMBAD format (e.g., '5d0m0s' for 5 arcmin)
+    row_limit : int
+        Maximum number of rows to return (default: 10)
+    
+    Returns
+    -------
+    astropy.table.Table or None
+        SIMBAD query results or None on error
+    """
     try:
         sim = Simbad()
         try:
-            sim.ROW_LIMIT = 10
+            sim.ROW_LIMIT = row_limit
         except Exception:
             pass
         if not _try_add_fields(sim, ('otype','alltypes','ids','V')):
@@ -120,6 +139,238 @@ def compute_file_hash(path: Path, chunk_size: int = 1024 * 1024) -> str:
             hasher.update(chunk)
     return hasher.hexdigest()
 
+
+def detect_object_type_from_simbad_types(types_str: str):
+    """
+    Detect object type from SIMBAD types string.
+    
+    Parameters
+    ----------
+    types_str : str
+        SIMBAD types string (e.g., from 'alltypes.otypes' field)
+    
+    Returns
+    -------
+    str or None
+        Object type code: 'SC' (Star Cluster), 'NE' (Nebula), 'GA' (Galaxy), 'ST' (Star), or None
+        Priority order: SC, NE, GA, ST (but caller should apply NE > SC > GA)
+    """
+    if not types_str:
+        return None
+    
+    types_str = str(types_str)
+    
+    # Star Cluster patterns
+    if 'Cl*' in types_str or 'As*' in types_str or 'OpC' in types_str:
+        return 'SC'
+    
+    # Nebula patterns
+    if 'ISM' in types_str or 'PN' in types_str or 'SNR' in types_str or 'HII' in types_str:
+        return 'NE'
+    
+    # Galaxy patterns
+    if '|G|' in types_str or 'Sy2' in types_str or 'LIN' in types_str:
+        return 'GA'
+    
+    # Star pattern (lowest priority, checked last)
+    if '*' in types_str:
+        return 'ST'
+    
+    return None
+
+
+def get_object_fov_radius(obj, fallback_arcmin=10.0, min_arcmin=1.0, max_arcmin=60.0):
+    """
+    Calculate FOV radius for an object from associated DataFiles.
+    
+    Parameters
+    ----------
+    obj : Object
+        Object instance
+    fallback_arcmin : float
+        Fallback radius in arcmin if no valid FOV found (default: 5.0)
+    min_arcmin : float
+        Minimum radius in arcmin (default: 1.0)
+    max_arcmin : float
+        Maximum radius in arcmin (default: 30.0)
+    
+    Returns
+    -------
+    str
+        Radius string for SIMBAD query (e.g., "5d0m0s" for 5 arcmin)
+    """
+    # Get associated DataFiles with valid FOV, prefer Light frames
+    datafiles = obj.datafiles.filter(
+        fov_x__gt=0,
+        fov_y__gt=0
+    ).order_by('-exposure_type')  # 'LI' comes before others alphabetically
+    
+    # If no Light frames, try any with valid FOV
+    if not datafiles.exists():
+        datafiles = obj.datafiles.filter(fov_x__gt=0, fov_y__gt=0)
+    
+    if not datafiles.exists():
+        # Use fallback
+        radius_arcmin = fallback_arcmin
+    else:
+        # Use first DataFile with valid FOV
+        df = datafiles.first()
+        # Calculate half-diagonal in degrees
+        fov_x_deg = float(df.fov_x)
+        fov_y_deg = float(df.fov_y)
+        half_diagonal_deg = np.sqrt(fov_x_deg**2 + fov_y_deg**2) / 2.0
+        # Convert to arcmin
+        radius_arcmin = half_diagonal_deg * 60.0
+    
+    # Apply caps
+    radius_arcmin = max(min_arcmin, min(max_arcmin, radius_arcmin))
+    
+    # Convert to SIMBAD format: "XdYmZs" where X=degrees, Y=arcmin, Z=arcsec
+    degrees = int(radius_arcmin // 60)
+    remaining_arcmin = radius_arcmin - (degrees * 60)
+    arcmin = int(remaining_arcmin)
+    arcsec = int((remaining_arcmin - arcmin) * 60)
+    
+    return f"{degrees}d{arcmin}m{arcsec}s"
+
+
+def update_object_from_simbad_result(obj, simbad_table_row, priority_types=['NE', 'SC', 'GA'], dry_run=False):
+    """
+    Update object from SIMBAD result, respecting override flags.
+    
+    Parameters
+    ----------
+    obj : Object
+        Object instance to update
+    simbad_table_row : astropy.table.Row
+        Single row from SIMBAD query result
+    priority_types : list
+        List of object types to prioritize (default: ['NE', 'SC', 'GA'])
+        If multiple matches found, highest priority in this list wins
+    dry_run : bool
+        If True, don't save changes (default: False)
+    
+    Returns
+    -------
+    dict
+        Dictionary with 'updated_fields' (list), 'new_object_type', 'new_name', 'identifiers_created' (int)
+    """
+    result = {
+        'updated_fields': [],
+        'new_object_type': None,
+        'new_name': None,
+        'identifiers_created': 0,
+    }
+    
+    # Extract SIMBAD data
+    raw_types = simbad_table_row.get('alltypes.otypes', None)
+    types_str = '' if raw_types is None else str(raw_types)
+    
+    # Detect object type
+    detected_type = detect_object_type_from_simbad_types(types_str)
+    if detected_type is None:
+        # Fallback to star if '*' in types
+        if '*' in types_str:
+            detected_type = 'ST'
+        else:
+            return result  # No valid type detected
+    
+    # Check if detected type is in priority list (we're looking for SC, NE, GA, not ST)
+    if detected_type not in priority_types:
+        return result  # Not a type we're interested in
+    
+    # Extract coordinates
+    simbad_ra = Angle(simbad_table_row['ra'], unit='degree').degree
+    simbad_dec = Angle(simbad_table_row['dec'], unit='degree').degree
+    
+    # Extract name
+    main_id = simbad_table_row.get('main_id', None)
+    new_name = str(main_id) if main_id else obj.name
+    
+    # Extract identifiers
+    aliases_field = None
+    try:
+        aliases_field = simbad_table_row['IDS']
+    except Exception:
+        try:
+            aliases_field = simbad_table_row['ids']
+        except Exception:
+            aliases_field = None
+    
+    aliases = []
+    if aliases_field is not None:
+        aliases = str(aliases_field).split('|')
+    
+    # Create SIMBAD href
+    sanitized_name = new_name.replace(" ", "").replace('+', "%2B")
+    simbad_href = f"https://simbad.u-strasbg.fr/simbad/sim-id?Ident={sanitized_name}"
+    
+    # Check override flags and update fields
+    update_fields = []
+    
+    # Update object_type
+    if should_allow_auto_update(obj, 'object_type'):
+        if obj.object_type != detected_type:
+            obj.object_type = detected_type
+            update_fields.append('object_type')
+            result['updated_fields'].append('object_type')
+            result['new_object_type'] = detected_type
+    
+    # Update coordinates
+    if should_allow_auto_update(obj, 'ra'):
+        if abs(obj.ra - simbad_ra) > 0.0001:  # Small tolerance for float comparison
+            obj.ra = simbad_ra
+            update_fields.append('ra')
+            result['updated_fields'].append('ra')
+    
+    if should_allow_auto_update(obj, 'dec'):
+        if abs(obj.dec - simbad_dec) > 0.0001:
+            obj.dec = simbad_dec
+            update_fields.append('dec')
+            result['updated_fields'].append('dec')
+    
+    # Update name
+    if should_allow_auto_update(obj, 'name'):
+        if obj.name != new_name:
+            obj.name = new_name
+            update_fields.append('name')
+            result['updated_fields'].append('name')
+            result['new_name'] = new_name
+    
+    # Update simbad_resolved flag
+    if should_allow_auto_update(obj, 'simbad_resolved'):
+        if not obj.simbad_resolved:
+            obj.simbad_resolved = True
+            update_fields.append('simbad_resolved')
+            result['updated_fields'].append('simbad_resolved')
+    
+    # Save object if there are updates
+    if update_fields and not dry_run:
+        obj.save(update_fields=update_fields)
+    
+    # Replace identifiers (delete old, create new)
+    if not dry_run:
+        # Delete all existing identifiers
+        deleted_count = obj.identifier_set.all().delete()[0]
+        
+        # Create new identifiers from SIMBAD
+        identifiers_created = 0
+        for alias in aliases:
+            if alias and alias.strip():
+                obj.identifier_set.create(
+                    name=alias.strip(),
+                    href=simbad_href,
+                )
+                identifiers_created += 1
+        
+        result['identifiers_created'] = identifiers_created
+        result['identifiers_deleted'] = deleted_count
+    else:
+        # In dry-run, just count what would be created
+        result['identifiers_created'] = len([a for a in aliases if a and a.strip()])
+        result['identifiers_deleted'] = obj.identifier_set.count()
+    
+    return result
 
 
 def add_new_observation_run(data_path, print_to_terminal=False,
@@ -519,7 +770,7 @@ def evaluate_data_file(data_file, observation_run, print_to_terminal=False):
 
             #   Search Simbad based on coordinates
             if not object_simbad_resolved:
-                result_table = _query_region_safe(data_file.ra, data_file.dec, '0d5m0s')
+                result_table = _query_region_safe(data_file.ra, data_file.dec, '0d5m0s', row_limit=10)
 
                 if (result_table is not None and
                         len(result_table) > 0):
@@ -563,14 +814,11 @@ def evaluate_data_file(data_file, observation_run, print_to_terminal=False):
                 # print(types_str)
 
                 #   Decode information in object string to get a rough object estimate
-                if 'Cl*' in types_str or 'As*' in types_str or 'OpC' in types_str:
-                    object_type = 'SC'
-                elif 'ISM' in types_str or 'PN' in types_str or 'SNR' in types_str or 'HII' in types_str:
-                    object_type = 'NE'
-                elif '|G|' in types_str or 'Sy2' in types_str or 'LIN' in types_str:
-                    object_type = 'GA'
-                elif '*' in types_str:
-                    object_type = 'ST'
+                object_type = detect_object_type_from_simbad_types(types_str)
+                if object_type is None:
+                    # Fallback: if no specific type detected, check for star
+                    if '*' in types_str:
+                        object_type = 'ST'
 
                 #   Set default name
                 main_id = object_data_table['main_id']

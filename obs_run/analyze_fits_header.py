@@ -1,8 +1,11 @@
 import numpy as np
+import logging
 
 from astropy.time import Time
 from astropy.coordinates.angles import Angle
 from obs_run.utils import should_allow_auto_update
+
+logger = logging.getLogger(__name__)
 
 
 ############################################################################
@@ -279,21 +282,46 @@ def analyze_fits(datafile):
     datafile.binning_x = header_data.get('binning_x', 1)
     datafile.binning_y = header_data.get('binning_y', 1)
 
-    #   Calculate chip size in mm
-    if datafile.pixel_size in [0, -1] and datafile.focal_length in [0, -1]:
-        pixel_size_mm = datafile.pixel_size / 1000
-        d = datafile.naxis1 * pixel_size_mm
-        h = datafile.naxis2 * pixel_size_mm
+    #   Calculate field of view if pixel_size and focal_length are available
+    if (datafile.pixel_size not in [0, -1] and datafile.focal_length not in [0, -1] and
+            datafile.naxis1 > 0 and datafile.naxis2 > 0):
+        try:
+            pixel_size_mm = datafile.pixel_size / 1000.0
+            d = datafile.naxis1 * pixel_size_mm
+            h = datafile.naxis2 * pixel_size_mm
 
-        #   Calculate field of view
-        double_focal_len = 2 * datafile.focal_length
-        fov_x = 2 * np.arctan(d / double_focal_len)
-        fov_y = 2 * np.arctan(h / double_focal_len)
+            #   Calculate field of view
+            double_focal_len = 2.0 * datafile.focal_length
+            if double_focal_len > 0:
+                fov_x = 2.0 * np.arctan(d / double_focal_len)
+                fov_y = 2.0 * np.arctan(h / double_focal_len)
 
-        #   Convert to degree
-        two_pi = 2. * np.pi
-        datafile.fov_x = fov_x * 360. / two_pi
-        datafile.fov_y = fov_y * 360. / two_pi
+                #   Convert to degree
+                two_pi = 2.0 * np.pi
+                fov_x_deg = fov_x * 360.0 / two_pi
+                fov_y_deg = fov_y * 360.0 / two_pi
+                
+                # Validate FOV values (reasonable range: 0.001 to 180 degrees)
+                if 0.001 <= fov_x_deg <= 180.0 and 0.001 <= fov_y_deg <= 180.0:
+                    datafile.fov_x = fov_x_deg
+                    datafile.fov_y = fov_y_deg
+                else:
+                    # Invalid FOV values, set to -1
+                    logger.warning(
+                        f'Invalid FOV calculated for DataFile {datafile.pk}: '
+                        f'fov_x={fov_x_deg:.6f}, fov_y={fov_y_deg:.6f}'
+                    )
+                    if datafile.fov_x == -1:
+                        datafile.fov_x = -1
+                    if datafile.fov_y == -1:
+                        datafile.fov_y = -1
+        except Exception as e:
+            logger.warning(f'Error calculating FOV for DataFile {datafile.pk}: {e}')
+            # Don't overwrite existing FOV if calculation fails
+            if datafile.fov_x == -1:
+                datafile.fov_x = -1
+            if datafile.fov_y == -1:
+                datafile.fov_y = -1
 
     #   Image type definitions
     img_types = {
