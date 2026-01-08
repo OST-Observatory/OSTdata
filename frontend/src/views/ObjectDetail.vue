@@ -18,14 +18,24 @@
         <v-card class="uniform-height">
           <v-card-title class="d-flex justify-space-between align-center">
             Basic Data
-            <v-btn
-              v-if="isAuthenticated"
-              icon="mdi-pencil"
-              size="small"
-              variant="text"
-              aria-label="Edit basic data"
-              @click="openBasicDialog"
-            ></v-btn>
+            <div class="d-flex align-center" style="gap: 8px">
+              <v-btn
+                v-if="isAdmin"
+                icon="mdi-pencil-box"
+                size="small"
+                variant="text"
+                aria-label="Edit object (admin)"
+                @click="openObjectEdit"
+              ></v-btn>
+              <v-btn
+                v-if="isAuthenticated"
+                icon="mdi-pencil"
+                size="small"
+                variant="text"
+                aria-label="Edit basic data"
+                @click="openBasicDialog"
+              ></v-btn>
+            </div>
           </v-card-title>
           <v-card-text>
             <v-row>
@@ -88,8 +98,13 @@
                     <v-list-item-subtitle>{{ totalExposureTime }}s</v-list-item-subtitle>
                   </v-list-item>
                   <v-list-item>
-                    <v-list-item-title>Internal Identifiers:</v-list-item-title>
-                    <v-list-item-subtitle>{{ internalIdentifiers }}</v-list-item-subtitle>
+                    <v-list-item-title>Public:</v-list-item-title>
+                    <v-list-item-subtitle>
+                      <v-icon :color="object?.is_public ? 'success' : 'error'" size="small">
+                        {{ object?.is_public ? 'mdi-check-circle' : 'mdi-close-circle' }}
+                      </v-icon>
+                      {{ object?.is_public ? 'Yes' : 'No' }}
+                    </v-list-item-subtitle>
                   </v-list-item>
                 </v-list>
               </v-col>
@@ -396,6 +411,89 @@
         </v-card>
       </v-col>
     </v-row>
+
+    <!-- Edit Object Dialog (Admin) -->
+    <v-dialog v-model="objectEditDialog" max-width="640" aria-labelledby="edit-object-title">
+      <v-card>
+        <v-card-title id="edit-object-title">Edit Object (Admin)</v-card-title>
+        <v-card-text>
+          <v-row dense class="mb-2">
+            <v-col cols="12" sm="6">
+              <v-text-field v-model="objectEditForm.name" label="Name" variant="outlined" density="comfortable" hide-details />
+            </v-col>
+            <v-col cols="12" sm="6">
+              <v-switch v-model="objectEditForm.is_public" inset hide-details color="primary" :label="`Public`" />
+            </v-col>
+          </v-row>
+          <v-row dense class="mb-2">
+            <v-col cols="12" sm="6">
+              <v-text-field
+                v-model.number="objectEditForm.ra"
+                label="Right Ascension (degrees)"
+                type="number"
+                variant="outlined"
+                density="comfortable"
+                hide-details
+                step="0.000001"
+              />
+            </v-col>
+            <v-col cols="12" sm="6">
+              <v-text-field
+                v-model.number="objectEditForm.dec"
+                label="Declination (degrees)"
+                type="number"
+                variant="outlined"
+                density="comfortable"
+                hide-details
+                step="0.000001"
+              />
+            </v-col>
+          </v-row>
+          <v-row dense class="mb-2">
+            <v-col cols="12" sm="6">
+              <v-text-field
+                v-model="objectEditForm.raHms"
+                label="Right Ascension (HMS, e.g. 23:13:43.9)"
+                variant="outlined"
+                density="comfortable"
+                hide-details
+                placeholder="HH:MM:SS.S"
+                @blur="convertRaHmsToDeg"
+              />
+            </v-col>
+            <v-col cols="12" sm="6">
+              <v-text-field
+                v-model="objectEditForm.decDms"
+                label="Declination (DMS, e.g. +61:26:58.0)"
+                variant="outlined"
+                density="comfortable"
+                hide-details
+                placeholder="±DD:MM:SS.S"
+                @blur="convertDecDmsToDeg"
+              />
+            </v-col>
+          </v-row>
+          <v-row dense class="mt-2">
+            <v-col cols="12" sm="6">
+              <v-text-field
+                v-model.number="objectEditForm.first_hjd"
+                label="First HJD (Heliocentric Julian Date)"
+                type="number"
+                variant="outlined"
+                density="comfortable"
+                hide-details
+                step="0.0001"
+              />
+            </v-col>
+          </v-row>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" @click="objectEditDialog = false">Cancel</v-btn>
+          <v-btn color="primary" variant="flat" :loading="objectEditSaving" @click="saveObjectEdit">Save</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
 
     <!-- Edit Basic Data Dialog -->
     <v-dialog v-model="basicDialog" max-width="520" @keydown.esc.prevent="closeBasicDialog" aria-labelledby="edit-basic-title">
@@ -957,6 +1055,19 @@ const editObjectType = ref(null)
 const editSpectroscopy = ref(false)
 const editPhotometry = ref(false)
 
+// Admin object edit
+const objectEditDialog = ref(false)
+const objectEditSaving = ref(false)
+const objectEditForm = ref({
+  name: '',
+  is_public: true,
+  ra: 0,
+  dec: 0,
+  first_hjd: 0,
+  raHms: '',
+  decDms: '',
+})
+
 // Computed properties
 const isAuthenticated = computed(() => authStore.isAuthenticated)
 const totalExposureTime = computed(() => {
@@ -1005,6 +1116,110 @@ const objectTypeOptions = [
   { title: 'Other', value: 'OT' },
   { title: 'Unknown', value: 'UK' },
 ]
+
+// Convert HMS to degrees for RA
+const hmsToDeg = (hms) => {
+  if (!hms || typeof hms !== 'string') return null
+  const m = hms.trim().match(/^(\d{1,2}):(\d{1,2}):(\d{1,2}(?:\.\d+)?)$/)
+  if (!m) return null
+  const h = Number(m[1])
+  const mi = Number(m[2])
+  const s = Number(m[3])
+  if (!Number.isFinite(h) || !Number.isFinite(mi) || !Number.isFinite(s)) return null
+  if (h >= 24 || mi >= 60 || s >= 60) return null
+  return (h + mi / 60 + s / 3600) * 15
+}
+
+// Convert DMS to degrees for Dec
+const dmsToDeg = (dms) => {
+  if (!dms || typeof dms !== 'string') return null
+  const m = dms.trim().match(/^([+\-]?)(\d{1,2}):(\d{1,2}):(\d{1,2}(?:\.\d+)?)$/)
+  if (!m) return null
+  const sign = m[1] === '-' ? -1 : 1
+  const d = Number(m[2])
+  const mi = Number(m[3])
+  const s = Number(m[4])
+  if (!Number.isFinite(d) || !Number.isFinite(mi) || !Number.isFinite(s)) return null
+  if (d > 90 || mi >= 60 || s >= 60) return null
+  return sign * (d + mi / 60 + s / 3600)
+}
+
+// Convert degrees to HMS for RA
+const degToHms = (deg) => {
+  if (deg === null || deg === undefined || deg === -1) return ''
+  const hours = Math.floor(deg / 15)
+  const minutes = Math.floor((deg % 15) * 4)
+  const seconds = ((deg % 15) * 4 - minutes) * 60
+  return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toFixed(1)}`
+}
+
+// Convert degrees to DMS for Dec
+const degToDms = (deg) => {
+  if (deg === null || deg === undefined || deg === -1) return ''
+  const sign = deg >= 0 ? '+' : '-'
+  const absDec = Math.abs(deg)
+  const degrees = Math.floor(absDec)
+  const minutes = Math.floor((absDec - degrees) * 60)
+  const seconds = ((absDec - degrees) * 60 - minutes) * 60
+  return `${sign}${degrees.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toFixed(1)}`
+}
+
+const convertRaHmsToDeg = () => {
+  if (objectEditForm.value.raHms) {
+    const deg = hmsToDeg(objectEditForm.value.raHms)
+    if (deg !== null) {
+      objectEditForm.value.ra = deg
+    }
+  }
+}
+
+const convertDecDmsToDeg = () => {
+  if (objectEditForm.value.decDms) {
+    const deg = dmsToDeg(objectEditForm.value.decDms)
+    if (deg !== null) {
+      objectEditForm.value.dec = deg
+    }
+  }
+}
+
+const openObjectEdit = () => {
+  if (!object.value) return
+  const ra = object.value.ra ?? 0
+  const dec = object.value.dec ?? 0
+  objectEditForm.value = {
+    name: object.value.name || '',
+    is_public: object.value.is_public ?? true,
+    ra: ra,
+    dec: dec,
+    first_hjd: object.value.first_hjd ?? 0,
+    raHms: degToHms(ra),
+    decDms: degToDms(dec),
+  }
+  objectEditDialog.value = true
+}
+
+const saveObjectEdit = async () => {
+  if (!object.value) return
+  try {
+    objectEditSaving.value = true
+    const payload = {
+      name: objectEditForm.value.name,
+      is_public: !!objectEditForm.value.is_public,
+      ra: objectEditForm.value.ra,
+      dec: objectEditForm.value.dec,
+      first_hjd: objectEditForm.value.first_hjd,
+    }
+    await api.updateObject(object.value.pk || object.value.id, payload)
+    await loadObject() // Reload to get updated data
+    objectEditDialog.value = false
+    try { notify.success('Object updated') } catch {}
+  } catch (e) {
+    console.error('Error saving object edit', e)
+    try { notify.error('Failed to update object') } catch {}
+  } finally {
+    objectEditSaving.value = false
+  }
+}
 
 const openBasicDialog = () => {
   editObjectType.value = object.value?.object_type || null

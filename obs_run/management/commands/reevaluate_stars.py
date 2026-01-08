@@ -149,7 +149,7 @@ class Command(BaseCommand):
                     obj.ra,
                     obj.dec,
                     radius_str,
-                    row_limit=50  # Increased limit for extended search
+                    row_limit=1000  # Increased limit for extended search
                 )
                 
                 if result_table is None or len(result_table) == 0:
