@@ -199,15 +199,19 @@ def get_object_fov_radius(obj, fallback_arcmin=10.0, min_arcmin=1.0, max_arcmin=
     str
         Radius string for SIMBAD query (e.g., "5d0m0s" for 5 arcmin)
     """
-    # Get associated DataFiles with valid FOV, prefer Light frames
+    # Get associated DataFiles with valid FOV
+    # Filter for FOV > 0 (not -1, not 0)
     datafiles = obj.datafiles.filter(
         fov_x__gt=0,
         fov_y__gt=0
-    ).order_by('-exposure_type')  # 'LI' comes before others alphabetically
+    )
     
-    # If no Light frames, try any with valid FOV
-    if not datafiles.exists():
-        datafiles = obj.datafiles.filter(fov_x__gt=0, fov_y__gt=0)
+    # Prefer Light frames (exposure_type='LI')
+    light_frames = datafiles.filter(exposure_type='LI')
+    
+    if light_frames.exists():
+        datafiles = light_frames
+    # Otherwise use any DataFile with valid FOV
     
     if not datafiles.exists():
         # Use fallback

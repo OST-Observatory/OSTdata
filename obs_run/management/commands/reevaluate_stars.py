@@ -51,6 +51,11 @@ class Command(BaseCommand):
             default=30.0,
             help='Maximum search radius in arcmin (default: 30.0)',
         )
+        parser.add_argument(
+            '--show-all-matches',
+            action='store_true',
+            help='Show all found SIMBAD objects, not just the best match',
+        )
 
     def handle(self, *args, **options):
         name_filter = options.get('name_filter')
@@ -59,6 +64,7 @@ class Command(BaseCommand):
         radius_fallback = options['radius_fallback']
         min_radius = options['min_radius']
         max_radius = options['max_radius']
+        show_all_matches = options.get('show_all_matches', False)
         
         if dry_run:
             self.stdout.write(self.style.WARNING('DRY RUN MODE - No changes will be saved'))
@@ -104,6 +110,20 @@ class Command(BaseCommand):
                     continue
                 
                 # Calculate FOV radius
+                # Debug: Check FOV availability
+                datafiles_with_fov = obj.datafiles.filter(fov_x__gt=0, fov_y__gt=0)
+                fov_count = datafiles_with_fov.count()
+                if fov_count > 0:
+                    sample_df = datafiles_with_fov.first()
+                    self.stdout.write(
+                        f'  Found {fov_count} DataFile(s) with FOV '
+                        f'(sample: fov_x={sample_df.fov_x:.6f}°, fov_y={sample_df.fov_y:.6f}°)'
+                    )
+                else:
+                    self.stdout.write(
+                        f'  No DataFiles with valid FOV found (total DataFiles: {obj.datafiles.count()})'
+                    )
+                
                 radius_str = get_object_fov_radius(
                     obj,
                     fallback_arcmin=radius_fallback,
@@ -136,10 +156,21 @@ class Command(BaseCommand):
                     detected_type = detect_object_type_from_simbad_types(types_str)
                     
                     if detected_type in priority_types:
-                        # Calculate distance (simple angular distance)
+                        # Extract magnitude (V-band) if available
+                        magnitude = None
+                        try:
+                            v_mag = row.get('V', None)
+                            if v_mag is not None and str(v_mag) != '--' and str(v_mag) != '':
+                                try:
+                                    magnitude = float(v_mag)
+                                except (ValueError, TypeError):
+                                    magnitude = None
+                        except Exception:
+                            magnitude = None
+                        
+                        # Calculate distance (simple angular distance) for reference
                         simbad_ra = float(row['ra'])
                         simbad_dec = float(row['dec'])
-                        # Simple angular distance approximation (good for small angles)
                         ra_diff = (simbad_ra - obj.ra) * math.cos(math.radians(obj.dec))
                         dec_diff = simbad_dec - obj.dec
                         distance_deg = math.sqrt(ra_diff**2 + dec_diff**2)
@@ -148,6 +179,7 @@ class Command(BaseCommand):
                             'row': row,
                             'type': detected_type,
                             'distance_deg': distance_deg,
+                            'magnitude': magnitude,
                             'name': str(row.get('main_id', 'Unknown')),
                         })
                 
@@ -156,17 +188,36 @@ class Command(BaseCommand):
                     stats['no_match'] += 1
                     continue
                 
-                # Sort by priority (NE > SC > GA) and then by distance
+                # Sort by priority (NE > SC > GA) and then by magnitude (brighter = better)
+                # If magnitude not available, use distance as fallback
                 priority_order = {t: i for i, t in enumerate(priority_types)}
-                candidates.sort(key=lambda x: (
-                    priority_order.get(x['type'], 999),  # Lower priority number = higher priority
-                    x['distance_deg']  # Then by distance
-                ))
+                
+                def sort_key(x):
+                    priority = priority_order.get(x['type'], 999)
+                    # Use magnitude if available (lower = brighter = better)
+                    # If no magnitude, use a large number so objects with magnitude come first
+                    mag_value = x['magnitude'] if x['magnitude'] is not None else 999.0
+                    return (priority, mag_value)
+                
+                candidates.sort(key=sort_key)
+                
+                # Show all matches if requested
+                if show_all_matches:
+                    self.stdout.write(f'  Found {len(candidates)} candidate(s):')
+                    for idx, cand in enumerate(candidates, 1):
+                        mag_str = f'mag={cand["magnitude"]:.2f}' if cand['magnitude'] is not None else 'mag=N/A'
+                        self.stdout.write(
+                            f'    {idx}. {cand["name"]} '
+                            f'(type={cand["type"]}, {mag_str}, '
+                            f'distance={cand["distance_deg"]:.6f} deg)'
+                        )
                 
                 best_match = candidates[0]
+                mag_str = f'mag={best_match["magnitude"]:.2f}' if best_match['magnitude'] is not None else 'mag=N/A'
                 self.stdout.write(
                     f'  Best match: {best_match["name"]} '
-                    f'(type={best_match["type"]}, distance={best_match["distance_deg"]:.6f} deg)'
+                    f'(type={best_match["type"]}, {mag_str}, '
+                    f'distance={best_match["distance_deg"]:.6f} deg)'
                 )
                 
                 # Update object
