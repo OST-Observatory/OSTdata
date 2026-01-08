@@ -111,18 +111,29 @@ class Command(BaseCommand):
                 
                 # Calculate FOV radius
                 # Debug: Check FOV availability
+                total_datafiles = obj.datafiles.count()
                 datafiles_with_fov = obj.datafiles.filter(fov_x__gt=0, fov_y__gt=0)
                 fov_count = datafiles_with_fov.count()
+                
                 if fov_count > 0:
                     sample_df = datafiles_with_fov.first()
                     self.stdout.write(
-                        f'  Found {fov_count} DataFile(s) with FOV '
+                        f'  Found {fov_count}/{total_datafiles} DataFile(s) with FOV '
                         f'(sample: fov_x={sample_df.fov_x:.6f}°, fov_y={sample_df.fov_y:.6f}°)'
                     )
                 else:
                     self.stdout.write(
-                        f'  No DataFiles with valid FOV found (total DataFiles: {obj.datafiles.count()})'
+                        f'  No DataFiles with valid FOV found (total DataFiles: {total_datafiles})'
                     )
+                    # Show sample of FOV values for debugging
+                    if total_datafiles > 0:
+                        sample_dfs = obj.datafiles.all()[:5]  # Show first 5
+                        fov_samples = []
+                        for df in sample_dfs:
+                            fov_samples.append(f'fov_x={df.fov_x}, fov_y={df.fov_y}')
+                        self.stdout.write(
+                            f'  Sample FOV values: {"; ".join(fov_samples)}'
+                        )
                 
                 radius_str = get_object_fov_radius(
                     obj,
@@ -149,6 +160,7 @@ class Command(BaseCommand):
                 self.stdout.write(f'  Found {len(result_table)} SIMBAD object(s)')
                 
                 # Filter results for SC, NE, GA types and apply priority
+                # Only consider objects with NGC, Messier (M), or ACO identifiers
                 candidates = []
                 for row in result_table:
                     raw_types = row.get('alltypes.otypes', None)
@@ -156,6 +168,49 @@ class Command(BaseCommand):
                     detected_type = detect_object_type_from_simbad_types(types_str)
                     
                     if detected_type in priority_types:
+                        # Check for NGC, Messier (M), or ACO identifiers
+                        main_id = str(row.get('main_id', '')).upper()
+                        
+                        # Get all identifiers from IDS field
+                        ids_field = None
+                        try:
+                            ids_field = row.get('IDS', None)
+                        except Exception:
+                            try:
+                                ids_field = row.get('ids', None)
+                            except Exception:
+                                ids_field = None
+                        
+                        all_ids = []
+                        if ids_field is not None:
+                            all_ids = [str(id_str).strip().upper() for id_str in str(ids_field).split('|')]
+                        if main_id:
+                            all_ids.append(main_id)
+                        
+                        # Check if any identifier contains NGC, M, or ACO
+                        has_valid_identifier = False
+                        identifier_match = None
+                        for id_str in all_ids:
+                            # Check for NGC (e.g., "NGC 1234", "NGC1234")
+                            if id_str.startswith('NGC') or ' NGC ' in id_str:
+                                has_valid_identifier = True
+                                identifier_match = id_str
+                                break
+                            # Check for Messier (e.g., "M 42", "M42", "Messier 42")
+                            if (id_str.startswith('M ') or id_str.startswith('M') and len(id_str) > 1 and id_str[1].isdigit()) or \
+                               id_str.startswith('MESSIER'):
+                                has_valid_identifier = True
+                                identifier_match = id_str
+                                break
+                            # Check for ACO (e.g., "ACO 1234", "ACO1234")
+                            if id_str.startswith('ACO') or ' ACO ' in id_str:
+                                has_valid_identifier = True
+                                identifier_match = id_str
+                                break
+                        
+                        if not has_valid_identifier:
+                            continue  # Skip objects without NGC/M/ACO identifiers
+                        
                         # Extract magnitude (V-band) if available
                         magnitude = None
                         try:
@@ -181,10 +236,15 @@ class Command(BaseCommand):
                             'distance_deg': distance_deg,
                             'magnitude': magnitude,
                             'name': str(row.get('main_id', 'Unknown')),
+                            'identifier': identifier_match,
                         })
                 
                 if not candidates:
-                    self.stdout.write(self.style.WARNING('  No SC/NE/GA objects found in results'))
+                    self.stdout.write(
+                        self.style.WARNING(
+                            '  No SC/NE/GA objects with NGC/M/ACO identifiers found in results'
+                        )
+                    )
                     stats['no_match'] += 1
                     continue
                 
@@ -203,13 +263,13 @@ class Command(BaseCommand):
                 
                 # Show all matches if requested
                 if show_all_matches:
-                    self.stdout.write(f'  Found {len(candidates)} candidate(s):')
+                    self.stdout.write(f'  Found {len(candidates)} candidate(s) with NGC/M/ACO identifiers:')
                     for idx, cand in enumerate(candidates, 1):
                         mag_str = f'mag={cand["magnitude"]:.2f}' if cand['magnitude'] is not None else 'mag=N/A'
                         self.stdout.write(
                             f'    {idx}. {cand["name"]} '
-                            f'(type={cand["type"]}, {mag_str}, '
-                            f'distance={cand["distance_deg"]:.6f} deg)'
+                            f'(type={cand["type"]}, identifier={cand.get("identifier", "N/A")}, '
+                            f'{mag_str}, distance={cand["distance_deg"]:.6f} deg)'
                         )
                 
                 best_match = candidates[0]
