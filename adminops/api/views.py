@@ -764,7 +764,7 @@ def admin_update_object_identifiers(request, object_id):
                     for alias in new_identifiers:
                         try:
                             Identifier.objects.create(
-                                object=obj,
+                                obj=obj,
                                 name=alias,
                                 href=simbad_href,
                                 info_from_header=False,
