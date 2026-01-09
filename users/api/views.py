@@ -302,25 +302,69 @@ def admin_ldap_test(request):
                     'last_name': result['attrs'].get('sn') or '',
                     'email': result['attrs'].get('mail') or '',
                 }
-                # Group membership based on configured group DNs; prefer memberOf
+                # Group membership based on configured group DNs; prefer memberOf, fallback to memberUid
                 member_of = []
                 try:
                     member_of = [ (x.decode('utf-8') if isinstance(x, (bytes, bytearray)) else str(x)) for x in (vals.get('memberOf', []) or []) ]
                 except Exception:
                     member_of = []
+                
+                # Get user UID for memberUid checks
+                user_uid = result['attrs'].get('uid', '')
+                
+                def _check_group_via_memberuid(group_dn, uid):
+                    """Helper function to check group membership via memberUid"""
+                    if not group_dn or not uid:
+                        return False
+                    try:
+                        attrs = ['memberUid']
+                        group_result = conn.search_s(group_dn, ldap.SCOPE_BASE, '(objectClass=*)', attrs)
+                        if group_result:
+                            _, group_vals = group_result[0]
+                            member_uids = group_vals.get('memberUid', [])
+                            if member_uids:
+                                member_uids_str = []
+                                for muid in member_uids:
+                                    try:
+                                        muid_str = muid.decode('utf-8') if isinstance(muid, (bytes, bytearray)) else str(muid)
+                                        member_uids_str.append(muid_str)
+                                    except Exception:
+                                        member_uids_str.append(str(muid))
+                                return uid in member_uids_str
+                    except Exception:
+                        pass
+                    return False
+                
                 grp = {}
                 staff_dn = getattr(settings, 'AUTH_LDAP_IS_STAFF_MEMBER', None) or os.environ.get('LDAP_GROUP_STAFF_DN')
                 superuser_dn = getattr(settings, 'AUTH_LDAP_IS_SUPERUSER_MEMBER', None) or os.environ.get('LDAP_GROUP_SUPERUSER_DN')
                 supervisor_dn = getattr(settings, 'AUTH_LDAP_IS_SUPERVISOR_MEMBER', None) or os.environ.get('LDAP_GROUP_SUPERVISOR_DN')
                 student_dn = getattr(settings, 'AUTH_LDAP_IS_STUDENT_MEMBER', None) or os.environ.get('LDAP_GROUP_STUDENT_DN')
+                
                 if staff_dn:
+                    # First check memberOf
                     grp['staff'] = any(staff_dn.lower() == mo.lower() for mo in member_of)
+                    # If not found, try memberUid
+                    if not grp['staff'] and user_uid:
+                        grp['staff'] = _check_group_via_memberuid(staff_dn, user_uid)
                 if superuser_dn:
+                    # First check memberOf
                     grp['superuser'] = any(superuser_dn.lower() == mo.lower() for mo in member_of)
+                    # If not found, try memberUid
+                    if not grp['superuser'] and user_uid:
+                        grp['superuser'] = _check_group_via_memberuid(superuser_dn, user_uid)
                 if supervisor_dn:
+                    # First check memberOf
                     grp['supervisor'] = any(supervisor_dn.lower() == mo.lower() for mo in member_of)
+                    # If not found, try memberUid
+                    if not grp['supervisor'] and user_uid:
+                        grp['supervisor'] = _check_group_via_memberuid(supervisor_dn, user_uid)
                 if student_dn:
+                    # First check memberOf
                     grp['student'] = any(student_dn.lower() == mo.lower() for mo in member_of)
+                    # If not found, try memberUid
+                    if not grp['student'] and user_uid:
+                        grp['student'] = _check_group_via_memberuid(student_dn, user_uid)
                 result['groups'] = grp
         except Exception as e:
             result['errors']['search'] = str(e)
