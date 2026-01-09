@@ -204,7 +204,7 @@ LDAP_GROUP_STUDENT_DN = env.str('LDAP_GROUP_STUDENT_DN', default='')
 try:
     if AUTH_LDAP_SERVER_URI:
         import ldap  # type: ignore
-        from django_auth_ldap.config import LDAPSearch
+        from django_auth_ldap.config import LDAPSearch, GroupOfNamesType
         AUTHENTICATION_BACKENDS = (
             'django_auth_ldap.backend.LDAPBackend',
             'django.contrib.auth.backends.ModelBackend',
@@ -227,6 +227,19 @@ try:
             'last_name': 'sn',
             'email': 'mail',
         }
+        # Configure group type (required when using AUTH_LDAP_USER_FLAGS_BY_GROUP)
+        # GroupOfNamesType works with memberOf attribute (standard LDAP/Active Directory)
+        # Our custom memberUid support is handled separately in the populate_user hook
+        AUTH_LDAP_GROUP_TYPE = GroupOfNamesType()
+        
+        # Configure group search if GROUP_SEARCH_BASE is set
+        if AUTH_LDAP_GROUP_SEARCH_BASE:
+            AUTH_LDAP_GROUP_SEARCH = LDAPSearch(
+                AUTH_LDAP_GROUP_SEARCH_BASE,
+                ldap.SCOPE_SUBTREE,
+                '(objectClass=groupOfNames)',
+            )
+        
         AUTH_LDAP_USER_FLAGS_BY_GROUP = {}
         if LDAP_GROUP_STAFF_DN:
             AUTH_LDAP_USER_FLAGS_BY_GROUP['is_staff'] = LDAP_GROUP_STAFF_DN
@@ -259,19 +272,20 @@ try:
                 try:
                     if conn is None:
                         import ldap as ldap_module
-                        server_uri = getattr(settings, 'AUTH_LDAP_SERVER_URI', None) or os.environ.get('LDAP_SERVER_URI')
+                        from django.conf import settings as django_settings
+                        server_uri = getattr(django_settings, 'AUTH_LDAP_SERVER_URI', None) or os.environ.get('LDAP_SERVER_URI')
                         if not server_uri:
                             return False
                         conn = ldap_module.initialize(server_uri)
                         conn.set_option(ldap_module.OPT_REFERRALS, 0)
-                        start_tls = bool(getattr(settings, 'AUTH_LDAP_START_TLS', False) or str(os.environ.get('LDAP_START_TLS', 'false')).lower() in ('1', 'true', 'yes'))
+                        start_tls = bool(getattr(django_settings, 'AUTH_LDAP_START_TLS', False) or str(os.environ.get('LDAP_START_TLS', 'false')).lower() in ('1', 'true', 'yes'))
                         if start_tls:
                             try:
                                 conn.start_tls_s()
                             except Exception:
                                 pass
-                        bind_dn = getattr(settings, 'AUTH_LDAP_BIND_DN', None) or os.environ.get('LDAP_BIND_DN') or ''
-                        bind_pw = getattr(settings, 'AUTH_LDAP_BIND_PASSWORD', None) or os.environ.get('LDAP_BIND_PASSWORD') or ''
+                        bind_dn = getattr(django_settings, 'AUTH_LDAP_BIND_DN', None) or os.environ.get('LDAP_BIND_DN') or ''
+                        bind_pw = getattr(django_settings, 'AUTH_LDAP_BIND_PASSWORD', None) or os.environ.get('LDAP_BIND_PASSWORD') or ''
                         try:
                             if bind_dn:
                                 conn.simple_bind_s(bind_dn, bind_pw or '')
