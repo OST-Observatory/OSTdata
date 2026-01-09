@@ -865,6 +865,97 @@ Notes:
 - In eager mode, job creation returns immediately and the resulting ZIP can usually be downloaded right away.
 - The ZIP is generated on the server’s filesystem; ensure adequate disk space and permissions.
 
+# LDAP Authentication
+
+OSTdata supports LDAP authentication for user login and group membership. The system supports both `memberOf` (standard LDAP/Active Directory) and `memberUid` (Posix groups) attributes for group membership determination.
+
+## Configuration
+
+Add the following environment variables to your `.env` file:
+
+```bash
+# LDAP Server Configuration
+LDAP_SERVER_URI=ldap://your-ldap-server:389
+# For LDAPS (secure LDAP), use: ldaps://your-ldap-server:636
+LDAP_START_TLS=false  # Set to true if using STARTTLS
+LDAP_BIND_DN=cn=binduser,dc=example,dc=com  # Optional: DN for bind user
+LDAP_BIND_PASSWORD=your_bind_password  # Optional: Password for bind user
+LDAP_CONNECT_TIMEOUT=5  # Connection timeout in seconds
+
+# User Search Configuration
+LDAP_USER_SEARCH_BASE=ou=users,dc=example,dc=com
+LDAP_USER_FILTER=(uid=%(user)s)  # Default filter, adjust as needed
+
+# Group Search Configuration (optional, for group-based searches)
+LDAP_GROUP_SEARCH_BASE=ou=groups,dc=example,dc=com
+
+# Group DNs for Role Assignment
+# These groups determine user roles (staff, superuser, supervisor, student)
+LDAP_GROUP_STAFF_DN=cn=staff,ou=groups,dc=example,dc=com
+LDAP_GROUP_SUPERUSER_DN=cn=admins,ou=groups,dc=example,dc=com
+LDAP_GROUP_SUPERVISOR_DN=cn=supervisors,ou=groups,dc=example,dc=com
+LDAP_GROUP_STUDENT_DN=cn=students,ou=groups,dc=example,dc=com
+```
+
+## How It Works
+
+1. **Authentication**: When a user logs in, Django attempts to authenticate against LDAP using the configured server and user search settings.
+
+2. **Group Membership**: The system checks group membership in two ways:
+   - **Primary method**: Uses `memberOf` attribute (standard LDAP/Active Directory)
+   - **Fallback method**: If `memberOf` doesn't match, checks `memberUid` attribute (Posix groups)
+
+3. **Role Assignment**: Based on group membership, users are assigned roles:
+   - `is_staff`: Set if user is member of `LDAP_GROUP_STAFF_DN`
+   - `is_superuser`: Set if user is member of `LDAP_GROUP_SUPERUSER_DN`
+   - `is_supervisor`: Set if user is member of `LDAP_GROUP_SUPERVISOR_DN` (custom field)
+   - `is_student`: Set if user is member of `LDAP_GROUP_STUDENT_DN` (custom field)
+
+4. **User Attributes**: The following LDAP attributes are mapped to Django user fields:
+   - `givenName` → `first_name`
+   - `sn` → `last_name`
+   - `mail` → `email`
+   - `uid` → `username` (used for login)
+
+## Testing LDAP Configuration
+
+1. **Health Check**: Navigate to `/admin/health` in the admin interface. The LDAP section shows:
+   - `configured`: Whether LDAP is configured (server URI is set)
+   - `can_import`: Whether the Python `ldap` module is available
+   - `bind_ok`: Whether the LDAP bind operation succeeds
+
+2. **LDAP Test Tool**: Use the admin LDAP test tool at `/admin/users`:
+   - Enter a username to test user search
+   - The tool displays user attributes and group membership
+   - Shows both `memberOf` and `memberUid` group membership
+
+## Troubleshooting
+
+- **"LDAP not configured"**: Ensure `LDAP_SERVER_URI` is set in your `.env` file and Django has been restarted.
+
+- **"bind_ok: Failed"**: Check:
+  - LDAP server is reachable
+  - `LDAP_BIND_DN` and `LDAP_BIND_PASSWORD` are correct (if required)
+  - Firewall rules allow connection to LDAP server
+
+- **Login fails**: Verify:
+  - User exists in LDAP and matches `LDAP_USER_FILTER`
+  - User password is correct
+  - `LDAP_USER_SEARCH_BASE` is correct
+
+- **Group membership not working**: Check:
+  - Group DNs are correct and match your LDAP structure
+  - User is actually a member of the groups (check via LDAP test tool)
+  - If using `memberUid`, ensure the group has `memberUid` attributes set
+
+## Notes
+
+- After changing LDAP configuration, restart Django (or Gunicorn) for changes to take effect.
+- The system creates Django user records automatically on first LDAP login.
+- User attributes are synced from LDAP on each login (`AUTH_LDAP_ALWAYS_UPDATE_USER` is enabled).
+- Group membership is checked on each login and user roles are updated accordingly.
+- Both `memberOf` and `memberUid` group membership methods are supported simultaneously.
+
 # Access Control (ACL) for Admin Features
 
 The project uses a lightweight ACL on top of Django auth to control access to admin features. Superusers bypass all checks. Roles (staff, supervisor, student) are represented by Django Groups, and a set of custom Permissions (codenames) is attached to the `User` content type.
