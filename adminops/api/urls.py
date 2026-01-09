@@ -16,6 +16,7 @@ from .views import (
     admin_set_banner,
     admin_clear_banner,
     banner_info,
+    admin_update_object_identifiers,
 )
 
 app_name = 'adminops-api'
@@ -37,6 +38,7 @@ urlpatterns = [
     path('banner/set', admin_set_banner, name='set_banner'),
     path('banner/clear', admin_clear_banner, name='clear_banner'),
     path('banner-info/', banner_info, name='banner_info'),
+    path('objects/<int:object_id>/update-identifiers/', admin_update_object_identifiers, name='update_object_identifiers'),
 ]
 
 

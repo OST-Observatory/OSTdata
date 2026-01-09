@@ -27,14 +27,14 @@
                 aria-label="Edit object (admin)"
                 @click="openObjectEdit"
               ></v-btn>
-              <v-btn
-                v-if="isAuthenticated"
-                icon="mdi-pencil"
-                size="small"
-                variant="text"
-                aria-label="Edit basic data"
-                @click="openBasicDialog"
-              ></v-btn>
+            <v-btn
+              v-if="isAuthenticated"
+              icon="mdi-pencil"
+              size="small"
+              variant="text"
+              aria-label="Edit basic data"
+              @click="openBasicDialog"
+            ></v-btn>
             </div>
           </v-card-title>
           <v-card-text>
@@ -162,7 +162,7 @@
           </v-card-text>
         </v-card>
       </v-col>
-
+      
       <!-- Aladin Lite Sky Map -->
       <v-col cols="12" md="3">
         <v-card class="uniform-height">
@@ -484,6 +484,70 @@
                 hide-details
                 step="0.0001"
               />
+            </v-col>
+          </v-row>
+          
+          <!-- SIMBAD Identifier Update Section -->
+          <v-divider class="my-4"></v-divider>
+          <v-row dense>
+            <v-col cols="12">
+              <div class="text-h6 mb-2">Update Identifiers from SIMBAD</div>
+            </v-col>
+            <v-col cols="12">
+              <v-radio-group v-model="simbadMatchMethod" inline hide-details>
+                <v-radio label="Match by Name" value="name" color="primary"></v-radio>
+                <v-radio label="Match by Coordinates" value="coordinates" color="primary"></v-radio>
+              </v-radio-group>
+            </v-col>
+            <v-col cols="12">
+              <v-checkbox
+                v-model="simbadDryRun"
+                label="Dry run (show changes without applying)"
+                color="primary"
+                hide-details
+              ></v-checkbox>
+            </v-col>
+            <v-col cols="12">
+              <v-btn
+                color="primary"
+                variant="outlined"
+                :loading="simbadUpdating"
+                @click="updateIdentifiersFromSimbad"
+              >
+                Update Identifiers
+              </v-btn>
+            </v-col>
+            <v-col cols="12" v-if="simbadResult">
+              <v-alert
+                :type="simbadResult.error ? 'error' : (simbadResult.dry_run ? 'info' : 'success')"
+                variant="tonal"
+                class="mt-2"
+              >
+                <div v-if="simbadResult.error" class="font-weight-bold">{{ simbadResult.error }}</div>
+                <div v-else>
+                  <div class="font-weight-bold mb-2">{{ simbadResult.message }}</div>
+                  <div v-if="simbadResult.dry_run">
+                    <div v-if="simbadResult.identifiers_to_delete && simbadResult.identifiers_to_delete.length > 0">
+                      <div class="text-caption font-weight-bold mt-2">Would delete ({{ simbadResult.identifiers_to_delete.length }}):</div>
+                      <div class="text-caption">{{ simbadResult.identifiers_to_delete.join(', ') }}</div>
+                    </div>
+                    <div v-if="simbadResult.identifiers_to_create && simbadResult.identifiers_to_create.length > 0">
+                      <div class="text-caption font-weight-bold mt-2">Would create ({{ simbadResult.identifiers_to_create.length }}):</div>
+                      <div class="text-caption">{{ simbadResult.identifiers_to_create.join(', ') }}</div>
+                    </div>
+                  </div>
+                  <div v-else>
+                    <div v-if="simbadResult.previous_identifiers && simbadResult.previous_identifiers.length > 0">
+                      <div class="text-caption font-weight-bold mt-2">Previous identifiers ({{ simbadResult.previous_identifiers.length }}):</div>
+                      <div class="text-caption">{{ simbadResult.previous_identifiers.join(', ') }}</div>
+                    </div>
+                    <div v-if="simbadResult.current_identifiers && simbadResult.current_identifiers.length > 0">
+                      <div class="text-caption font-weight-bold mt-2">New identifiers ({{ simbadResult.current_identifiers.length }}):</div>
+                      <div class="text-caption">{{ simbadResult.current_identifiers.join(', ') }}</div>
+                    </div>
+                  </div>
+                </div>
+              </v-alert>
             </v-col>
           </v-row>
         </v-card-text>
@@ -1068,6 +1132,12 @@ const objectEditForm = ref({
   decDms: '',
 })
 
+// SIMBAD identifier update
+const simbadMatchMethod = ref('name')
+const simbadDryRun = ref(true)
+const simbadUpdating = ref(false)
+const simbadResult = ref(null)
+
 // Computed properties
 const isAuthenticated = computed(() => authStore.isAuthenticated)
 const totalExposureTime = computed(() => {
@@ -1195,7 +1265,38 @@ const openObjectEdit = () => {
     raHms: degToHms(ra),
     decDms: degToDms(dec),
   }
+  // Reset SIMBAD update state
+  simbadMatchMethod.value = 'name'
+  simbadDryRun.value = true
+  simbadResult.value = null
   objectEditDialog.value = true
+}
+
+const updateIdentifiersFromSimbad = async () => {
+  if (!object.value) return
+  try {
+    simbadUpdating.value = true
+    simbadResult.value = null
+    const result = await api.adminUpdateObjectIdentifiers(
+      object.value.pk || object.value.id,
+      simbadMatchMethod.value,
+      simbadDryRun.value
+    )
+    simbadResult.value = result
+    if (!simbadDryRun.value && result.success) {
+      // Reload object to get updated identifiers
+      await loadObject()
+      try { notify.success('Identifiers updated from SIMBAD') } catch {}
+    }
+  } catch (e) {
+    console.error('Error updating identifiers from SIMBAD', e)
+    simbadResult.value = {
+      error: e?.message || 'Failed to update identifiers from SIMBAD',
+    }
+    try { notify.error('Failed to update identifiers from SIMBAD') } catch {}
+  } finally {
+    simbadUpdating.value = false
+  }
 }
 
 const saveObjectEdit = async () => {

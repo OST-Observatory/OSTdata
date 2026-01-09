@@ -376,6 +376,13 @@ export const api = {
   adminClearOverrideFlag: (modelType, instanceId, fieldName) => fetchWithAuth(`/admin/override-flags/${encodeURIComponent(modelType)}/${encodeURIComponent(instanceId)}/${encodeURIComponent(fieldName)}/clear/`, { method: 'POST' }),
   adminClearAllOverrides: (modelType, instanceId) => fetchWithAuth(`/admin/override-flags/${encodeURIComponent(modelType)}/${encodeURIComponent(instanceId)}/clear-all/`, { method: 'POST' }),
   adminListOverrideFlags: () => fetchWithAuth('/admin/override-flags/list/'),
+  adminUpdateObjectIdentifiers: (objectId, matchMethod, dryRun) => fetchWithAuth(`/admin/objects/${encodeURIComponent(objectId)}/update-identifiers/`, {
+    method: 'POST',
+    body: JSON.stringify({
+      match_method: matchMethod,
+      dry_run: dryRun,
+    }),
+  }),
   // Site-wide Banner
   getBanner: () => fetchWithAuth('/runs/banner/'),
   adminGetBanner: () => fetchWithAuth('/admin/banner/'),

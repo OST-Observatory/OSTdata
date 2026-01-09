@@ -42,7 +42,8 @@ from obs_run.tasks import (
 )
 from ostdata.services.health import gather_admin_health
 from obs_run.models import ObservationRun, DataFile
-from objects.models import Object
+from objects.models import Object, Identifier
+from utilities import _query_object_variants, _query_region_safe
 
 
 # -------------------- Banner helpers (Redis) --------------------
@@ -584,5 +585,174 @@ def admin_trigger_refresh_dashboard_stats(request):
         return Response({'enqueued': False, 'error': str(e)}, status=400)
 
 
+@extend_schema(
+    summary='Update object identifiers from SIMBAD',
+    description='Query SIMBAD and update identifiers for an object. Supports matching by name or coordinates.',
+    request=serializers.Serializer,
+    responses={200: serializers.Serializer}
+)
+@api_view(['POST'])
+@permission_classes([IsAdminUser])
+def admin_update_object_identifiers(request, object_id):
+    """
+    Update object identifiers from SIMBAD.
+    
+    Query parameters:
+    - match_method: 'name' or 'coordinates' (default: 'name')
+    - dry_run: 'true' or 'false' (default: 'false')
+    """
+    try:
+        obj = Object.objects.get(pk=object_id)
+    except Object.DoesNotExist:
+        return Response({'error': 'Object not found'}, status=404)
+    
+    match_method = request.data.get('match_method', 'name')
+    dry_run = request.data.get('dry_run', 'false')
+    dry_run = str(dry_run).lower() in ('true', '1', 'yes')
+    
+    # Get current identifiers (excluding header-based ones)
+    current_identifiers = list(
+        obj.identifier_set.filter(info_from_header=False).values_list('name', flat=True)
+    )
+    
+    simbad_table = None
+    error_message = None
+    
+    try:
+        if match_method == 'name':
+            # Query by object name
+            simbad_table = _query_object_variants(obj.name)
+            if simbad_table is None or len(simbad_table) == 0:
+                error_message = f'No SIMBAD result found for name: {obj.name}'
+        elif match_method == 'coordinates':
+            # Query by coordinates
+            if obj.ra == -1 or obj.dec == -1 or obj.ra == 0 or obj.dec == 0:
+                error_message = 'Invalid coordinates for SIMBAD query'
+            else:
+                simbad_table = _query_region_safe(obj.ra, obj.dec, '0d5m0s', row_limit=10)
+                if simbad_table is None or len(simbad_table) == 0:
+                    error_message = f'No SIMBAD result found for coordinates: RA={obj.ra}, Dec={obj.dec}'
+                elif len(simbad_table) > 0:
+                    # Use first result (closest match)
+                    simbad_table = simbad_table[:1]
+        else:
+            return Response({'error': f'Invalid match_method: {match_method}'}, status=400)
+    except Exception as e:
+        logger.exception(f'Error querying SIMBAD for object {object_id}: {e}')
+        error_message = f'SIMBAD query failed: {str(e)}'
+    
+    if error_message:
+        return Response({
+            'error': error_message,
+            'current_identifiers': current_identifiers,
+            'new_identifiers': [],
+            'identifiers_to_delete': current_identifiers,
+            'identifiers_to_create': [],
+        })
+    
+    if simbad_table is None or len(simbad_table) == 0:
+        return Response({
+            'error': 'No SIMBAD results found',
+            'current_identifiers': current_identifiers,
+            'new_identifiers': [],
+            'identifiers_to_delete': current_identifiers,
+            'identifiers_to_create': [],
+        })
+    
+    # Extract identifiers from SIMBAD result
+    row = simbad_table[0]
+    
+    # Get main_id first
+    main_id = None
+    try:
+        main_id = row.get('main_id', None)
+        if main_id is not None:
+            main_id = str(main_id).strip()
+    except Exception:
+        pass
+    
+    # Get all identifiers from IDS field
+    aliases_field = None
+    try:
+        aliases_field = row['IDS']
+    except (KeyError, IndexError):
+        try:
+            aliases_field = row['ids']
+        except (KeyError, IndexError):
+            try:
+                # Try accessing by index if it's a table row
+                aliases_field = row[3] if len(row) > 3 else None  # IDS is often column 3
+            except Exception:
+                aliases_field = None
+    
+    aliases = []
+    if aliases_field is not None:
+        # Handle both string and masked array formats
+        aliases_str = str(aliases_field)
+        # Split by pipe character and clean up
+        aliases = [a.strip() for a in aliases_str.split('|') if a and a.strip()]
+    
+    # Add main_id to the list if it's not already there
+    if main_id and main_id not in aliases:
+        aliases.insert(0, main_id)
+    elif not main_id and aliases:
+        # If no main_id but we have aliases, use first alias as main
+        pass
+    
+    # Remove duplicates while preserving order
+    new_identifiers = []
+    seen = set()
+    for alias in aliases:
+        alias_clean = alias.strip()
+        if alias_clean and alias_clean not in seen:
+            seen.add(alias_clean)
+            new_identifiers.append(alias_clean)
+    
+    # Create SIMBAD href
+    object_name = str(main_id) if main_id else obj.name
+    sanitized_name = object_name.replace(" ", "").replace('+', "%2B")
+    simbad_href = f"https://simbad.u-strasbg.fr/simbad/sim-id?Ident={sanitized_name}"
+    
+    # Determine what would change
+    identifiers_to_delete = current_identifiers
+    identifiers_to_create = new_identifiers
+    
+    if not dry_run:
+        # Actually update identifiers
+        # Delete all existing identifiers (excluding header-based ones)
+        deleted_count = obj.identifier_set.filter(info_from_header=False).delete()[0]
+        
+        # Create new identifiers from SIMBAD
+        created_count = 0
+        for alias in new_identifiers:
+            Identifier.objects.create(
+                object=obj,
+                name=alias,
+                href=simbad_href,
+                info_from_header=False,
+            )
+            created_count += 1
+        
+        return Response({
+            'success': True,
+            'message': f'Updated identifiers: deleted {deleted_count}, created {created_count}',
+            'current_identifiers': new_identifiers,
+            'previous_identifiers': current_identifiers,
+            'identifiers_deleted': deleted_count,
+            'identifiers_created': created_count,
+        })
+    else:
+        # Dry-run: just return what would change
+        return Response({
+            'success': True,
+            'dry_run': True,
+            'message': f'Would delete {len(identifiers_to_delete)} and create {len(identifiers_to_create)} identifiers',
+            'current_identifiers': current_identifiers,
+            'new_identifiers': new_identifiers,
+            'identifiers_to_delete': identifiers_to_delete,
+            'identifiers_to_create': identifiers_to_create,
+            'simbad_main_id': main_id if main_id else None,
+            'simbad_href': simbad_href,
+        })
 
 
