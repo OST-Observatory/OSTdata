@@ -282,6 +282,57 @@ def gather_admin_health() -> Dict[str, Any]:
     except Exception:
         data['system'] = None
 
+    # LDAP check
+    ldap_data = {
+        'configured': False,
+        'server_uri': None,
+        'can_import': False,
+        'bind_ok': False,
+        'errors': {},
+    }
+    try:
+        server_uri = getattr(settings, 'AUTH_LDAP_SERVER_URI', None) or os.environ.get('LDAP_SERVER_URI')
+        if server_uri:
+            ldap_data['configured'] = True
+            ldap_data['server_uri'] = server_uri
+            
+            if _ldap:
+                ldap_data['can_import'] = True
+                # Try to connect and bind
+                try:
+                    start_tls = bool(getattr(settings, 'AUTH_LDAP_START_TLS', False) or str(os.environ.get('LDAP_START_TLS', 'false')).lower() in ('1', 'true', 'yes'))
+                    bind_dn = getattr(settings, 'AUTH_LDAP_BIND_DN', None) or os.environ.get('LDAP_BIND_DN') or ''
+                    bind_pw = getattr(settings, 'AUTH_LDAP_BIND_PASSWORD', None) or os.environ.get('LDAP_BIND_PASSWORD') or ''
+                    
+                    conn = _ldap.initialize(server_uri)
+                    conn.set_option(_ldap.OPT_REFERRALS, 0)
+                    conn.set_option(_ldap.OPT_NETWORK_TIMEOUT, getattr(settings, 'AUTH_LDAP_CONNECT_TIMEOUT', 5))
+                    
+                    if start_tls:
+                        try:
+                            conn.start_tls_s()
+                        except Exception as e:
+                            ldap_data['errors']['start_tls'] = str(e)
+                    
+                    try:
+                        if bind_dn:
+                            conn.simple_bind_s(bind_dn, bind_pw or '')
+                        else:
+                            conn.simple_bind_s()
+                        ldap_data['bind_ok'] = True
+                    except Exception as e:
+                        ldap_data['errors']['bind'] = str(e)
+                    finally:
+                        try:
+                            conn.unbind_s()
+                        except Exception:
+                            pass
+                except Exception as e:
+                    ldap_data['errors']['connect'] = str(e)
+    except Exception as e:
+        ldap_data['errors']['check'] = str(e)
+    data['ldap'] = ldap_data
+
     return data
 
 
