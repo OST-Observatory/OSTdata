@@ -3,7 +3,7 @@ from pathlib import Path
 from django.utils import timezone
 from django.db import transaction
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAdminUser
+from ostdata.permissions import IsAdminOrSuperuser as IsAdminUser
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiExample
@@ -160,7 +160,7 @@ def download_job_status(request, job_id):
 def list_download_jobs(request):
     """List download jobs. Admins see all; authenticated users see their own; anonymous see none."""
     qs = DownloadJob.objects.all().order_by('-created_at')
-    if request.user.is_authenticated and request.user.is_staff:
+    if request.user.is_authenticated and (request.user.is_staff or request.user.is_superuser):
         if not (request.user.is_superuser or request.user.has_perm('users.acl_jobs_view_all')):
             qs = qs.filter(user_id=request.user.pk)
     elif request.user.is_authenticated:
@@ -177,7 +177,7 @@ def list_download_jobs(request):
         except Exception:
             pass
     user_param = request.query_params.get('user')
-    if user_param and request.user.is_authenticated and request.user.is_staff:
+    if user_param and request.user.is_authenticated and (request.user.is_staff or request.user.is_superuser):
         try:
             qs = qs.filter(user_id=int(user_param))
         except Exception:

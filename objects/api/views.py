@@ -1,5 +1,6 @@
 from rest_framework import viewsets, status
-from rest_framework.permissions import IsAuthenticatedOrReadOnly, IsAdminUser, IsAuthenticated
+from rest_framework.permissions import IsAuthenticatedOrReadOnly, IsAuthenticated
+from ostdata.permissions import IsAdminOrSuperuser as IsAdminUser
 from rest_framework.response import Response
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.filters import OrderingFilter

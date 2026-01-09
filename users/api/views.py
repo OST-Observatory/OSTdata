@@ -1,6 +1,7 @@
 from rest_framework import status, viewsets
 from rest_framework.decorators import api_view, permission_classes, authentication_classes
-from rest_framework.permissions import AllowAny, IsAuthenticated, IsAdminUser
+from rest_framework.permissions import AllowAny, IsAuthenticated
+from ostdata.permissions import IsAdminOrSuperuser as IsAdminUser
 from rest_framework.response import Response
 from rest_framework.authtoken.models import Token
 from django.conf import settings
