@@ -238,6 +238,196 @@ def get_object_fov_radius(obj, fallback_arcmin=10.0, min_arcmin=1.0, max_arcmin=
     return f"{degrees}d{arcmin}m{arcsec}s"
 
 
+def verify_star_classification(obj, data_file=None, enable_extended_search=True):
+    """
+    Verify if an object classified as 'ST' (star) should actually be a cluster, nebula, or galaxy.
+    Performs an extended SIMBAD region search to find nearby SC/NE/GA objects with NGC/M/ACO identifiers.
+    
+    Parameters
+    ----------
+    obj : Object
+        Object instance that was classified as 'ST'
+    data_file : DataFile, optional
+        Associated DataFile (used for FOV calculation if available)
+    enable_extended_search : bool
+        Whether to perform extended search (default: True)
+    
+    Returns
+    -------
+    dict
+        Result dictionary with 'updated' (bool), 'best_match' (dict or None), 'candidates' (list)
+    """
+    import math
+    
+    # Only check objects classified as stars
+    if obj.object_type != 'ST':
+        return {'updated': False, 'best_match': None, 'candidates': []}
+    
+    # Skip if coordinates are invalid
+    if obj.ra == -1 or obj.dec == -1 or obj.ra == 0 or obj.dec == 0:
+        return {'updated': False, 'best_match': None, 'candidates': []}
+    
+    if not enable_extended_search:
+        return {'updated': False, 'best_match': None, 'candidates': []}
+    
+    try:
+        # Calculate FOV radius for search
+        # If data_file is provided and has FOV, use it; otherwise use object's associated DataFiles
+        radius_arcmin = 5.0  # Default fallback
+        min_radius = 1.0
+        max_radius = 30.0
+        
+        if data_file and data_file.fov_x > 0 and data_file.fov_y > 0:
+            # Use FOV from the current data file
+            fov_x_deg = float(data_file.fov_x)
+            fov_y_deg = float(data_file.fov_y)
+            half_diagonal_deg = np.sqrt(fov_x_deg**2 + fov_y_deg**2) / 2.0
+            radius_arcmin = half_diagonal_deg * 60.0
+            radius_arcmin = max(min_radius, min(max_radius, radius_arcmin))
+        else:
+            # Use FOV from associated DataFiles
+            radius_str = get_object_fov_radius(
+                obj,
+                fallback_arcmin=radius_arcmin,
+                min_arcmin=min_radius,
+                max_arcmin=max_radius
+            )
+            # Parse radius string to get arcmin
+            import re
+            match = re.match(r'(\d+)d(\d+)m(\d+)s', radius_str)
+            if match:
+                degrees = int(match.group(1))
+                arcmin = int(match.group(2))
+                arcsec = int(match.group(3))
+                radius_arcmin = degrees * 60 + arcmin + arcsec / 60.0
+            else:
+                radius_arcmin = 5.0
+        
+        # Convert to SIMBAD format
+        degrees = int(radius_arcmin // 60)
+        remaining_arcmin = radius_arcmin - (degrees * 60)
+        arcmin = int(remaining_arcmin)
+        arcsec = int((remaining_arcmin - arcmin) * 60)
+        radius_str = f"{degrees}d{arcmin}m{arcsec}s"
+        
+        # Query SIMBAD with extended radius
+        result_table = _query_region_safe(
+            obj.ra,
+            obj.dec,
+            radius_str,
+            row_limit=1000  
+        )
+        
+        if result_table is None or len(result_table) == 0:
+            return {'updated': False, 'best_match': None, 'candidates': []}
+        
+        # Priority order: NE > SC > GA
+        priority_types = ['NE', 'SC', 'GA']
+        priority_order = {t: i for i, t in enumerate(priority_types)}
+        
+        # Filter results for SC, NE, GA types with NGC/M/ACO identifiers
+        candidates = []
+        for row in result_table:
+            raw_types = row.get('alltypes.otypes', None)
+            types_str = '' if raw_types is None else str(raw_types)
+            detected_type = detect_object_type_from_simbad_types(types_str)
+            
+            if detected_type in priority_types:
+                # Check for NGC, Messier (M), or ACO identifiers
+                main_id = str(row.get('main_id', '')).upper()
+                
+                # Get all identifiers from IDS field
+                ids_field = None
+                try:
+                    ids_field = row.get('IDS', None)
+                except Exception:
+                    try:
+                        ids_field = row.get('ids', None)
+                    except Exception:
+                        ids_field = None
+                
+                all_ids = []
+                if ids_field is not None:
+                    all_ids = [str(id_str).strip().upper() for id_str in str(ids_field).split('|')]
+                if main_id:
+                    all_ids.append(main_id)
+                
+                # Check if any identifier contains NGC, M, or ACO
+                has_valid_identifier = False
+                identifier_match = None
+                for id_str in all_ids:
+                    # Check for NGC
+                    if id_str.startswith('NGC') or ' NGC ' in id_str:
+                        has_valid_identifier = True
+                        identifier_match = id_str
+                        break
+                    # Check for Messier
+                    if (id_str.startswith('M ') or (id_str.startswith('M') and len(id_str) > 1 and id_str[1].isdigit())) or \
+                       id_str.startswith('MESSIER'):
+                        has_valid_identifier = True
+                        identifier_match = id_str
+                        break
+                    # Check for ACO
+                    if id_str.startswith('ACO') or ' ACO ' in id_str:
+                        has_valid_identifier = True
+                        identifier_match = id_str
+                        break
+                
+                if not has_valid_identifier:
+                    continue  # Skip objects without NGC/M/ACO identifiers
+                
+                # Extract magnitude (V-band) if available
+                magnitude = None
+                try:
+                    v_mag = row.get('V', None)
+                    if v_mag is not None and str(v_mag) != '--' and str(v_mag) != '':
+                        try:
+                            magnitude = float(v_mag)
+                        except (ValueError, TypeError):
+                            magnitude = None
+                except Exception:
+                    magnitude = None
+                
+                candidates.append({
+                    'row': row,
+                    'type': detected_type,
+                    'magnitude': magnitude,
+                    'name': str(row.get('main_id', 'Unknown')),
+                    'identifier': identifier_match,
+                })
+        
+        if not candidates:
+            return {'updated': False, 'best_match': None, 'candidates': []}
+        
+        # Sort by priority (NE > SC > GA) and then by magnitude (brighter = better)
+        def sort_key(x):
+            priority = priority_order.get(x['type'], 999)
+            mag_value = x['magnitude'] if x['magnitude'] is not None else 999.0
+            return (priority, mag_value)
+        
+        candidates.sort(key=sort_key)
+        best_match = candidates[0]
+        
+        # Update object if a better match was found
+        update_result = update_object_from_simbad_result(
+            obj,
+            best_match['row'],
+            priority_types=priority_types,
+            dry_run=False  # Always apply updates during initial evaluation
+        )
+        
+        return {
+            'updated': len(update_result.get('updated_fields', [])) > 0,
+            'best_match': best_match,
+            'candidates': candidates,
+            'update_result': update_result,
+        }
+        
+    except Exception as e:
+        logger.warning(f'Error verifying star classification for object {obj.pk}: {e}')
+        return {'updated': False, 'best_match': None, 'candidates': []}
+
+
 def update_object_from_simbad_result(obj, simbad_table_row, priority_types=['NE', 'SC', 'GA'], dry_run=False):
     """
     Update object from SIMBAD result, respecting override flags.
@@ -352,10 +542,10 @@ def update_object_from_simbad_result(obj, simbad_table_row, priority_types=['NE'
     if update_fields and not dry_run:
         obj.save(update_fields=update_fields)
     
-    # Replace identifiers (delete old, create new)
+    # Replace identifiers (delete old non-header-based, create new)
     if not dry_run:
-        # Delete all existing identifiers
-        deleted_count = obj.identifier_set.all().delete()[0]
+        # Delete all existing identifiers except header-based ones
+        deleted_count = obj.identifier_set.filter(info_from_header=False).delete()[0]
         
         # Create new identifiers from SIMBAD
         identifiers_created = 0
@@ -364,6 +554,7 @@ def update_object_from_simbad_result(obj, simbad_table_row, priority_types=['NE'
                 obj.identifier_set.create(
                     name=alias.strip(),
                     href=simbad_href,
+                    info_from_header=False,
                 )
                 identifiers_created += 1
         
@@ -844,8 +1035,33 @@ def evaluate_data_file(data_file, observation_run, print_to_terminal=False):
             obj.datafiles.add(data_file)
             obj.save()
 
-            #   Set alias names
-            if object_simbad_resolved:
+            #   Verify star classification: if classified as 'ST', perform extended search
+            #   to check if it should actually be a cluster, nebula, or galaxy
+            verification_updated = False
+            if object_type == 'ST':
+                try:
+                    # Check if extended search is enabled (can be disabled via environment variable)
+                    enable_extended = str(os.environ.get('ENABLE_STAR_VERIFICATION', 'true')).lower() in ('true', '1', 'yes')
+                    if enable_extended:
+                        verification_result = verify_star_classification(obj, data_file=data_file, enable_extended_search=True)
+                        if verification_result['updated']:
+                            verification_updated = True
+                            if print_to_terminal:
+                                best_match = verification_result.get('best_match', {})
+                                logger.info(
+                                    f'Star classification corrected for {obj.name}: '
+                                    f'now classified as {obj.object_type} '
+                                    f'(found: {best_match.get("name", "Unknown")})'
+                                )
+                            # Update object_type variable for consistency
+                            obj.refresh_from_db()
+                            object_type = obj.object_type
+                except Exception as e:
+                    # Don't fail object creation if verification fails
+                    logger.warning(f'Error during star classification verification for {obj.name}: {e}')
+
+            #   Set alias names (only if verification didn't already update identifiers)
+            if object_simbad_resolved and not verification_updated:
                 #   Add header name as an alias
                 obj.identifier_set.create(
                     name=target,
@@ -881,6 +1097,23 @@ def evaluate_data_file(data_file, observation_run, print_to_terminal=False):
                 #   Set datafile target name to Simbad resolved
                 #   name
                 data_file.main_target = object_name
+                data_file.save()
+            elif verification_updated:
+                # If verification updated the object, ensure header name is added as identifier
+                # (it might have been removed when identifiers were replaced)
+                try:
+                    existing_header_id = obj.identifier_set.filter(name__exact=target, info_from_header=True).first()
+                    if not existing_header_id:
+                        obj.identifier_set.create(
+                            name=target,
+                            info_from_header=True,
+                        )
+                except Exception as e:
+                    logger.debug(f'Error adding header identifier after verification: {e}')
+                
+                # Update datafile target name to match updated object name
+                obj.refresh_from_db()
+                data_file.main_target = obj.name
                 data_file.save()
 
         if print_to_terminal:
