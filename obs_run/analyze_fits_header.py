@@ -79,12 +79,34 @@ def extract_fits_header_info(header):
     data['exptime'] = np.round(header.get('EXPTIME', -1), 0)
     data['observer'] = header.get('OBSERVER', 'UK')
     data['imagetyp'] = header.get('IMAGETYP', 'UK')
-    data['focal_length'] = header.get('FOCALLEN', -1)
+    
+    # Focal length - try multiple header keys
+    focal_length = header.get('FOCALLEN', None) or header.get('FOCAL', None) or header.get('FOCLEN', None)
+    if focal_length is not None:
+        try:
+            data['focal_length'] = float(focal_length)
+        except (ValueError, TypeError):
+            data['focal_length'] = -1
+    else:
+        data['focal_length'] = -1
 
     #   Image properties
     data['naxis1'] = header.get('NAXIS1', -1)
     data['naxis2'] = header.get('NAXIS2', -1)
-    data['pixel_size'] = header.get('XPIXSZ', -1)
+    
+    # Pixel size - try multiple header keys (XPIXSZ is in microns)
+    pixel_size = header.get('XPIXSZ', None) or header.get('XPIXSIZE', None) or header.get('PIXSIZE', None) or header.get('PIXSZ', None)
+    if pixel_size is not None:
+        try:
+            pixel_size_val = float(pixel_size)
+            # If pixel size is very large (> 100), it might be in mm instead of microns
+            if pixel_size_val > 100:
+                pixel_size_val = pixel_size_val * 1000.0  # Convert mm to microns
+            data['pixel_size'] = pixel_size_val
+        except (ValueError, TypeError):
+            data['pixel_size'] = -1
+    else:
+        data['pixel_size'] = -1
 
     #   Binning factors (robust to different header conventions)
     binx = header.get('XBINNING', None) or header.get('XBIN', None) or header.get('BINX', None)
@@ -283,15 +305,26 @@ def analyze_fits(datafile):
     datafile.binning_y = header_data.get('binning_y', 1)
 
     #   Calculate field of view if pixel_size and focal_length are available
-    if (datafile.pixel_size not in [0, -1] and datafile.focal_length not in [0, -1] and
-            datafile.naxis1 > 0 and datafile.naxis2 > 0):
+    # Initialize FOV to -1 if not already set
+    if datafile.fov_x == -1:
+        datafile.fov_x = -1
+    if datafile.fov_y == -1:
+        datafile.fov_y = -1
+    
+    # Check if we have the required values for FOV calculation
+    pixel_size_valid = datafile.pixel_size is not None and datafile.pixel_size > 0
+    focal_length_valid = datafile.focal_length is not None and datafile.focal_length > 0
+    naxis_valid = datafile.naxis1 > 0 and datafile.naxis2 > 0
+    
+    if pixel_size_valid and focal_length_valid and naxis_valid:
         try:
-            pixel_size_mm = datafile.pixel_size / 1000.0
-            d = datafile.naxis1 * pixel_size_mm
-            h = datafile.naxis2 * pixel_size_mm
+            pixel_size_mm = float(datafile.pixel_size) / 1000.0
+            focal_length_mm = float(datafile.focal_length)
+            d = float(datafile.naxis1) * pixel_size_mm
+            h = float(datafile.naxis2) * pixel_size_mm
 
             #   Calculate field of view
-            double_focal_len = 2.0 * datafile.focal_length
+            double_focal_len = 2.0 * focal_length_mm
             if double_focal_len > 0:
                 fov_x = 2.0 * np.arctan(d / double_focal_len)
                 fov_y = 2.0 * np.arctan(h / double_focal_len)
@@ -305,23 +338,55 @@ def analyze_fits(datafile):
                 if 0.001 <= fov_x_deg <= 180.0 and 0.001 <= fov_y_deg <= 180.0:
                     datafile.fov_x = fov_x_deg
                     datafile.fov_y = fov_y_deg
+                    logger.debug(
+                        f'FOV calculated for DataFile {datafile.pk}: '
+                        f'fov_x={fov_x_deg:.6f}°, fov_y={fov_y_deg:.6f}°'
+                    )
                 else:
                     # Invalid FOV values, set to -1
                     logger.warning(
                         f'Invalid FOV calculated for DataFile {datafile.pk}: '
-                        f'fov_x={fov_x_deg:.6f}, fov_y={fov_y_deg:.6f}'
+                        f'fov_x={fov_x_deg:.6f}°, fov_y={fov_y_deg:.6f}° '
+                        f'(pixel_size={datafile.pixel_size}µm, focal_length={datafile.focal_length}mm, '
+                        f'naxis1={datafile.naxis1}, naxis2={datafile.naxis2})'
                     )
-                    if datafile.fov_x == -1:
-                        datafile.fov_x = -1
-                    if datafile.fov_y == -1:
-                        datafile.fov_y = -1
-        except Exception as e:
-            logger.warning(f'Error calculating FOV for DataFile {datafile.pk}: {e}')
-            # Don't overwrite existing FOV if calculation fails
-            if datafile.fov_x == -1:
+                    datafile.fov_x = -1
+                    datafile.fov_y = -1
+            else:
+                logger.warning(
+                    f'Invalid focal_length for FOV calculation (DataFile {datafile.pk}): '
+                    f'focal_length={datafile.focal_length}mm'
+                )
                 datafile.fov_x = -1
-            if datafile.fov_y == -1:
                 datafile.fov_y = -1
+        except Exception as e:
+            logger.warning(
+                f'Error calculating FOV for DataFile {datafile.pk}: {e} '
+                f'(pixel_size={datafile.pixel_size}, focal_length={datafile.focal_length}, '
+                f'naxis1={datafile.naxis1}, naxis2={datafile.naxis2})'
+            )
+            datafile.fov_x = -1
+            datafile.fov_y = -1
+    else:
+        # Missing required values for FOV calculation
+        if not pixel_size_valid:
+            logger.debug(
+                f'Cannot calculate FOV for DataFile {datafile.pk}: '
+                f'invalid pixel_size={datafile.pixel_size}'
+            )
+        if not focal_length_valid:
+            logger.debug(
+                f'Cannot calculate FOV for DataFile {datafile.pk}: '
+                f'invalid focal_length={datafile.focal_length}'
+            )
+        if not naxis_valid:
+            logger.debug(
+                f'Cannot calculate FOV for DataFile {datafile.pk}: '
+                f'invalid naxis (naxis1={datafile.naxis1}, naxis2={datafile.naxis2})'
+            )
+        # Ensure FOV is set to -1 if values are missing
+        datafile.fov_x = -1
+        datafile.fov_y = -1
 
     #   Image type definitions
     img_types = {
