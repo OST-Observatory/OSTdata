@@ -76,7 +76,23 @@ def extract_fits_header_info(header):
     #   Telescope and instrument info
     data['instrument'] = header.get('INSTRUME', 'UK')
     data['telescope'] = header.get('TELESCOP', 'UK')
-    data['exptime'] = np.round(header.get('EXPTIME', -1), 0)
+    
+    # Exposure time - try multiple header keys and preserve decimal precision
+    exptime = header.get('EXPTIME', None) or header.get('EXPOSURE', None) or header.get('EXPOSUR', None)
+    if exptime is not None:
+        try:
+            exptime_val = float(exptime)
+            # Only round if value is >= 10 second (preserve precision for sub-second exposures)
+            if exptime_val >= 10.0:
+                data['exptime'] = np.round(exptime_val, 0)
+            else:
+                # Preserve decimal precision for sub-second exposures (e.g., 0.1, 0.5)
+                data['exptime'] = exptime_val
+        except (ValueError, TypeError):
+            data['exptime'] = -1
+    else:
+        data['exptime'] = -1
+    
     data['observer'] = header.get('OBSERVER', 'UK')
     data['imagetyp'] = header.get('IMAGETYP', 'UK')
     
