@@ -830,76 +830,110 @@
 
               <v-skeleton-loader v-if="loadingDataFiles" type="table"></v-skeleton-loader>
               <template v-else>
-                <v-table v-if="objDfPagedItems && objDfPagedItems.length" class="custom-table">
-                  <thead>
-                    <tr>
-                      <th class="text-primary" style="width:36px">
-                        <v-checkbox v-model="selectAll" density="compact" hide-details @change="toggleSelectAll" aria-label="Select all files" />
-                      </th>
-                      <th class="text-primary">File Name</th>
-                      <th class="text-primary">Time</th>
-                      <th class="text-primary">Target</th>
-                      <th class="text-primary">Coordinates</th>
-                      <th class="text-primary">File Type</th>
-                      <th class="text-primary">Binning</th>
-                      <th class="text-primary">Instrument</th>
-                      <th class="text-primary">Exposure Type</th>
-                      <th class="text-primary">Exp. Time</th>
-                      <th class="text-primary text-right">Tools</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr v-for="df in objDfPagedItems" :key="df.pk || df.id">
-                      <td>
-                        <v-checkbox v-model="selectedIds" :value="(df.pk || df.id)" density="compact" hide-details :aria-label="`Select ${df.file_name}`" />
-                      </td>
-                      <td>{{ df.file_name }}</td>
-                      <td>{{ formatDate(df.obs_date) }}</td>
-                      <td>
-                        <template v-if="(df.exposure_type || '').toUpperCase() === 'LI'">
-                          <router-link
-                            v-if="df.main_target && df.main_target.trim()"
-                            :to="`/objects/${getObjectIdByTargetName(df.main_target)}`"
-                            class="text-decoration-none primary--text"
-                          >{{ df.main_target }}</router-link>
-                          <span v-else>{{ df.main_target || '—' }}</span>
-                        </template>
-                        <span v-else class="text-secondary">—</span>
-                      </td>
-                      <td>{{ df.ra_hms }} {{ df.dec_dms }}</td>
-                      <td>{{ df.file_type }}</td>
-                      <td>{{ df.binning || '1x1' }}</td>
-                      <td>{{ df.instrument || '—' }}</td>
-                      <td>{{ df.exposure_type_display || df.exposure_type }}</td>
-                      <td>{{ formatExposureTime(df.exptime) }}</td>
-                      <td class="text-right">
-                        <v-btn
-                          v-if="String(df.file_type || '').toUpperCase() !== 'SER'"
-                          variant="text"
-                          size="small"
-                          icon
-                          aria-label="Preview"
-                          @click="openPreview(df)"
-                        >
-                          <v-icon>mdi-image-search</v-icon>
-                        </v-btn>
-                        <v-btn
-                          variant="text"
-                          size="small"
-                          icon
-                          :disabled="String(df.file_type || '').toUpperCase() !== 'FITS'"
-                          :aria-label="`View FITS header for ${df.file_name}`"
-                          @click="openHeader(df)"
-                        >
-                          <v-icon>mdi-file-document-outline</v-icon>
-                        </v-btn>
-                        <v-btn variant="text" size="small" icon :href="api.getDataFileDownloadUrl(df.pk || df.id)" :aria-label="`Download ${df.file_name}`">
-                          <v-icon>mdi-download</v-icon>
-                        </v-btn>
-                      </td>
-                    </tr>
-                  </tbody>
-                </v-table>
+                <v-data-table
+                  v-if="sortedDataFiles && sortedDataFiles.length"
+                  :headers="objectDataFileHeaders"
+                  :items="sortedDataFiles"
+                  :items-per-page="objDfItemsPerPage === -1 ? sortedDataFiles.length : objDfItemsPerPage"
+                  :page="objDfPage"
+                  :sort-by="objDfSortBy"
+                  @update:sort-by="handleObjDfSort"
+                  @update:page="handleObjDfPageChange"
+                  hide-default-footer
+                  class="custom-table"
+                  item-key="pk"
+                  item-value="pk"
+                >
+                  <template v-slot:header.select>
+                    <div class="d-flex justify-center">
+                      <v-checkbox
+                        :model-value="areAllPageItemsSelected"
+                        :indeterminate="areSomePageItemsSelected && !areAllPageItemsSelected"
+                        density="compact"
+                        hide-details
+                        @update:model-value="toggleSelectAllPageItems"
+                        aria-label="Select all files on this page"
+                      />
+                    </div>
+                  </template>
+                  <template v-slot:item.select="{ item }">
+                    <v-checkbox
+                      v-model="selectedIds"
+                      :value="(item.pk || item.id)"
+                      density="compact"
+                      hide-details
+                      :aria-label="`Select ${item.file_name}`"
+                    />
+                  </template>
+                  <template v-slot:item.file_name="{ item }">
+                    {{ item.file_name }}
+                  </template>
+                  <template v-slot:item.obs_date="{ item }">
+                    {{ formatDate(item.obs_date) }}
+                  </template>
+                  <template v-slot:item.main_target="{ item }">
+                    <template v-if="(item.exposure_type || '').toUpperCase() === 'LI'">
+                      <router-link
+                        v-if="item.main_target && item.main_target.trim()"
+                        :to="`/objects/${getObjectIdByTargetName(item.main_target)}`"
+                        class="text-decoration-none primary--text"
+                      >{{ item.main_target }}</router-link>
+                      <span v-else>{{ item.main_target || '—' }}</span>
+                    </template>
+                    <span v-else class="text-secondary">—</span>
+                  </template>
+                  <template v-slot:item.coordinates="{ item }">
+                    {{ item.ra_hms }} {{ item.dec_dms }}
+                  </template>
+                  <template v-slot:item.file_type="{ item }">
+                    {{ item.file_type }}
+                  </template>
+                  <template v-slot:item.binning="{ item }">
+                    {{ item.binning || '1x1' }}
+                  </template>
+                  <template v-slot:item.instrument="{ item }">
+                    {{ item.instrument || '—' }}
+                  </template>
+                  <template v-slot:item.exposure_type_display="{ item }">
+                    {{ item.exposure_type_display || item.exposure_type }}
+                  </template>
+                  <template v-slot:item.exptime="{ item }">
+                    {{ formatExposureTime(item.exptime) }}
+                  </template>
+                  <template v-slot:item.tools="{ item }">
+                    <div class="d-flex justify-end" style="gap: 4px">
+                      <v-btn
+                        v-if="String(item.file_type || '').toUpperCase() !== 'SER'"
+                        variant="text"
+                        size="small"
+                        icon
+                        aria-label="Preview"
+                        @click="openPreview(item)"
+                      >
+                        <v-icon>mdi-image-search</v-icon>
+                      </v-btn>
+                      <v-btn
+                        variant="text"
+                        size="small"
+                        icon
+                        :disabled="String(item.file_type || '').toUpperCase() !== 'FITS'"
+                        :aria-label="`View FITS header for ${item.file_name}`"
+                        @click="openHeader(item)"
+                      >
+                        <v-icon>mdi-file-document-outline</v-icon>
+                      </v-btn>
+                      <v-btn
+                        variant="text"
+                        size="small"
+                        icon
+                        :href="api.getDataFileDownloadUrl(item.pk || item.id)"
+                        :aria-label="`Download ${item.file_name}`"
+                      >
+                        <v-icon>mdi-download</v-icon>
+                      </v-btn>
+                    </div>
+                  </template>
+                </v-data-table>
                 <div v-else class="text-caption text-secondary">No data files.</div>
                 </template>
               <v-card-actions class="d-flex align-center justify-space-between px-4 py-2 card-actions-responsive">
@@ -1102,6 +1136,7 @@ const loadingDataFiles = ref(false)
 const aladinLoading = ref(true)
 const objDfPage = ref(1)
 const objDfItemsPerPage = ref(10)
+const objDfSortBy = ref([{ key: 'obs_date', order: 'desc' }])
 // Client-side pagination for Observation Runs table
 const runPage = ref(1)
 const runItemsPerPage = ref(10)
@@ -1372,18 +1407,17 @@ const dataFileHeaders = [
 ]
 
 const objectDataFileHeaders = [
-  { title: '', key: 'select', sortable: false, width: 36 },
+  { title: '', key: 'select', sortable: false, width: 48 },
   { title: 'File Name', key: 'file_name', sortable: true },
-  { title: 'Observation Date', key: 'obs_date', sortable: true },
+  { title: 'Time', key: 'obs_date', sortable: true },
   { title: 'Target', key: 'main_target', sortable: true },
   { title: 'Coordinates', key: 'coordinates', sortable: false },
   { title: 'File Type', key: 'file_type', sortable: true },
-  { title: 'Binning', key: 'binning', sortable: false },
+  { title: 'Binning', key: 'binning', sortable: true },
   { title: 'Instrument', key: 'instrument', sortable: true },
   { title: 'Exposure Type', key: 'exposure_type_display', sortable: true },
-  { title: 'Exposure Time [s]', key: 'exptime', sortable: true },
-  { title: 'Observation Run', key: 'observation_run', sortable: true },
-  { title: 'Tools', key: 'tools', sortable: false },
+  { title: 'Exp. Time', key: 'exptime', sortable: true },
+  { title: 'Tools', key: 'tools', sortable: false, align: 'end' },
 ]
 
 // Methods
@@ -1803,23 +1837,89 @@ const filteredDataFiles = computed(() => {
   return items
 })
 
+// Sort function for data files
+const sortDataFiles = (items, sortBy) => {
+  if (!sortBy || sortBy.length === 0) return items
+  
+  const sorted = [...items]
+  const sort = sortBy[0]
+  const key = sort.key
+  const order = sort.order === 'desc' ? -1 : 1
+  
+  sorted.sort((a, b) => {
+    let aVal = a[key]
+    let bVal = b[key]
+    
+    // Handle special cases
+    if (key === 'obs_date') {
+      aVal = a.obs_date ? new Date(a.obs_date).getTime() : 0
+      bVal = b.obs_date ? new Date(b.obs_date).getTime() : 0
+    } else if (key === 'exptime') {
+      aVal = a.exptime || 0
+      bVal = b.exptime || 0
+    } else if (key === 'binning') {
+      // Parse binning like "2x2" to numeric value for sorting
+      const parseBinning = (bin) => {
+        if (!bin) return 0
+        const match = String(bin).match(/(\d+)x(\d+)/)
+        return match ? parseInt(match[1]) * parseInt(match[2]) : 0
+      }
+      aVal = parseBinning(a.binning)
+      bVal = parseBinning(b.binning)
+    } else if (key === 'exposure_type_display') {
+      aVal = a.exposure_type_display || a.exposure_type || ''
+      bVal = b.exposure_type_display || b.exposure_type || ''
+    }
+    
+    // Handle null/undefined
+    if (aVal == null) aVal = ''
+    if (bVal == null) bVal = ''
+    
+    // Compare
+    if (typeof aVal === 'string' && typeof bVal === 'string') {
+      return aVal.localeCompare(bVal) * order
+    }
+    if (aVal < bVal) return -1 * order
+    if (aVal > bVal) return 1 * order
+    return 0
+  })
+  
+  return sorted
+}
+
+const sortedDataFiles = computed(() => {
+  return sortDataFiles(filteredDataFiles.value, objDfSortBy.value)
+})
+
 const objDfPagedItems = computed(() => {
-  if (objDfItemsPerPage.value === -1) return filteredDataFiles.value
+  if (objDfItemsPerPage.value === -1) return sortedDataFiles.value
   const start = (objDfPage.value - 1) * objDfItemsPerPage.value
-  return filteredDataFiles.value.slice(start, start + objDfItemsPerPage.value)
+  return sortedDataFiles.value.slice(start, start + objDfItemsPerPage.value)
 })
 
 // Checkbox select-all and selection helpers for paged items
-const selectAll = ref(false)
-watch(objDfPagedItems, () => {
-  selectAll.value = false
-  selectedIds.value = []
+const areAllPageItemsSelected = computed(() => {
+  const pageItems = objDfPagedItems.value || []
+  if (pageItems.length === 0) return false
+  return pageItems.every(item => selectedIds.value.includes(item.pk || item.id))
 })
-const toggleSelectAll = () => {
-  if (selectAll.value) {
-    selectedIds.value = (objDfPagedItems.value || []).map(df => df.pk || df.id)
+
+const areSomePageItemsSelected = computed(() => {
+  const pageItems = objDfPagedItems.value || []
+  return pageItems.some(item => selectedIds.value.includes(item.pk || item.id))
+})
+
+const toggleSelectAllPageItems = () => {
+  const pageItems = objDfPagedItems.value || []
+  const pageIds = pageItems.map(item => item.pk || item.id)
+  
+  if (areAllPageItemsSelected.value) {
+    // Deselect all page items
+    selectedIds.value = selectedIds.value.filter(id => !pageIds.includes(id))
   } else {
-    selectedIds.value = []
+    // Select all page items (add to existing selection)
+    const newIds = pageIds.filter(id => !selectedIds.value.includes(id))
+    selectedIds.value = [...selectedIds.value, ...newIds]
   }
 }
 
@@ -1830,14 +1930,14 @@ const getObjectIdByTargetName = (name) => {
 
 const objDfTotalPages = computed(() => {
   if (objDfItemsPerPage.value === -1) return 1
-  return Math.max(1, Math.ceil((filteredDataFiles.value.length || 0) / (objDfItemsPerPage.value || 10)))
+  return Math.max(1, Math.ceil((sortedDataFiles.value.length || 0) / (objDfItemsPerPage.value || 10)))
 })
 
 const objDfPaginationInfo = computed(() => {
-  if (objDfItemsPerPage.value === -1) return `Showing all ${filteredDataFiles.value.length}`
+  if (objDfItemsPerPage.value === -1) return `Showing all ${sortedDataFiles.value.length}`
   const start = (objDfPage.value - 1) * objDfItemsPerPage.value + 1
-  const end = Math.min(objDfPage.value * objDfItemsPerPage.value, filteredDataFiles.value.length)
-  return `${start}-${end} of ${filteredDataFiles.value.length}`
+  const end = Math.min(objDfPage.value * objDfItemsPerPage.value, sortedDataFiles.value.length)
+  return `${start}-${end} of ${sortedDataFiles.value.length}`
 })
 
 const objDfPageSizeOptions = [
@@ -1852,6 +1952,12 @@ const handleObjDfPageChange = (newPage) => {
   if (newPage >= 1 && newPage <= objDfTotalPages.value) {
     objDfPage.value = newPage
   }
+}
+
+const handleObjDfSort = (newSortBy) => {
+  objDfSortBy.value = newSortBy.length > 0 ? newSortBy : [{ key: 'obs_date', order: 'desc' }]
+  // Reset to first page when sorting changes
+  objDfPage.value = 1
 }
 
 const handleObjDfItemsPerPageChange = () => {
@@ -2148,5 +2254,14 @@ watch(object, (val) => {
   min-height: 30px;
   padding-top: 5px;
   padding-bottom: 5px;
+}
+
+/* Center checkbox in table header */
+.custom-table :deep(th:first-child) {
+  text-align: center;
+}
+
+.custom-table :deep(td:first-child) {
+  text-align: center;
 }
 </style> 
