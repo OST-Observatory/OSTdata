@@ -1494,65 +1494,109 @@ const loadAvailableTags = async () => {
 }
 
 const initializeAladinLite = () => {
-  // Wait for Aladin v3 script (no jQuery dependency)
-  const maxRetries = 100 // 100 retries * 100ms = 10 seconds timeout
-  let retryCount = 0
+  // Only load Aladin script if not already loaded
+  if (!window.A) {
+    // Check if script is already being loaded
+    const existingScript = document.querySelector('script[src*="aladin.js"]')
+    if (existingScript) {
+      // Script is already being loaded, wait for it
+      const maxRetries = 100 // 100 retries * 100ms = 10 seconds timeout
+      let retryCount = 0
+      const checkScriptLoaded = () => {
+        if (window.A) {
+          doInitialize()
+        } else if (retryCount < maxRetries) {
+          retryCount++
+          setTimeout(checkScriptLoaded, 100)
+        } else {
+          handleLoadError()
+        }
+      }
+      checkScriptLoaded()
+      return
+    }
 
-  const checkAndInitialize = () => {
-    if (window.A && object.value?.ra && object.value?.dec) {
-      try {
-        window.A.aladin('#aladin-lite-div', {
-          survey: 'P/DSS2/color',
-          fov: 0.5,
-          target: `${object.value.ra} ${object.value.dec}`,
-          showZoomControl: false,
-          showLayersControl: false,
-          showGotoControl: false,
-          showFrame: false
-        })
-        aladinLoading.value = false
-      } catch (error) {
-        console.error('Error initializing Aladin Lite:', error)
+    // Load the script dynamically
+    const script = document.createElement('script')
+    script.type = 'text/javascript'
+    script.src = 'https://aladin.cds.unistra.fr/AladinLite/api/v3/latest/aladin.js'
+    script.charset = 'utf-8'
+    script.onload = () => {
+      doInitialize()
+    }
+    script.onerror = () => {
+      handleLoadError()
+    }
+    document.head.appendChild(script)
+    return
+  }
+
+  // Script already loaded, initialize directly
+  doInitialize()
+
+  function doInitialize() {
+    const maxRetries = 100 // 100 retries * 100ms = 10 seconds timeout
+    let retryCount = 0
+
+    const checkAndInitialize = () => {
+      if (window.A && object.value?.ra && object.value?.dec) {
+        try {
+          window.A.aladin('#aladin-lite-div', {
+            survey: 'P/DSS2/color',
+            fov: 0.5,
+            target: `${object.value.ra} ${object.value.dec}`,
+            showZoomControl: false,
+            showLayersControl: false,
+            showGotoControl: false,
+            showFrame: false
+          })
+          aladinLoading.value = false
+        } catch (error) {
+          console.error('Error initializing Aladin Lite:', error)
+          const aladinDiv = document.getElementById('aladin-lite-div')
+          if (aladinDiv) {
+            aladinDiv.innerHTML = `
+              <div style="padding: 20px; text-align: center; color: #666;">
+                <p>Sky Map not available</p>
+                <p>Coordinates: ${formatRA(object.value.ra)} ${formatDec(object.value.dec)}</p>
+              </div>
+            `
+          }
+          aladinLoading.value = false
+        }
+      } else if (window.A) {
         const aladinDiv = document.getElementById('aladin-lite-div')
         if (aladinDiv) {
           aladinDiv.innerHTML = `
             <div style="padding: 20px; text-align: center; color: #666;">
-              <p>Sky Map not available</p>
-              <p>Coordinates: ${formatRA(object.value.ra)} ${formatDec(object.value.dec)}</p>
+              <p>No coordinates available for sky map</p>
             </div>
           `
         }
         aladinLoading.value = false
+      } else if (retryCount < maxRetries) {
+        retryCount++
+        setTimeout(checkAndInitialize, 100)
+      } else {
+        handleLoadError()
       }
-    } else if (window.A) {
-      const aladinDiv = document.getElementById('aladin-lite-div')
-      if (aladinDiv) {
-        aladinDiv.innerHTML = `
-          <div style="padding: 20px; text-align: center; color: #666;">
-            <p>No coordinates available for sky map</p>
-          </div>
-        `
-      }
-      aladinLoading.value = false
-    } else if (retryCount < maxRetries) {
-      retryCount++
-      setTimeout(checkAndInitialize, 100)
-    } else {
-      // Aladin script failed to load after timeout
-      console.warn('Aladin Lite script failed to load after timeout')
-      const aladinDiv = document.getElementById('aladin-lite-div')
-      if (aladinDiv) {
-        aladinDiv.innerHTML = `
-          <div style="padding: 20px; text-align: center; color: #666;">
-            <p>Sky Map could not be loaded</p>
-          </div>
-        `
-      }
-      aladinLoading.value = false
     }
+
+    checkAndInitialize()
   }
 
-  checkAndInitialize()
+  function handleLoadError() {
+    console.warn('Aladin Lite script failed to load')
+    const aladinDiv = document.getElementById('aladin-lite-div')
+    if (aladinDiv) {
+      aladinDiv.innerHTML = `
+        <div style="padding: 20px; text-align: center; color: #666;">
+          <p>Sky Map could not be loaded</p>
+        </div>
+      `
+    }
+    aladinLoading.value = false
+  }
 }
 
 const openTagDialog = () => {
