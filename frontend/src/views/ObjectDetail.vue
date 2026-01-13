@@ -1494,99 +1494,115 @@ const loadAvailableTags = async () => {
 }
 
 const initializeAladinLite = () => {
-  // Only load Aladin script if not already loaded
-  if (!window.A) {
-    // Check if script is already being loaded
-    const existingScript = document.querySelector('script[src*="aladin.js"]')
-    if (existingScript) {
-      // Script is already being loaded, wait for it
+  // Check if coordinates are available
+  if (!object.value?.ra || !object.value?.dec) {
+    const aladinDiv = document.getElementById('aladin-lite-div')
+    if (aladinDiv) {
+      aladinDiv.innerHTML = `
+        <div style="padding: 20px; text-align: center; color: #666;">
+          <p>No coordinates available for sky map</p>
+        </div>
+      `
+    }
+    aladinLoading.value = false
+    return
+  }
+
+  // Helper function to initialize Aladin using A.init promise
+  const initAladin = () => {
+    if (window.A && window.A.init) {
+      window.A.init
+        .then(() => {
+          try {
+            window.A.aladin('#aladin-lite-div', {
+              survey: 'P/DSS2/color',
+              fov: 0.5,
+              target: `${object.value.ra} ${object.value.dec}`,
+              showZoomControl: false,
+              showLayersControl: false,
+              showGotoControl: false,
+              showFrame: false
+            })
+            aladinLoading.value = false
+          } catch (error) {
+            console.error('Error initializing Aladin Lite:', error)
+            const aladinDiv = document.getElementById('aladin-lite-div')
+            if (aladinDiv) {
+              aladinDiv.innerHTML = `
+                <div style="padding: 20px; text-align: center; color: #666;">
+                  <p>Sky Map not available</p>
+                  <p>Coordinates: ${formatRA(object.value.ra)} ${formatDec(object.value.dec)}</p>
+                </div>
+              `
+            }
+            aladinLoading.value = false
+          }
+        })
+        .catch((error) => {
+          console.error('Error waiting for Aladin initialization:', error)
+          handleLoadError()
+        })
+    } else {
+      // A.init not available yet, wait and retry
       const maxRetries = 100 // 100 retries * 100ms = 10 seconds timeout
       let retryCount = 0
-      const checkScriptLoaded = () => {
-        if (window.A) {
-          doInitialize()
+      const checkAndInit = () => {
+        if (window.A && window.A.init) {
+          initAladin()
         } else if (retryCount < maxRetries) {
           retryCount++
-          setTimeout(checkScriptLoaded, 100)
+          setTimeout(checkAndInit, 100)
         } else {
           handleLoadError()
         }
       }
-      checkScriptLoaded()
-      return
+      checkAndInit()
     }
+  }
 
-    // Load the script dynamically
-    const script = document.createElement('script')
-    script.type = 'text/javascript'
-    script.src = 'https://aladin.cds.unistra.fr/AladinLite/api/v3/latest/aladin.js'
-    script.charset = 'utf-8'
-    script.onload = () => {
-      doInitialize()
-    }
-    script.onerror = () => {
-      handleLoadError()
-    }
-    document.head.appendChild(script)
+  // Check if script is already loaded
+  if (window.A && window.A.init) {
+    // Script already loaded, initialize directly
+    initAladin()
     return
   }
 
-  // Script already loaded, initialize directly
-  doInitialize()
-
-  function doInitialize() {
-    const maxRetries = 100 // 100 retries * 100ms = 10 seconds timeout
+  // Check if script is already being loaded
+  const existingScript = document.querySelector('script[src*="aladin.js"]')
+  if (existingScript) {
+    // Script is already being loaded, wait for it
+    const maxRetries = 100
     let retryCount = 0
-
-    const checkAndInitialize = () => {
-      if (window.A && object.value?.ra && object.value?.dec) {
-        try {
-          window.A.aladin('#aladin-lite-div', {
-            survey: 'P/DSS2/color',
-            fov: 0.5,
-            target: `${object.value.ra} ${object.value.dec}`,
-            showZoomControl: false,
-            showLayersControl: false,
-            showGotoControl: false,
-            showFrame: false
-          })
-          aladinLoading.value = false
-        } catch (error) {
-          console.error('Error initializing Aladin Lite:', error)
-          const aladinDiv = document.getElementById('aladin-lite-div')
-          if (aladinDiv) {
-            aladinDiv.innerHTML = `
-              <div style="padding: 20px; text-align: center; color: #666;">
-                <p>Sky Map not available</p>
-                <p>Coordinates: ${formatRA(object.value.ra)} ${formatDec(object.value.dec)}</p>
-              </div>
-            `
-          }
-          aladinLoading.value = false
-        }
-      } else if (window.A) {
-        const aladinDiv = document.getElementById('aladin-lite-div')
-        if (aladinDiv) {
-          aladinDiv.innerHTML = `
-            <div style="padding: 20px; text-align: center; color: #666;">
-              <p>No coordinates available for sky map</p>
-            </div>
-          `
-        }
-        aladinLoading.value = false
+    const waitForScript = () => {
+      if (window.A && window.A.init) {
+        initAladin()
       } else if (retryCount < maxRetries) {
         retryCount++
-        setTimeout(checkAndInitialize, 100)
+        setTimeout(waitForScript, 100)
       } else {
         handleLoadError()
       }
     }
-
-    checkAndInitialize()
+    waitForScript()
+    return
   }
 
+  // Load the script dynamically
+  const script = document.createElement('script')
+  script.type = 'text/javascript'
+  script.src = 'https://aladin.cds.unistra.fr/AladinLite/api/v3/latest/aladin.js'
+  script.charset = 'utf-8'
+  script.onload = () => {
+    // Wait for A.init to be available
+    initAladin()
+  }
+  script.onerror = () => {
+    handleLoadError()
+  }
+  document.head.appendChild(script)
+
   function handleLoadError() {
-    console.warn('Aladin Lite script failed to load')
+    console.warn('Aladin Lite script failed to load or initialize')
     const aladinDiv = document.getElementById('aladin-lite-div')
     if (aladinDiv) {
       aladinDiv.innerHTML = `
