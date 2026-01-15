@@ -32,3 +32,17 @@ export function sameLocalDay(a, b) {
   return fmt.format(da) === fmt.format(db)
 }
 
+/**
+ * Convert Julian Date (JD) to JavaScript Date object
+ * @param {number} jd - Julian Date (e.g., 2459254.48)
+ * @returns {Date|null} - Date object or null if JD is invalid
+ */
+export function jdToDate(jd) {
+  if (!jd || typeof jd !== 'number' || jd <= 0 || jd < 2440587.5) {
+    return null
+  }
+  // JD to milliseconds: (JD - 2440587.5) * 86400000
+  // 2440587.5 is the JD for 1970-01-01 00:00:00 UTC
+  const milliseconds = (jd - 2440587.5) * 86400000
+  return new Date(milliseconds)
+}

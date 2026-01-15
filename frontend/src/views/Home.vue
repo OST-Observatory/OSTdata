@@ -112,7 +112,14 @@
                   {{ item.name }}
                 </router-link>
               </template>
-              <template #item.date="{ item }">{{ formatDate(item.start_time || item.date) }}</template>
+              <template #item.date="{ item }">
+                <template v-if="item.mid_observation_jd && item.mid_observation_jd > 0">
+                  {{ formatDate(jdToDate(item.mid_observation_jd)) }}
+                </template>
+                <template v-else>
+                  {{ formatDate(item.start_time || item.date) }}
+                </template>
+              </template>
               <template #item.main_targets="{ item }">
                 <div class="d-flex flex-wrap gap-1">
                   <v-chip
@@ -180,6 +187,7 @@
 import { ref } from 'vue'
 import { api } from '@/services/api'
 import { getStatusColor } from '@/utils/status'
+import { formatDateTime, jdToDate } from '@/utils/datetime'
 
 const query = ref('')
 const searching = ref(false)
@@ -294,10 +302,8 @@ const fetchRunsForObjects = async (objs) => {
 }
 
 const formatDate = (value) => {
-  try {
-    const d = new Date(value)
-    return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(d)
-  } catch { return '' }
+  if (!value) return 'N/A'
+  return formatDateTime(value, { dateStyle: 'short' })
 }
 
 const formatRA = (ra) => {

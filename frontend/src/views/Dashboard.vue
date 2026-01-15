@@ -159,7 +159,14 @@
                           </template>
                         </v-tooltip>
                       </td>
-                      <td class="text-secondary">{{ formatDate(run.start_time || run.date) }}</td>
+                      <td class="text-secondary">
+                        <template v-if="run.mid_observation_jd && run.mid_observation_jd > 0">
+                          {{ formatDate(jdToDate(run.mid_observation_jd)) }}
+                        </template>
+                        <template v-else>
+                          {{ formatDate(run.start_time || run.date) }}
+                        </template>
+                      </td>
                       <td>
                         <v-chip
                           :color="getStatusColor(run.status || run.reduction_status)"
@@ -278,7 +285,7 @@ import { ref, onMounted, watch } from 'vue'
 import { api } from '@/services/api'
 import { getStatusColor } from '@/utils/status'
 import { useNotifyStore } from '@/store/notify'
-import { formatDateTime } from '@/utils/datetime'
+import { formatDateTime, jdToDate } from '@/utils/datetime'
 import { useQuerySync } from '@/composables/useQuerySync'
 
 export default {
@@ -579,6 +586,7 @@ export default {
       recentObjects,
       headers,
       formatDate,
+      jdToDate,
       objectTypes,
       mapObjectTypeToCode,
       reductionStatuses,

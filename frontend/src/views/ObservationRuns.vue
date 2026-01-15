@@ -174,7 +174,12 @@
           </template>
 
           <template v-slot:item.mid_observation_jd="{ item }">
-            {{ formatDateTime(item.start_time || item.date, { dateStyle: 'short' }) }}
+            <template v-if="item.mid_observation_jd && item.mid_observation_jd > 0">
+              {{ formatDateTime(jdToDate(item.mid_observation_jd), { dateStyle: 'short' }) }}
+            </template>
+            <template v-else>
+              {{ formatDateTime(item.start_time || item.date, { dateStyle: 'short' }) }}
+            </template>
           </template>
 
           <template v-slot:item.main_targets="{ item }">
@@ -414,7 +419,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useDisplay } from 'vuetify'
 import { api } from '@/services/api'
-import { formatDateTime } from '@/utils/datetime'
+import { formatDateTime, jdToDate } from '@/utils/datetime'
 import { getStatusColor } from '@/utils/status'
 import { useQuerySync } from '@/composables/useQuerySync'
 import { useNotifyStore } from '@/store/notify'

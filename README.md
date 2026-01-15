@@ -318,7 +318,7 @@ User=ostdata
 Group=www-data
 WorkingDirectory=/path_to_home_dir/ostdata/OSTdata
 ExecStart=/path_to_home_dir/ostdata/ostdata_env/bin/gunicorn \
-          --access-logfile - \
+          --access-logfile /path_to_home_dir/ostdata/OSTdata/logs/gunicorn_access.log \
           --workers 3 \
           --timeout 600 \
           --error-logfile /path_to_home_dir/ostdata/OSTdata/logs/gunicorn_error.log \
