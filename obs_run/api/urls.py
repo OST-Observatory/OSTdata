@@ -12,6 +12,7 @@ from .runs import (
     dark_finder_search,
     parse_fits_header,
     get_instruments,
+    get_instrument_catalog,
 )
 from .views import (
     DataFileViewSet,
@@ -74,5 +75,6 @@ urlpatterns = [
     path('dark-finder/', dark_finder_search, name='dark_finder_search'),
     path('parse-fits-header/', parse_fits_header, name='parse_fits_header'),
     path('instruments/', get_instruments, name='get_instruments'),
+    path('instrument-catalog/', get_instrument_catalog, name='get_instrument_catalog'),
     path('', include(router.urls) ),
 ]

@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 from obs_run.models import ObservationRun
 from objects.models import Object
-from obs_run.utils import normalize_alias, INSTRUMENT_ALIASES, check_and_set_override, get_override_field_name
+from obs_run.utils import normalize_alias, INSTRUMENT_ALIASES, INSTRUMENT_CATALOG, check_and_set_override, get_override_field_name
 from .serializers import RunSerializer
 from .filter import RunFilter
 from ..plotting import (
@@ -799,14 +799,47 @@ def parse_fits_header(request):
         
         try:
             # Extract parameters using existing function
-            from obs_run.analyze_fits_header import extract_fits_header_info
+            from obs_run.analyze_fits_header import extract_fits_header_info, detect_instruments, disambiguate_instrument
             header_data = extract_fits_header_info(header)
+            
+            # Detect all possible instruments from chip parameters (primary method)
+            possible_instruments = detect_instruments(
+                header_data.get('naxis1', -1),
+                header_data.get('naxis2', -1),
+                header_data.get('pixel_size', -1),
+                header_data.get('binning_x', 1),
+                header_data.get('binning_y', 1),
+            )
+
+            header_instr = header_data.get('instrument', '') or ''
+            
+            # Determine final instrument
+            detected_instrument = None
+            if len(possible_instruments) == 1:
+                # Single match from parameters - use it
+                detected_instrument = possible_instruments[0]
+            elif len(possible_instruments) > 1:
+                # Multiple matches - try to disambiguate using header instrument
+                disambiguated = disambiguate_instrument(possible_instruments, header_instr)
+                if disambiguated:
+                    detected_instrument = disambiguated
+                elif header_instr:
+                    # If disambiguation fails but header has instrument, use header
+                    detected_instrument = header_instr
+                else:
+                    # No header instrument and multiple matches - use first match
+                    detected_instrument = possible_instruments[0]
+            elif header_instr:
+                # No match from parameters, but header has instrument - use header
+                detected_instrument = header_instr
+            # else: no instrument detected and no header instrument - leave empty
             
             # Return in same format as dark_finder_search request
             result = {
                 'exptime': header_data.get('exptime', -1),
                 'ccd_temp': header_data.get('ccd_temp', -999),
-                'instrument': header_data.get('instrument', ''),
+                'instrument': detected_instrument or '',  # Detected/recognized instrument
+                'header_instrument': header_instr,  # Original instrument from FITS header
                 'naxis1': int(header_data.get('naxis1', 0)),
                 'naxis2': int(header_data.get('naxis2', 0)),
                 'gain': header_data.get('gain', -1),
@@ -815,6 +848,7 @@ def parse_fits_header(request):
                 'offset': header_data.get('offset', -1),
                 'binning_x': header_data.get('binning_x', 1),
                 'binning_y': header_data.get('binning_y', 1),
+                'pixel_size': header_data.get('pixel_size', -1),
             }
             
             return Response(result)
@@ -865,4 +899,36 @@ def get_instruments(request):
         logger.exception("get_instruments failed: %s", e)
         return Response({'error': str(e)}, status=400)
 
+
+@extend_schema(
+    summary='Get instrument catalog with dimensions',
+    tags=['Dark Finder'],
+)
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_instrument_catalog(request):
+    """
+    Get instrument catalog with pixel dimensions for auto-filling.
+    Returns the same catalog used by detect_instrument().
+    """
+    try:
+        # Use centralized instrument catalog from utils
+        catalog = INSTRUMENT_CATALOG
+        
+        # Return simplified catalog for frontend
+        catalog_simple = [
+            {
+                'name': item['name'],
+                'width': item['w'],
+                'height': item['h'],
+                'pixel_size_um': item['px_um']
+            }
+            for item in catalog
+        ]
+        
+        return Response({'catalog': catalog_simple})
+        
+    except Exception as e:
+        logger.exception("get_instrument_catalog failed: %s", e)
+        return Response({'error': str(e)}, status=400)
 

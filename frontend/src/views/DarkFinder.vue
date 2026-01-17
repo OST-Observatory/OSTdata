@@ -3,7 +3,7 @@
     <h1 class="text-h4 mb-4">Dark Finder</h1>
 
     <v-tabs v-model="tab" class="mb-4">
-      <v-tab value="manual">Manuelle Eingabe</v-tab>
+      <v-tab value="manual">Manual Input</v-tab>
       <v-tab value="upload">FITS Upload</v-tab>
     </v-tabs>
 
@@ -254,6 +254,14 @@
                     required
                     clearable
                   />
+                  <v-alert
+                    v-if="parsedParams.header_instrument && !parsedParams.instrument"
+                    type="info"
+                    density="compact"
+                    class="mt-2"
+                  >
+                    Header instrument: {{ parsedParams.header_instrument }} (not recognized)
+                  </v-alert>
                 </v-col>
                 <v-col cols="12" md="3">
                   <v-text-field
@@ -419,7 +427,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { api } from '@/services/api'
 import { useNotifyStore } from '@/store/notify'
 
@@ -435,6 +443,7 @@ const parseError = ref('')
 const parseSuccess = ref(false)
 const fitsFile = ref(null)
 const instruments = ref([])
+const instrumentCatalog = ref([])
 const results = ref([])
 const selected = ref([])
 const parsedParams = ref(null)
@@ -479,6 +488,31 @@ const loadInstruments = async () => {
   }
 }
 
+const loadInstrumentCatalog = async () => {
+  try {
+    const data = await api.getInstrumentCatalog()
+    instrumentCatalog.value = data.catalog || []
+  } catch (e) {
+    console.error('Failed to load instrument catalog:', e)
+  }
+}
+
+// Watch for instrument selection in manual tab to auto-fill pixel dimensions
+watch(() => params.value.instrument, (newInstrument) => {
+  if (newInstrument && instrumentCatalog.value.length > 0) {
+    const catalogItem = instrumentCatalog.value.find(
+      item => item.name === newInstrument
+    )
+    if (catalogItem) {
+      // Only auto-fill if dimensions are not already set
+      if (!params.value.naxis1 && !params.value.naxis2) {
+        params.value.naxis1 = catalogItem.width
+        params.value.naxis2 = catalogItem.height
+      }
+    }
+  }
+})
+
 const onFileSelected = async () => {
   if (!fitsFile.value) return
   
@@ -488,10 +522,16 @@ const onFileSelected = async () => {
   
   try {
     const data = await api.parseFitsHeader(fitsFile.value)
+    
+    // Get detected instrument (recognized from dimensions/pixel size) and header instrument
+    const detectedInstrument = data.instrument || ''
+    const headerInstrument = data.header_instrument || ''
+    
     parsedParams.value = {
       exptime: data.exptime || null,
       ccd_temp: data.ccd_temp !== -999 ? data.ccd_temp : null,
-      instrument: data.instrument || '',
+      instrument: detectedInstrument,  // Automatically set if detected
+      header_instrument: headerInstrument,  // Original from header (for display if not detected)
       naxis1: data.naxis1 || null,
       naxis2: data.naxis2 || null,
       gain: data.gain !== -1 ? data.gain : -1,
@@ -501,6 +541,14 @@ const onFileSelected = async () => {
       binning_x: data.binning_x || 1,
       binning_y: data.binning_y || 1,
     }
+    
+    // Show notification if instrument was automatically detected
+    if (detectedInstrument) {
+      notify.success(`Instrument automatically detected: ${detectedInstrument}`)
+    } else if (headerInstrument) {
+      notify.info(`Could not recognize instrument from dimensions. Header shows: ${headerInstrument}`)
+    }
+    
     parseSuccess.value = true
   } catch (e) {
     const errorMsg = e?.data?.error || e?.message || 'Failed to parse FITS header'
@@ -746,6 +794,7 @@ const formatDate = (dateStr) => {
 
 onMounted(() => {
   loadInstruments()
+  loadInstrumentCatalog()
 })
 </script>
 

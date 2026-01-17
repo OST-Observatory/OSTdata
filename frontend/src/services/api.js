@@ -411,4 +411,5 @@ export const api = {
     })
   },
   getInstruments: () => fetchWithAuth('/runs/instruments/'),
+  getInstrumentCatalog: () => fetchWithAuth('/runs/instrument-catalog/'),
 }

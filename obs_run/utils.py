@@ -6,19 +6,42 @@ Also includes override flag management functions.
 
 # Simple alias maps to normalize common instrument/telescope names
 INSTRUMENT_ALIASES = {
-    'sbig st-8 3 ccd camera': 'ST-8',
-    'sbig st-8': 'ST-8',
-    'sbig st8': 'ST-8',
-    'st-8': 'ST-8',
-    'st8': 'ST-8',
-    'QHYCCD-Cameras-Capture': 'QHY600M or QHY268M',
-    'QHY600M': 'QHY600M',
-    'QHY268M': 'QHY268M',
-    'QHY600': 'QHY600M',
-    'QHY268': 'QHY268M',
-    'SBIG ST-i CCD Camera': 'ST-i',
-    'SBIG ST-i': 'ST-i',
-    'SBIG ST-i CCD': 'ST-i',
+    'SBIG ST-i CCD Camera': 'SBIG ST-i',
+    'SBIG ST-i': 'SBIG ST-i',
+    'SBIG ST-i CCD': 'SBIG ST-i',
+    'SBIG ST-7': 'SBIG ST-7',
+    'ST-7': 'SBIG ST-7',
+    'sbig st-8 3 ccd camera': 'SBIG ST-8',
+    'sbig st-8': 'SBIG ST-8',
+    'sbig st8': 'SBIG ST-8',
+    'st-8': 'SBIG ST-8',
+    'st8': 'SBIG ST-8',
+    'SBIG STF-8300 CCD Camera': 'SBIG STF-8300',
+    'SBIG STF-8300': 'SBIG STF-8300',
+    'QHYCCD-Cameras-Capture': 'QHY 600M or QHY 268M',
+    'QHY600M': 'QHY 600M',
+    'QHY600': 'QHY 600M',
+    'QHY CCD QHY600M-3eda8b4': 'QHY 600M',
+    'QHY CCD QHY600M-62e19d4': 'QHY 600M',
+    'QHY268': 'QHY 268M',
+    'QHY268M': 'QHY 268M',
+    'QHY CCD QHY268M-92149f4': 'QHY 268M',
+    'QHY CCD QHY5III485C-131': 'QHY 5III485C',
+    'QHY CCD QHY5III485C-131e734a8677559cd': 'QHY 5III485C',
+    'QHY CCD QHY5III462C-888': 'QHY 5III462C',
+    'QHY CCD QHY5III462C-888c314299c69d610': 'QHY 5III462C',
+    'ZWO ASI2600MC Pro': 'ZWO ASI2600MC Pro',
+    'ZWO ASI2600MC Pro(2600)': 'ZWO ASI2600MC Pro',
+    'ZWO CCD ASI2600MC Pro(2600)': 'ZWO ASI2600MC Pro',
+    'ZWO ASI294MM Pro': 'ZWO ASI294MM Pro',
+    'ZWO CCD ASI294MM Pro': 'ZWO ASI294MM Pro',
+    'ASI174MM': 'ZWO ASI174MM',
+    'ZWO ASI174MM': 'ZWO ASI174MM',
+    'ASI220MM': 'ZWO ASI220MM',
+    'ZWO ASI220MM': 'ZWO ASI220MM',
+    'ASI678MM': 'ZWO ASI678MM',
+    'ZWO ASI678MM': 'ZWO ASI678MM',
+    'Skyris 445C': 'Skyris 445C',
 }
 
 TELESCOPE_ALIASES = {
@@ -27,6 +50,24 @@ TELESCOPE_ALIASES = {
     'sky-watcher': 'SkyWatcher',
     'Planewave CDK20': 'CDK20',
 }
+
+# Instrument catalog with pixel dimensions for detection and API endpoints
+INSTRUMENT_CATALOG = [
+    { 'name': 'QHY 600M', 'px_um': 3.76, 'w': 9576, 'h': 6388, 'w_alt': 9600, 'h_alt': 6422 },
+    { 'name': 'QHY 268M', 'px_um': 3.76, 'w': 6252, 'h': 4176, 'w_alt': 6280, 'h_alt': 4210 },
+    { 'name': 'QHY 5III485C', 'px_um': 2.90, 'w': 3864, 'h': 2180 },
+    { 'name': 'QHY 5III462C', 'px_um': 2.90, 'w': 1920, 'h': 1080 },
+    { 'name': 'SBIG ST8',     'px_um': 9.00, 'w': 1530, 'h': 1020 },
+    { 'name': 'SBIG ST7',     'px_um': 9.00, 'w': 765,  'h': 510  },
+    { 'name': 'SBIG STF-8300M','px_um': 5.40,'w': 3326, 'h': 2504 },
+    { 'name': 'SBIG ST-i',    'px_um': 7.40, 'w': 648,  'h': 486  },
+    { 'name': 'Skyris 445C', 'px_um': 3.75, 'w': 1280, 'h': 960 },
+    { 'name': 'ZWO ASI174MM', 'px_um': 5.86, 'w': 1936, 'h': 1216 },
+    { 'name': 'ZWO ASI220MM', 'px_um': 4.00, 'w': 1920, 'h': 1080 },
+    { 'name': 'ZWO ASI678MM', 'px_um': 2.00, 'w': 3840, 'h': 2160 },
+    { 'name': 'ZWO ASI2600MC Pro', 'px_um': 3.76, 'w': 6248, 'h': 4176 },
+    { 'name': 'ZWO ASI294MM Pro', 'px_um': 2.3, 'w': 8288, 'h': 5644 }
+]
 
 # Normalize alias maps to lowercase keys for robust, case-insensitive lookup
 INSTRUMENT_ALIASES = { (k.strip().lower() if isinstance(k, str) else k): v for k, v in INSTRUMENT_ALIASES.items() }
