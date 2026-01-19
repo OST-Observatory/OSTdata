@@ -317,15 +317,19 @@ After=network.target
 User=ostdata
 Group=www-data
 WorkingDirectory=/path_to_home_dir/ostdata/OSTdata
-ExecStart=/path_to_home_dir/ostdata/ostdata_env/bin/gunicorn \
-          --access-logfile /path_to_home_dir/ostdata/OSTdata/logs/gunicorn_access.log \
-          --workers 3 \
+ExecStart=/path_to_home_dir/ostdata/ostdata_env/bin/gunicorn \--workers 3 \
           --timeout 600 \
-          --error-logfile /path_to_home_dir/ostdata/OSTdata/logs/gunicorn_error.log \
+          --access-logfile - \
+          --error-logfile - \
           --capture-output \
           --log-level info \
           --bind unix:/path_to_home_dir/ostdata/run/gunicorn.sock \
           ostdata.wsgi:application
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=gunicorn_ostdata
+
 
 [Install]
 WantedBy=multi-user.target
@@ -902,16 +906,19 @@ LDAP_GROUP_STUDENT_DN=cn=students,ou=groups,dc=example,dc=com
 1. **Authentication**: When a user logs in, Django attempts to authenticate against LDAP using the configured server and user search settings.
 
 2. **Group Membership**: The system checks group membership in two ways:
+   
    - **Primary method**: Uses `memberOf` attribute (standard LDAP/Active Directory)
    - **Fallback method**: If `memberOf` doesn't match, checks `memberUid` attribute (Posix groups)
 
 3. **Role Assignment**: Based on group membership, users are assigned roles:
+   
    - `is_staff`: Set if user is member of `LDAP_GROUP_STAFF_DN`
    - `is_superuser`: Set if user is member of `LDAP_GROUP_SUPERUSER_DN`
    - `is_supervisor`: Set if user is member of `LDAP_GROUP_SUPERVISOR_DN` (custom field)
    - `is_student`: Set if user is member of `LDAP_GROUP_STUDENT_DN` (custom field)
 
 4. **User Attributes**: The following LDAP attributes are mapped to Django user fields:
+   
    - `givenName` → `first_name`
    - `sn` → `last_name`
    - `mail` → `email`
@@ -920,11 +927,13 @@ LDAP_GROUP_STUDENT_DN=cn=students,ou=groups,dc=example,dc=com
 ## Testing LDAP Configuration
 
 1. **Health Check**: Navigate to `/admin/health` in the admin interface. The LDAP section shows:
+   
    - `configured`: Whether LDAP is configured (server URI is set)
    - `can_import`: Whether the Python `ldap` module is available
    - `bind_ok`: Whether the LDAP bind operation succeeds
 
 2. **LDAP Test Tool**: Use the admin LDAP test tool at `/admin/users`:
+   
    - Enter a username to test user search
    - The tool displays user attributes and group membership
    - Shows both `memberOf` and `memberUid` group membership
@@ -934,16 +943,19 @@ LDAP_GROUP_STUDENT_DN=cn=students,ou=groups,dc=example,dc=com
 - **"LDAP not configured"**: Ensure `LDAP_SERVER_URI` is set in your `.env` file and Django has been restarted.
 
 - **"bind_ok: Failed"**: Check:
+  
   - LDAP server is reachable
   - `LDAP_BIND_DN` and `LDAP_BIND_PASSWORD` are correct (if required)
   - Firewall rules allow connection to LDAP server
 
 - **Login fails**: Verify:
+  
   - User exists in LDAP and matches `LDAP_USER_FILTER`
   - User password is correct
   - `LDAP_USER_SEARCH_BASE` is correct
 
 - **Group membership not working**: Check:
+  
   - Group DNs are correct and match your LDAP structure
   - User is actually a member of the groups (check via LDAP test tool)
   - If using `memberUid`, ensure the group has `memberUid` attributes set
