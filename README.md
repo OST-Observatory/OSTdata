@@ -188,10 +188,7 @@ cp ostdata/.env.example  ostdata/.env
 
 ### 2. Adjust the .env file
 
-In `.env` specify the secret Django security key, the PostgreSQL database password, the
-server IP and URL, as well as the hostname of the production machine.
-If a custom log directory is required or a different database user was defined during setup,
-specify that here as well.
+In `.env` specify the secret Django security key, the PostgreSQL database password, the server IP and URL, as well as the hostname of the production machine.
 
 ```
 SECRET_KEY=generate_and_add_your_secret_security_key_here
@@ -201,8 +198,7 @@ DATABASE_PASSWORD=your_database_password
 DATABASE_HOST=localhost
 DATABASE_PORT=
 DEVICE=the_name_of_your_device_used_in_production
-ALLOWED_HOSTS=server_url,server_ip,localhost
-LOG_DIR=logs/
+ALLOWED_HOSTS=server_url,server_ip,localhostlog
 DEFAULT_FROM_EMAIL=example@email.com
 # When running under a URL prefix (e.g. /data_archive), ensure STATIC_URL matches:
 # If FORCE_SCRIPT_NAME=/data_archive → STATIC_URL=/data_archive/static/
@@ -370,27 +366,6 @@ Check status:
 ```
 sudo systemctl status gunicorn_ostdata
 ```
-
-## Set up logrotate
-
-To enable log rotation the following file should be added to /etc/logrotate.d:
-
-```
-/home/ostdata/www/ostdata/OSTdata/logs/*.log {
-  rotate 14
-  daily
-  compress
-  delaycompress
-  nocreate
-  notifempty
-  missingok
-  su ostdata www-data
-}
-```
-
-Change user name, group, and the log directory as needed.
-
-Alternatively, `logging.handlers.RotatingFileHandler` can be configured as the logging handler in `settings_production.py`.
 
 ## Configure Apache web server
 
