@@ -873,12 +873,20 @@
                   </template>
                   <template v-slot:item.main_target="{ item }">
                     <template v-if="(item.exposure_type || '').toUpperCase() === 'LI'">
-                      <router-link
-                        v-if="item.main_target && item.main_target.trim()"
-                        :to="`/objects/${getObjectIdByTargetName(item.main_target)}`"
-                        class="text-decoration-none primary--text"
-                      >{{ item.main_target }}</router-link>
-                      <span v-else>{{ item.main_target || '—' }}</span>
+                      <template v-if="item.header_target_name && item.header_target_name.trim() && item.header_target_name !== '-'">
+                        {{ item.header_target_name }}
+                        <template v-if="item.main_target && item.main_target.trim() && item.main_target !== '-'">
+                          <span class="text-secondary"> (</span>
+                          <router-link
+                            v-if="getObjectIdByTargetName(item.main_target)"
+                            :to="`/objects/${getObjectIdByTargetName(item.main_target)}`"
+                            class="text-decoration-none primary--text"
+                          >{{ item.main_target }}</router-link>
+                          <span v-else>{{ item.main_target }}</span>
+                          <span class="text-secondary">)</span>
+                        </template>
+                      </template>
+                      <span v-else>{{ item.header_target_name || '—' }}</span>
                     </template>
                     <span v-else class="text-secondary">—</span>
                   </template>

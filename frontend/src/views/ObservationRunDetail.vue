@@ -609,12 +609,20 @@
                   <td>{{ formatTimeOnly(df.obs_date) }}</td>
                   <td>
                     <template v-if="isLight(df)">
-                      <router-link
-                        v-if="getObjectIdByTargetName(df.main_target)"
-                        :to="`/objects/${getObjectIdByTargetName(df.main_target)}`"
-                        class="text-decoration-none primary--text"
-                      >{{ df.main_target }}</router-link>
-                      <span v-else>{{ df.main_target || '—' }}</span>
+                      <template v-if="df.header_target_name && df.header_target_name.trim() && df.header_target_name !== '-'">
+                        {{ df.header_target_name }}
+                        <template v-if="df.main_target && df.main_target.trim() && df.main_target !== '-'">
+                          <span class="text-secondary"> (</span>
+                          <router-link
+                            v-if="getObjectIdByTargetName(df.main_target)"
+                            :to="`/objects/${getObjectIdByTargetName(df.main_target)}`"
+                            class="text-decoration-none primary--text"
+                          >{{ df.main_target }}</router-link>
+                          <span v-else>{{ df.main_target }}</span>
+                          <span class="text-secondary">)</span>
+                        </template>
+                      </template>
+                      <span v-else>{{ df.header_target_name || '—' }}</span>
                     </template>
                     <span v-else class="text-secondary">—</span>
                   </td>
@@ -1173,6 +1181,7 @@ const filteredDataFiles = computed(() => {
   if (dfFilterBinning.value) {
     items = items.filter(f => (f.binning || '').toLowerCase() === String(dfFilterBinning.value).toLowerCase())
   }
+  console.log('items', items);
   return items
 })
 
@@ -1288,6 +1297,9 @@ const targetNameToObjectId = computed(() => {
   const map = new Map()
   for (const o of objects.value || []) {
     if (o?.name) {
+      const normalized = String(o.name).toLowerCase().replace(/\s+/g, '')
+      map.set(normalized, o.pk || o.id)
+      // Also add original name (lowercase) for exact matches
       map.set(String(o.name).toLowerCase(), o.pk || o.id)
     }
   }
@@ -1296,7 +1308,11 @@ const targetNameToObjectId = computed(() => {
 
 const getObjectIdByTargetName = (name) => {
   if (!name) return null
-  return targetNameToObjectId.value.get(String(name).toLowerCase()) || null
+  const normalized = String(name).toLowerCase().replace(/\s+/g, '')
+  // Try normalized (without spaces) first, then exact match
+  return targetNameToObjectId.value.get(normalized) || 
+         targetNameToObjectId.value.get(String(name).toLowerCase()) || 
+         null
 }
 
 const isLight = (df) => {

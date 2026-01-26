@@ -66,7 +66,8 @@ INSTRUMENT_CATALOG = [
     { 'name': 'ZWO ASI220MM', 'px_um': 4.00, 'w': 1920, 'h': 1080 },
     { 'name': 'ZWO ASI678MM', 'px_um': 2.00, 'w': 3840, 'h': 2160 },
     { 'name': 'ZWO ASI2600MC Pro', 'px_um': 3.76, 'w': 6248, 'h': 4176 },
-    { 'name': 'ZWO ASI294MM Pro', 'px_um': 2.3, 'w': 8288, 'h': 5644 }
+    { 'name': 'ZWO ASI294MM Pro', 'px_um': 2.3, 'w': 8288, 'h': 5644 },
+    { 'name': 'omegon veTEC 533C', 'px_um': 3.8, 'w': 3008, 'h': 3008 }
 ]
 
 # Normalize alias maps to lowercase keys for robust, case-insensitive lookup
@@ -207,6 +208,25 @@ def was_manually_changed(instance, field_name: str) -> bool:
         return latest_history.history_user is not None
     except Exception:
         return False
+
+
+def object_has_any_override(obj) -> bool:
+    """
+    Check if an Object has any override flags set.
+    
+    Args:
+        obj: Object instance
+        
+    Returns:
+        True if any override flag is set, False otherwise
+    """
+    return any([
+        obj.name_override, obj.is_public_override, obj.ra_override,
+        obj.dec_override, obj.first_hjd_override, obj.is_main_override,
+        obj.photometry_override, obj.spectroscopy_override,
+        obj.simbad_resolved_override, obj.object_type_override,
+        obj.note_override
+    ])
 
 
 def detect_user_changes_from_history(instance) -> list:

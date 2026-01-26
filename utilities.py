@@ -26,7 +26,7 @@ django.setup()
 
 from objects.models import Object
 from obs_run.models import ObservationRun, DataFile
-from obs_run.utils import should_allow_auto_update
+from obs_run.utils import should_allow_auto_update, object_has_any_override
 logger = logging.getLogger(__name__)
 
 import time
@@ -736,7 +736,7 @@ def add_new_data_file(path_to_file, observation_run, print_to_terminal=False):
     return True
 
 
-def evaluate_data_file(data_file, observation_run, print_to_terminal=False):
+def evaluate_data_file(data_file, observation_run, print_to_terminal=False, skip_if_object_has_overrides=True):
     """
     Evaluate data file and add associated objects
 
@@ -751,7 +751,31 @@ def evaluate_data_file(data_file, observation_run, print_to_terminal=False):
     print_to_terminal           : `boolean`, optional
         If True information will be printed to the terminal.
         Default is ``False``.
+    
+    skip_if_object_has_overrides : `boolean`, optional
+        If True, skip re-assignment if existing objects have override flags set.
+        Default is ``True``.
+        
+    Returns
+    -------
+    dict
+        Dictionary with status information:
+        - 'status': 'assigned', 'skipped', 'new_object_created', 'no_match'
+        - 'object': assigned object (if any)
+        - 'skipped_reason': reason for skipping (if skipped)
+        - 'new_object': newly created object (if created)
     """
+    # Check if data_file is already associated with objects that have override flags
+    existing_objects = list(data_file.object_set.all())
+    if existing_objects and skip_if_object_has_overrides:
+        for existing_obj in existing_objects:
+            if object_has_any_override(existing_obj):
+                return {
+                    'status': 'skipped',
+                    'skipped_reason': 'object_has_overrides',
+                    'object': existing_obj
+                }
+    
     #   Set data file information from file header data
     data_file.set_info()
     data_file.save()
@@ -767,8 +791,6 @@ def evaluate_data_file(data_file, observation_run, print_to_terminal=False):
         data_file.save(update_fields=['file_size', 'content_hash'])
     except Exception:
         pass
-    print('data_file.exposure_type:')
-    print(data_file.exposure_type)
 
     target = (data_file.main_target or '').strip()
     expo_type = data_file.exposure_type
@@ -851,6 +873,11 @@ def evaluate_data_file(data_file, observation_run, print_to_terminal=False):
             #         obj = None
 
         if obj is not None:
+            # Remove old associations if this is a different object
+            old_objects = list(data_file.object_set.exclude(pk=obj.pk).all())
+            for old_obj in old_objects:
+                old_obj.datafiles.remove(data_file)
+            
             obj.datafiles.add(data_file)
             obj.observation_run.add(observation_run)
             
@@ -873,8 +900,10 @@ def evaluate_data_file(data_file, observation_run, print_to_terminal=False):
             else:
                 obj.save()
 
-            #   Set datafile target name to Simbad resolved name
-            if obj.simbad_resolved:
+            #   Set datafile target name to identified object name
+            #   This should always be updated when an object is identified,
+            #   regardless of whether it was resolved via Simbad or not
+            if should_allow_auto_update(data_file, 'main_target'):
                 data_file.main_target = obj.name
                 data_file.save()
 
@@ -887,6 +916,8 @@ def evaluate_data_file(data_file, observation_run, print_to_terminal=False):
                     name=target,
                     info_from_header=True,
                 )
+            
+            return {'status': 'assigned', 'object': obj}
 
         #   Handling of Solar system objects
         elif obj is None and target in solar_system:
@@ -906,6 +937,7 @@ def evaluate_data_file(data_file, observation_run, print_to_terminal=False):
             obj.observation_run.add(observation_run)
             obj.datafiles.add(data_file)
             obj.save()
+            return {'status': 'new_object_created', 'new_object': obj}
 
         #   Handling of special targets
         elif obj is None and target in special_targets:
@@ -1094,10 +1126,10 @@ def evaluate_data_file(data_file, observation_run, print_to_terminal=False):
                         href=simbad_href,
                     )
 
-                #   Set datafile target name to Simbad resolved
-                #   name
-                data_file.main_target = object_name
-                data_file.save()
+                #   Set datafile target name to Simbad resolved name
+                if should_allow_auto_update(data_file, 'main_target'):
+                    data_file.main_target = object_name
+                    data_file.save()
             elif verification_updated:
                 # If verification updated the object, ensure header name is added as identifier
                 # (it might have been removed when identifiers were replaced)
@@ -1113,11 +1145,14 @@ def evaluate_data_file(data_file, observation_run, print_to_terminal=False):
                 
                 # Update datafile target name to match updated object name
                 obj.refresh_from_db()
-                data_file.main_target = obj.name
-                data_file.save()
-
-        if print_to_terminal:
-            print()
+                if should_allow_auto_update(data_file, 'main_target'):
+                    data_file.main_target = obj.name
+                    data_file.save()
+            
+            return {'status': 'new_object_created', 'new_object': obj}
+        
+        # No object found or matched
+        return {'status': 'no_match'}
 
 
 def analyze_and_update_exposure_type(file_path, plot_histogram=False,

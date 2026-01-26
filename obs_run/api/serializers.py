@@ -313,6 +313,7 @@ class DataFileSerializer(ModelSerializer):
             'naxis1',
             'naxis2',
             'main_target',
+            'header_target_name',
             'ra',
             'dec',
             'ra_hms',
