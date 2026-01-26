@@ -88,7 +88,11 @@ class Command(BaseCommand):
                         
                         # Safety check: ensure result is a dictionary
                         if not result or not isinstance(result, dict):
-                            logger.warning(f'Unexpected result type from evaluate_data_file for file {df.pk}: {type(result)}')
+                            logger.warning(
+                                f'Unexpected result type from evaluate_data_file for file {df.pk}: {type(result)}. '
+                                f'File: {Path(df.datafile).name}, Target: {df.main_target}, '
+                                f'Exposure Type: {df.exposure_type}, RA: {df.ra}, DEC: {df.dec}'
+                            )
                             evaluated += 1
                             continue
                         

@@ -829,344 +829,372 @@ def evaluate_data_file(data_file, observation_run, print_to_terminal=False, skip
             data_file.dec is not None and
             data_file.dec != 0.
     ):
-        #   Tolerance in degree
-        # t = 0.1
-        t = 0.5
-        if ('20210224' in str(data_file.datafile) or
-                '20220106' in str(data_file.datafile)):
-            t = 1.0
+        try:
+            #   Tolerance in degree
+            # t = 0.1
+            t = 0.5
+            if ('20210224' in str(data_file.datafile) or
+                    '20220106' in str(data_file.datafile)):
+                t = 1.0
 
-        if target in special_targets or target in solar_system:
-            objs = Object.objects.filter(name__icontains=target)
-        else:
-            # First, filter by a bounding box to reduce candidates
-            bbox = Object.objects \
-                .filter(ra__range=(data_file.ra - t, data_file.ra + t)) \
-                .filter(dec__range=(data_file.dec - t, data_file.dec + t))
-            # Annotate squared angular distance (no sqrt needed for ordering)
-            dist_sq = ExpressionWrapper(
-                (F('ra') - data_file.ra) * (F('ra') - data_file.ra) +
-                (F('dec') - data_file.dec) * (F('dec') - data_file.dec),
-                output_field=FloatField()
-            )
-            objs = bbox.annotate(distance_sq=dist_sq).order_by('distance_sq')
-
-        if objs.exists():
-            if print_to_terminal:
-                print('Object already known (target: {})'.format(target))
-            obj = objs.first()
-            # Extra safety: if not in bbox case, also try exact/iexact name match
-            # Update object fields only if override flags allow it
-            if obj:
-                if should_allow_auto_update(obj, 'is_main'):
-                    obj.is_main = True
-                obj.save()
-                # Update first_hjd only if override flag allows
-                if should_allow_auto_update(obj, 'first_hjd'):
-                    if (obj.first_hjd == 0. or
-                            obj.first_hjd == -1. or
-                            data_file.hjd < obj.first_hjd):
-                        obj.first_hjd = data_file.hjd
-                        obj.save(update_fields=['first_hjd'])
-        else:
-            obj = None
-            # # Fallback 1: strict name match
-            # by_name = Object.objects.filter(name__iexact=target)
-            # if by_name.exists():
-            #     obj = by_name.first()
-            # else:
-            #     by_name_ic = Object.objects.filter(name__icontains=target)
-            #     if by_name_ic.exists():
-            #         obj = by_name_ic.first()
-            #     else:
-            #         obj = None
-
-        if obj is not None:
-            if not dry_run:
-                # Remove old associations if this is a different object
-                old_objects = list(data_file.object_set.exclude(pk=obj.pk).all())
-                for old_obj in old_objects:
-                    old_obj.datafiles.remove(data_file)
-                
-                obj.datafiles.add(data_file)
-                obj.observation_run.add(observation_run)
-                
-                # Update object fields only if override flags allow it
-                update_fields = []
-                
-                if should_allow_auto_update(obj, 'is_main'):
-                    obj.is_main = True
-                    update_fields.append('is_main')
-
-                #   Update JD the object was first observed
-                if should_allow_auto_update(obj, 'first_hjd'):
-                    if (obj.first_hjd == 0. or
-                            obj.first_hjd > data_file.hjd):
-                        obj.first_hjd = data_file.hjd
-                        update_fields.append('first_hjd')
-
-                if update_fields:
-                    obj.save(update_fields=update_fields)
-                else:
-                    obj.save()
-
-                #   Set datafile target name to identified object name
-                #   This should always be updated when an object is identified,
-                #   regardless of whether it was resolved via Simbad or not
-                if should_allow_auto_update(data_file, 'main_target'):
-                    data_file.main_target = obj.name
-                    data_file.save()
-
-                #   Add header name as an alias
-                identifiers = obj.identifier_set.filter(
-                    name__exact=target
+            if target in special_targets or target in solar_system:
+                objs = Object.objects.filter(name__icontains=target)
+            else:
+                # First, filter by a bounding box to reduce candidates
+                bbox = Object.objects \
+                    .filter(ra__range=(data_file.ra - t, data_file.ra + t)) \
+                    .filter(dec__range=(data_file.dec - t, data_file.dec + t))
+                # Annotate squared angular distance (no sqrt needed for ordering)
+                dist_sq = ExpressionWrapper(
+                    (F('ra') - data_file.ra) * (F('ra') - data_file.ra) +
+                    (F('dec') - data_file.dec) * (F('dec') - data_file.dec),
+                    output_field=FloatField()
                 )
-                if len(identifiers) == 0:
-                    obj.identifier_set.create(
-                        name=target,
-                        info_from_header=True,
-                    )
-            
-            return {'status': 'assigned', 'object': obj}
+                objs = bbox.annotate(distance_sq=dist_sq).order_by('distance_sq')
 
-        #   Handling of Solar system objects
-        elif obj is None and target in solar_system:
-            if print_to_terminal:
-                print('New object (target: {})'.format(target))
-            #     Make a new object
-            obj = Object(
-                name=target,
-                ra=data_file.ra,
-                dec=data_file.dec,
-                object_type='SO',
-                simbad_resolved=False,
-                first_hjd=data_file.hjd,
-                is_main=True,
-            )
-            if not dry_run:
-                obj.save()
-                obj.observation_run.add(observation_run)
-                obj.datafiles.add(data_file)
-                obj.save()
-            return {'status': 'new_object_created', 'new_object': obj}
-
-        #   Handling of special targets
-        elif obj is None and target in special_targets:
-            if print_to_terminal:
-                print('New object (target: {})'.format(target))
-            #     Make a new object
-            obj = Object(
-                name=target,
-                ra=data_file.ra,
-                dec=data_file.dec,
-                object_type='UK',
-                simbad_resolved=False,
-                first_hjd=data_file.hjd,
-            )
-            if not dry_run:
-                obj.save()
-                obj.observation_run.add(observation_run)
-                obj.datafiles.add(data_file)
-                obj.save()
-            return {'status': 'new_object_created', 'new_object': obj}
-        else:
-            if print_to_terminal:
-                print('New object (target: {})'.format(target))
-            #   Set Defaults
-            object_ra = data_file.ra
-            object_dec = data_file.dec
-            object_type = 'UK'
-            object_simbad_resolved = False
-            object_name = target
-
-            #   Query Simbad for object name (safe, with variants and rate-limit)
-            simbad_tbl = _query_object_variants(target)
-
-            #   Get Simbad coordinates
-            if simbad_tbl is not None and len(simbad_tbl) > 0:
-                simbad_ra = Angle(
-                    simbad_tbl[0]['ra'],
-                    unit='degree',
-                ).degree
-                simbad_dec = Angle(
-                    simbad_tbl[0]['dec'],
-                    unit='degree',
-                ).degree
-
-                # #   Tolerance in degree
-                # tol = 0.5
-                # tol = 1.
-
-                if (simbad_ra + t > data_file.ra > simbad_ra - t and
-                        simbad_dec + t > data_file.dec > simbad_dec - t):
-                    object_ra = simbad_ra
-                    object_dec = simbad_dec
-                    object_simbad_resolved = True
-                    object_data_table = simbad_tbl[0]
-
+            if objs.exists():
                 if print_to_terminal:
-                    print('Object resolved based on name:')
-                    print(object_simbad_resolved)
+                    print('Object already known (target: {})'.format(target))
+                obj = objs.first()
+                # Extra safety: if not in bbox case, also try exact/iexact name match
+                # Update object fields only if override flags allow it
+                if obj:
+                    if should_allow_auto_update(obj, 'is_main'):
+                        obj.is_main = True
+                    obj.save()
+                    # Update first_hjd only if override flag allows
+                    if should_allow_auto_update(obj, 'first_hjd'):
+                        if (obj.first_hjd == 0. or
+                                obj.first_hjd == -1. or
+                                data_file.hjd < obj.first_hjd):
+                            obj.first_hjd = data_file.hjd
+                            obj.save(update_fields=['first_hjd'])
+            else:
+                obj = None
+                # # Fallback 1: strict name match
+                # by_name = Object.objects.filter(name__iexact=target)
+                # if by_name.exists():
+                #     obj = by_name.first()
+                # else:
+                #     by_name_ic = Object.objects.filter(name__icontains=target)
+                #     if by_name_ic.exists():
+                #         obj = by_name_ic.first()
+                #     else:
+                #         obj = None
 
-            #   Search Simbad based on coordinates
-            if not object_simbad_resolved:
-                result_table = _query_region_safe(data_file.ra, data_file.dec, '0d5m0s', row_limit=10)
-
-                if (result_table is not None and
-                        len(result_table) > 0):
-
-                    #   Get the brightest object if magnitudes
-                    #   are available otherwise use the object
-                    #   with the smallest distance to the
-                    #   coordinates
-                    if np.all(result_table['V'].mask):
-                        index = 0
-                    else:
-                        index = np.argmin(
-                            result_table['V'].data
-                        )
-                    simbad_ra = Angle(
-                        result_table[index]['ra'],
-                        unit='degree',
-                    ).degree
-                    simbad_dec = Angle(
-                        result_table[index]['dec'],
-                        unit='degree',
-                    ).degree
-                    object_ra = simbad_ra
-                    object_dec = simbad_dec
-                    object_simbad_resolved = True
-                    object_data_table = result_table[index]
-
-                if print_to_terminal:
-                    print('Object resolved based on coordinates:')
-                    print(object_simbad_resolved)
-
-            #   Set object type based on Simbad
-            if object_simbad_resolved:
-                # print('object_data_table:')
-                # print(object_data_table.pprint(max_lines=-1, max_width=-1))
-                # print(object_data_table)
-
-                raw_types = object_data_table['alltypes.otypes']
-                types_str = '' if raw_types is None else str(raw_types)
-                # print('types_str:')
-                # print(types_str)
-
-                #   Decode information in object string to get a rough object estimate
-                object_type = detect_object_type_from_simbad_types(types_str)
-                if object_type is None:
-                    # Fallback: if no specific type detected, check for star
-                    if '*' in types_str:
-                        object_type = 'ST'
-
-                #   Set default name
-                main_id = object_data_table['main_id']
-                if main_id:
-                    object_name = str(main_id)
-
-            #     Make a new object (new objects don't have override flags set)
-            obj = Object(
-                name=object_name,
-                ra=object_ra,
-                dec=object_dec,
-                object_type=object_type,
-                simbad_resolved=object_simbad_resolved,
-                first_hjd=data_file.hjd,
-                is_main=True,
-            )
-            if not dry_run:
-                obj.save()
-                obj.observation_run.add(observation_run)
-                obj.datafiles.add(data_file)
-                obj.save()
-
-                #   Verify star classification: if classified as 'ST', perform extended search
-                #   to check if it should actually be a cluster, nebula, or galaxy
-                verification_updated = False
-                if object_type == 'ST':
-                    try:
-                        # Check if extended search is enabled (can be disabled via environment variable)
-                        enable_extended = str(os.environ.get('ENABLE_STAR_VERIFICATION', 'true')).lower() in ('true', '1', 'yes')
-                        if enable_extended:
-                            verification_result = verify_star_classification(obj, data_file=data_file, enable_extended_search=True)
-                            if verification_result['updated']:
-                                verification_updated = True
-                                if print_to_terminal:
-                                    best_match = verification_result.get('best_match', {})
-                                    logger.info(
-                                        f'Star classification corrected for {obj.name}: '
-                                        f'now classified as {obj.object_type} '
-                                        f'(found: {best_match.get("name", "Unknown")})'
-                                    )
-                                # Update object_type variable for consistency
-                                obj.refresh_from_db()
-                                object_type = obj.object_type
-                    except Exception as e:
-                        # Don't fail object creation if verification fails
-                        logger.warning(f'Error during star classification verification for {obj.name}: {e}')
-
-                #   Set alias names (only if verification didn't already update identifiers)
-                if object_simbad_resolved and not verification_updated:
-                    #   Add header name as an alias
-                    obj.identifier_set.create(
-                        name=target,
-                        info_from_header=True,
-                    )
-
-                    #   Get aliases from Simbad
-                    aliases_field = None
-                    try:
-                        aliases_field = object_data_table['IDS']
-                    except Exception:
-                        try:
-                            aliases_field = object_data_table['ids']
-                        except Exception:
-                            aliases_field = None
-                    aliases = [] if aliases_field is None else str(aliases_field).split('|')
-                    # print(aliases)
-
-                    #   Create Simbad link
-                    sanitized_name = object_name.replace(" ", "") \
-                        .replace('+', "%2B")
-                    simbad_href = f"https://simbad.u-strasbg.fr/" \
-                                  f"simbad/sim-id?Ident=" \
-                                  f"{sanitized_name}"
-
-                    #   Set identifier objects
-                    for alias in aliases:
-                        obj.identifier_set.create(
-                            name=alias,
-                            href=simbad_href,
-                        )
-
-                    #   Set datafile target name to Simbad resolved name
-                    if should_allow_auto_update(data_file, 'main_target'):
-                        data_file.main_target = object_name
-                        data_file.save()
-                elif verification_updated:
-                    # If verification updated the object, ensure header name is added as identifier
-                    # (it might have been removed when identifiers were replaced)
-                    try:
-                        existing_header_id = obj.identifier_set.filter(name__exact=target, info_from_header=True).first()
-                        if not existing_header_id:
-                            obj.identifier_set.create(
-                                name=target,
-                                info_from_header=True,
-                            )
-                    except Exception as e:
-                        logger.debug(f'Error adding header identifier after verification: {e}')
+            if obj is not None:
+                if not dry_run:
+                    # Remove old associations if this is a different object
+                    old_objects = list(data_file.object_set.exclude(pk=obj.pk).all())
+                    for old_obj in old_objects:
+                        old_obj.datafiles.remove(data_file)
                     
-                    # Update datafile target name to match updated object name
-                    obj.refresh_from_db()
+                    obj.datafiles.add(data_file)
+                    obj.observation_run.add(observation_run)
+                    
+                    # Update object fields only if override flags allow it
+                    update_fields = []
+                    
+                    if should_allow_auto_update(obj, 'is_main'):
+                        obj.is_main = True
+                        update_fields.append('is_main')
+
+                    #   Update JD the object was first observed
+                    if should_allow_auto_update(obj, 'first_hjd'):
+                        if (obj.first_hjd == 0. or
+                                obj.first_hjd > data_file.hjd):
+                            obj.first_hjd = data_file.hjd
+                            update_fields.append('first_hjd')
+
+                    if update_fields:
+                        obj.save(update_fields=update_fields)
+                    else:
+                        obj.save()
+
+                    #   Set datafile target name to identified object name
+                    #   This should always be updated when an object is identified,
+                    #   regardless of whether it was resolved via Simbad or not
                     if should_allow_auto_update(data_file, 'main_target'):
                         data_file.main_target = obj.name
                         data_file.save()
-            
-            return {'status': 'new_object_created', 'new_object': obj}
+
+                    #   Add header name as an alias
+                    identifiers = obj.identifier_set.filter(
+                        name__exact=target
+                    )
+                    if len(identifiers) == 0:
+                        obj.identifier_set.create(
+                            name=target,
+                            info_from_header=True,
+                        )
+                
+                return {'status': 'assigned', 'object': obj}
+
+            #   Handling of Solar system objects
+            elif obj is None and target in solar_system:
+                if print_to_terminal:
+                    print('New object (target: {})'.format(target))
+                #     Make a new object
+                obj = Object(
+                    name=target,
+                    ra=data_file.ra,
+                    dec=data_file.dec,
+                    object_type='SO',
+                    simbad_resolved=False,
+                    first_hjd=data_file.hjd,
+                    is_main=True,
+                )
+                if not dry_run:
+                    obj.save()
+                    obj.observation_run.add(observation_run)
+                    obj.datafiles.add(data_file)
+                    obj.save()
+                return {'status': 'new_object_created', 'new_object': obj}
+
+            #   Handling of special targets
+            elif obj is None and target in special_targets:
+                if print_to_terminal:
+                    print('New object (target: {})'.format(target))
+                #     Make a new object
+                obj = Object(
+                    name=target,
+                    ra=data_file.ra,
+                    dec=data_file.dec,
+                    object_type='UK',
+                    simbad_resolved=False,
+                    first_hjd=data_file.hjd,
+                )
+                if not dry_run:
+                    obj.save()
+                    obj.observation_run.add(observation_run)
+                    obj.datafiles.add(data_file)
+                    obj.save()
+                return {'status': 'new_object_created', 'new_object': obj}
+            else:
+                if print_to_terminal:
+                    print('New object (target: {})'.format(target))
+                #   Set Defaults
+                object_ra = data_file.ra
+                object_dec = data_file.dec
+                object_type = 'UK'
+                object_simbad_resolved = False
+                object_name = target
+
+                #   Query Simbad for object name (safe, with variants and rate-limit)
+                simbad_tbl = _query_object_variants(target)
+
+                #   Get Simbad coordinates
+                if simbad_tbl is not None and len(simbad_tbl) > 0:
+                    simbad_ra = Angle(
+                        simbad_tbl[0]['ra'],
+                        unit='degree',
+                    ).degree
+                    simbad_dec = Angle(
+                        simbad_tbl[0]['dec'],
+                        unit='degree',
+                    ).degree
+
+                    # #   Tolerance in degree
+                    # tol = 0.5
+                    # tol = 1.
+
+                    if (simbad_ra + t > data_file.ra > simbad_ra - t and
+                            simbad_dec + t > data_file.dec > simbad_dec - t):
+                        object_ra = simbad_ra
+                        object_dec = simbad_dec
+                        object_simbad_resolved = True
+                        object_data_table = simbad_tbl[0]
+
+                    if print_to_terminal:
+                        print('Object resolved based on name:')
+                        print(object_simbad_resolved)
+
+                #   Search Simbad based on coordinates
+                if not object_simbad_resolved:
+                    result_table = _query_region_safe(data_file.ra, data_file.dec, '0d5m0s', row_limit=10)
+
+                    if (result_table is not None and
+                            len(result_table) > 0):
+
+                        #   Get the brightest object if magnitudes
+                        #   are available otherwise use the object
+                        #   with the smallest distance to the
+                        #   coordinates
+                        if np.all(result_table['V'].mask):
+                            index = 0
+                        else:
+                            index = np.argmin(
+                                result_table['V'].data
+                            )
+                        simbad_ra = Angle(
+                            result_table[index]['ra'],
+                            unit='degree',
+                        ).degree
+                        simbad_dec = Angle(
+                            result_table[index]['dec'],
+                            unit='degree',
+                        ).degree
+                        object_ra = simbad_ra
+                        object_dec = simbad_dec
+                        object_simbad_resolved = True
+                        object_data_table = result_table[index]
+
+                        if print_to_terminal:
+                            print('Object resolved based on coordinates:')
+                            print(object_simbad_resolved)
+
+                #   Set object type based on Simbad
+                if object_simbad_resolved:
+                    # print('object_data_table:')
+                    # print(object_data_table.pprint(max_lines=-1, max_width=-1))
+                    # print(object_data_table)
+
+                    raw_types = object_data_table['alltypes.otypes']
+                    types_str = '' if raw_types is None else str(raw_types)
+                    # print('types_str:')
+                    # print(types_str)
+
+                    #   Decode information in object string to get a rough object estimate
+                    object_type = detect_object_type_from_simbad_types(types_str)
+                    if object_type is None:
+                        # Fallback: if no specific type detected, check for star
+                        if '*' in types_str:
+                            object_type = 'ST'
+
+                    #   Set default name
+                    main_id = object_data_table['main_id']
+                    if main_id:
+                        object_name = str(main_id)
+
+                #     Make a new object (new objects don't have override flags set)
+                obj = Object(
+                    name=object_name,
+                    ra=object_ra,
+                    dec=object_dec,
+                    object_type=object_type,
+                    simbad_resolved=object_simbad_resolved,
+                    first_hjd=data_file.hjd,
+                    is_main=True,
+                )
+                if not dry_run:
+                    obj.save()
+                    obj.observation_run.add(observation_run)
+                    obj.datafiles.add(data_file)
+                    obj.save()
+
+                    #   Verify star classification: if classified as 'ST', perform extended search
+                    #   to check if it should actually be a cluster, nebula, or galaxy
+                    verification_updated = False
+                    if object_type == 'ST':
+                        try:
+                            # Check if extended search is enabled (can be disabled via environment variable)
+                            enable_extended = str(os.environ.get('ENABLE_STAR_VERIFICATION', 'true')).lower() in ('true', '1', 'yes')
+                            if enable_extended:
+                                verification_result = verify_star_classification(obj, data_file=data_file, enable_extended_search=True)
+                                if verification_result['updated']:
+                                    verification_updated = True
+                                    if print_to_terminal:
+                                        best_match = verification_result.get('best_match', {})
+                                        logger.info(
+                                            f'Star classification corrected for {obj.name}: '
+                                            f'now classified as {obj.object_type} '
+                                            f'(found: {best_match.get("name", "Unknown")})'
+                                        )
+                                    # Update object_type variable for consistency
+                                    obj.refresh_from_db()
+                                    object_type = obj.object_type
+                        except Exception as e:
+                            # Don't fail object creation if verification fails
+                            logger.warning(f'Error during star classification verification for {obj.name}: {e}')
+
+                    #   Set alias names (only if verification didn't already update identifiers)
+                    if object_simbad_resolved and not verification_updated:
+                        #   Add header name as an alias
+                        obj.identifier_set.create(
+                            name=target,
+                            info_from_header=True,
+                        )
+
+                        #   Get aliases from Simbad
+                        aliases_field = None
+                        try:
+                            aliases_field = object_data_table['IDS']
+                        except Exception:
+                            try:
+                                aliases_field = object_data_table['ids']
+                            except Exception:
+                                aliases_field = None
+                        aliases = [] if aliases_field is None else str(aliases_field).split('|')
+                        # print(aliases)
+
+                        #   Create Simbad link
+                        sanitized_name = object_name.replace(" ", "") \
+                            .replace('+', "%2B")
+                        simbad_href = f"https://simbad.u-strasbg.fr/" \
+                                      f"simbad/sim-id?Ident=" \
+                                      f"{sanitized_name}"
+
+                        #   Set identifier objects
+                        for alias in aliases:
+                            obj.identifier_set.create(
+                                name=alias,
+                                href=simbad_href,
+                            )
+
+                        #   Set datafile target name to Simbad resolved name
+                        if should_allow_auto_update(data_file, 'main_target'):
+                            data_file.main_target = object_name
+                            data_file.save()
+                    elif verification_updated:
+                        # If verification updated the object, ensure header name is added as identifier
+                        # (it might have been removed when identifiers were replaced)
+                        try:
+                            existing_header_id = obj.identifier_set.filter(name__exact=target, info_from_header=True).first()
+                            if not existing_header_id:
+                                obj.identifier_set.create(
+                                    name=target,
+                                    info_from_header=True,
+                                )
+                        except Exception as e:
+                            logger.debug(f'Error adding header identifier after verification: {e}')
+                        
+                        # Update datafile target name to match updated object name
+                        obj.refresh_from_db()
+                        if should_allow_auto_update(data_file, 'main_target'):
+                            data_file.main_target = obj.name
+                            data_file.save()
+                
+                return {'status': 'new_object_created', 'new_object': obj}
         
-        # No object found or matched
-        return {'status': 'no_match'}
+            # No object found or matched (within the if block)
+            return {'status': 'no_match'}
+        except Exception as e:
+            # Log the error for debugging
+            logger.error(f'Error in evaluate_data_file (within if block) for data_file {data_file.pk} (target: {target}, expo_type: {expo_type}): {e}', exc_info=True)
+            return {
+                'status': 'error',
+                'error': str(e),
+                'data_file_pk': data_file.pk,
+                'target': target,
+                'expo_type': expo_type
+            }
+    else:
+        # Conditions not met for object association
+        # Log why we're skipping (for debugging)
+        reasons = []
+        if target_lower == '' or target_lower == 'unknown':
+            reasons.append('empty_or_unknown_target')
+        if expo_type != 'LI':
+            reasons.append(f'wrong_exposure_type_{expo_type}')
+        if 'flat' in target_lower or 'dark' in target_lower:
+            reasons.append('flat_or_dark')
+        if data_file.ra == -1 or data_file.ra is None or data_file.ra == 0.:
+            reasons.append('invalid_ra')
+        if data_file.dec == -1 or data_file.dec is None or data_file.dec == 0.:
+            reasons.append('invalid_dec')
+        
+        logger.debug(f'DataFile {data_file.pk} skipped object association: {", ".join(reasons)}')
+        return {'status': 'no_match', 'reason': 'conditions_not_met', 'details': reasons}
 
 
 def analyze_and_update_exposure_type(file_path, plot_histogram=False,
