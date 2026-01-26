@@ -736,7 +736,7 @@ def add_new_data_file(path_to_file, observation_run, print_to_terminal=False):
     return True
 
 
-def evaluate_data_file(data_file, observation_run, print_to_terminal=False, skip_if_object_has_overrides=True):
+def evaluate_data_file(data_file, observation_run, print_to_terminal=False, skip_if_object_has_overrides=True, dry_run=False):
     """
     Evaluate data file and add associated objects
 
@@ -755,6 +755,10 @@ def evaluate_data_file(data_file, observation_run, print_to_terminal=False, skip
     skip_if_object_has_overrides : `boolean`, optional
         If True, skip re-assignment if existing objects have override flags set.
         Default is ``True``.
+    
+    dry_run                     : `boolean`, optional
+        If True, simulate evaluation without making database changes.
+        Default is ``False``.
         
     Returns
     -------
@@ -777,20 +781,25 @@ def evaluate_data_file(data_file, observation_run, print_to_terminal=False, skip
                 }
     
     #   Set data file information from file header data
-    data_file.set_info()
-    data_file.save()
-    # Update file metadata (size/hash) to reflect any external changes
-    try:
-        p = Path(str(data_file.datafile))
-        data_file.file_size = p.stat().st_size if p.exists() else 0
+    if not dry_run:
         try:
-            data_file.content_hash = compute_file_hash(p) if p.exists() else ''
+            data_file.set_info()
+            data_file.save()
+        except Exception as e:
+            logger.warning(f'Error in set_info() for data_file {data_file.pk}: {e}')
+            # Continue anyway - some fields might already be set
+        # Update file metadata (size/hash) to reflect any external changes
+        try:
+            p = Path(str(data_file.datafile))
+            data_file.file_size = p.stat().st_size if p.exists() else 0
+            try:
+                data_file.content_hash = compute_file_hash(p) if p.exists() else ''
+            except Exception:
+                # Keep previous hash if reading fails
+                pass
+            data_file.save(update_fields=['file_size', 'content_hash'])
         except Exception:
-            # Keep previous hash if reading fails
             pass
-        data_file.save(update_fields=['file_size', 'content_hash'])
-    except Exception:
-        pass
 
     target = (data_file.main_target or '').strip()
     expo_type = data_file.exposure_type
@@ -873,49 +882,50 @@ def evaluate_data_file(data_file, observation_run, print_to_terminal=False, skip
             #         obj = None
 
         if obj is not None:
-            # Remove old associations if this is a different object
-            old_objects = list(data_file.object_set.exclude(pk=obj.pk).all())
-            for old_obj in old_objects:
-                old_obj.datafiles.remove(data_file)
-            
-            obj.datafiles.add(data_file)
-            obj.observation_run.add(observation_run)
-            
-            # Update object fields only if override flags allow it
-            update_fields = []
-            
-            if should_allow_auto_update(obj, 'is_main'):
-                obj.is_main = True
-                update_fields.append('is_main')
+            if not dry_run:
+                # Remove old associations if this is a different object
+                old_objects = list(data_file.object_set.exclude(pk=obj.pk).all())
+                for old_obj in old_objects:
+                    old_obj.datafiles.remove(data_file)
+                
+                obj.datafiles.add(data_file)
+                obj.observation_run.add(observation_run)
+                
+                # Update object fields only if override flags allow it
+                update_fields = []
+                
+                if should_allow_auto_update(obj, 'is_main'):
+                    obj.is_main = True
+                    update_fields.append('is_main')
 
-            #   Update JD the object was first observed
-            if should_allow_auto_update(obj, 'first_hjd'):
-                if (obj.first_hjd == 0. or
-                        obj.first_hjd > data_file.hjd):
-                    obj.first_hjd = data_file.hjd
-                    update_fields.append('first_hjd')
+                #   Update JD the object was first observed
+                if should_allow_auto_update(obj, 'first_hjd'):
+                    if (obj.first_hjd == 0. or
+                            obj.first_hjd > data_file.hjd):
+                        obj.first_hjd = data_file.hjd
+                        update_fields.append('first_hjd')
 
-            if update_fields:
-                obj.save(update_fields=update_fields)
-            else:
-                obj.save()
+                if update_fields:
+                    obj.save(update_fields=update_fields)
+                else:
+                    obj.save()
 
-            #   Set datafile target name to identified object name
-            #   This should always be updated when an object is identified,
-            #   regardless of whether it was resolved via Simbad or not
-            if should_allow_auto_update(data_file, 'main_target'):
-                data_file.main_target = obj.name
-                data_file.save()
+                #   Set datafile target name to identified object name
+                #   This should always be updated when an object is identified,
+                #   regardless of whether it was resolved via Simbad or not
+                if should_allow_auto_update(data_file, 'main_target'):
+                    data_file.main_target = obj.name
+                    data_file.save()
 
-            #   Add header name as an alias
-            identifiers = obj.identifier_set.filter(
-                name__exact=target
-            )
-            if len(identifiers) == 0:
-                obj.identifier_set.create(
-                    name=target,
-                    info_from_header=True,
+                #   Add header name as an alias
+                identifiers = obj.identifier_set.filter(
+                    name__exact=target
                 )
+                if len(identifiers) == 0:
+                    obj.identifier_set.create(
+                        name=target,
+                        info_from_header=True,
+                    )
             
             return {'status': 'assigned', 'object': obj}
 
@@ -933,10 +943,11 @@ def evaluate_data_file(data_file, observation_run, print_to_terminal=False, skip
                 first_hjd=data_file.hjd,
                 is_main=True,
             )
-            obj.save()
-            obj.observation_run.add(observation_run)
-            obj.datafiles.add(data_file)
-            obj.save()
+            if not dry_run:
+                obj.save()
+                obj.observation_run.add(observation_run)
+                obj.datafiles.add(data_file)
+                obj.save()
             return {'status': 'new_object_created', 'new_object': obj}
 
         #   Handling of special targets
@@ -952,10 +963,12 @@ def evaluate_data_file(data_file, observation_run, print_to_terminal=False, skip
                 simbad_resolved=False,
                 first_hjd=data_file.hjd,
             )
-            obj.save()
-            obj.observation_run.add(observation_run)
-            obj.datafiles.add(data_file)
-            obj.save()
+            if not dry_run:
+                obj.save()
+                obj.observation_run.add(observation_run)
+                obj.datafiles.add(data_file)
+                obj.save()
+            return {'status': 'new_object_created', 'new_object': obj}
         else:
             if print_to_terminal:
                 print('New object (target: {})'.format(target))
@@ -1062,92 +1075,93 @@ def evaluate_data_file(data_file, observation_run, print_to_terminal=False, skip
                 first_hjd=data_file.hjd,
                 is_main=True,
             )
-            obj.save()
-            obj.observation_run.add(observation_run)
-            obj.datafiles.add(data_file)
-            obj.save()
+            if not dry_run:
+                obj.save()
+                obj.observation_run.add(observation_run)
+                obj.datafiles.add(data_file)
+                obj.save()
 
-            #   Verify star classification: if classified as 'ST', perform extended search
-            #   to check if it should actually be a cluster, nebula, or galaxy
-            verification_updated = False
-            if object_type == 'ST':
-                try:
-                    # Check if extended search is enabled (can be disabled via environment variable)
-                    enable_extended = str(os.environ.get('ENABLE_STAR_VERIFICATION', 'true')).lower() in ('true', '1', 'yes')
-                    if enable_extended:
-                        verification_result = verify_star_classification(obj, data_file=data_file, enable_extended_search=True)
-                        if verification_result['updated']:
-                            verification_updated = True
-                            if print_to_terminal:
-                                best_match = verification_result.get('best_match', {})
-                                logger.info(
-                                    f'Star classification corrected for {obj.name}: '
-                                    f'now classified as {obj.object_type} '
-                                    f'(found: {best_match.get("name", "Unknown")})'
-                                )
-                            # Update object_type variable for consistency
-                            obj.refresh_from_db()
-                            object_type = obj.object_type
-                except Exception as e:
-                    # Don't fail object creation if verification fails
-                    logger.warning(f'Error during star classification verification for {obj.name}: {e}')
-
-            #   Set alias names (only if verification didn't already update identifiers)
-            if object_simbad_resolved and not verification_updated:
-                #   Add header name as an alias
-                obj.identifier_set.create(
-                    name=target,
-                    info_from_header=True,
-                )
-
-                #   Get aliases from Simbad
-                aliases_field = None
-                try:
-                    aliases_field = object_data_table['IDS']
-                except Exception:
+                #   Verify star classification: if classified as 'ST', perform extended search
+                #   to check if it should actually be a cluster, nebula, or galaxy
+                verification_updated = False
+                if object_type == 'ST':
                     try:
-                        aliases_field = object_data_table['ids']
-                    except Exception:
-                        aliases_field = None
-                aliases = [] if aliases_field is None else str(aliases_field).split('|')
-                # print(aliases)
+                        # Check if extended search is enabled (can be disabled via environment variable)
+                        enable_extended = str(os.environ.get('ENABLE_STAR_VERIFICATION', 'true')).lower() in ('true', '1', 'yes')
+                        if enable_extended:
+                            verification_result = verify_star_classification(obj, data_file=data_file, enable_extended_search=True)
+                            if verification_result['updated']:
+                                verification_updated = True
+                                if print_to_terminal:
+                                    best_match = verification_result.get('best_match', {})
+                                    logger.info(
+                                        f'Star classification corrected for {obj.name}: '
+                                        f'now classified as {obj.object_type} '
+                                        f'(found: {best_match.get("name", "Unknown")})'
+                                    )
+                                # Update object_type variable for consistency
+                                obj.refresh_from_db()
+                                object_type = obj.object_type
+                    except Exception as e:
+                        # Don't fail object creation if verification fails
+                        logger.warning(f'Error during star classification verification for {obj.name}: {e}')
 
-                #   Create Simbad link
-                sanitized_name = object_name.replace(" ", "") \
-                    .replace('+', "%2B")
-                simbad_href = f"https://simbad.u-strasbg.fr/" \
-                              f"simbad/sim-id?Ident=" \
-                              f"{sanitized_name}"
-
-                #   Set identifier objects
-                for alias in aliases:
+                #   Set alias names (only if verification didn't already update identifiers)
+                if object_simbad_resolved and not verification_updated:
+                    #   Add header name as an alias
                     obj.identifier_set.create(
-                        name=alias,
-                        href=simbad_href,
+                        name=target,
+                        info_from_header=True,
                     )
 
-                #   Set datafile target name to Simbad resolved name
-                if should_allow_auto_update(data_file, 'main_target'):
-                    data_file.main_target = object_name
-                    data_file.save()
-            elif verification_updated:
-                # If verification updated the object, ensure header name is added as identifier
-                # (it might have been removed when identifiers were replaced)
-                try:
-                    existing_header_id = obj.identifier_set.filter(name__exact=target, info_from_header=True).first()
-                    if not existing_header_id:
+                    #   Get aliases from Simbad
+                    aliases_field = None
+                    try:
+                        aliases_field = object_data_table['IDS']
+                    except Exception:
+                        try:
+                            aliases_field = object_data_table['ids']
+                        except Exception:
+                            aliases_field = None
+                    aliases = [] if aliases_field is None else str(aliases_field).split('|')
+                    # print(aliases)
+
+                    #   Create Simbad link
+                    sanitized_name = object_name.replace(" ", "") \
+                        .replace('+', "%2B")
+                    simbad_href = f"https://simbad.u-strasbg.fr/" \
+                                  f"simbad/sim-id?Ident=" \
+                                  f"{sanitized_name}"
+
+                    #   Set identifier objects
+                    for alias in aliases:
                         obj.identifier_set.create(
-                            name=target,
-                            info_from_header=True,
+                            name=alias,
+                            href=simbad_href,
                         )
-                except Exception as e:
-                    logger.debug(f'Error adding header identifier after verification: {e}')
-                
-                # Update datafile target name to match updated object name
-                obj.refresh_from_db()
-                if should_allow_auto_update(data_file, 'main_target'):
-                    data_file.main_target = obj.name
-                    data_file.save()
+
+                    #   Set datafile target name to Simbad resolved name
+                    if should_allow_auto_update(data_file, 'main_target'):
+                        data_file.main_target = object_name
+                        data_file.save()
+                elif verification_updated:
+                    # If verification updated the object, ensure header name is added as identifier
+                    # (it might have been removed when identifiers were replaced)
+                    try:
+                        existing_header_id = obj.identifier_set.filter(name__exact=target, info_from_header=True).first()
+                        if not existing_header_id:
+                            obj.identifier_set.create(
+                                name=target,
+                                info_from_header=True,
+                            )
+                    except Exception as e:
+                        logger.debug(f'Error adding header identifier after verification: {e}')
+                    
+                    # Update datafile target name to match updated object name
+                    obj.refresh_from_db()
+                    if should_allow_auto_update(data_file, 'main_target'):
+                        data_file.main_target = obj.name
+                        data_file.save()
             
             return {'status': 'new_object_created', 'new_object': obj}
         
