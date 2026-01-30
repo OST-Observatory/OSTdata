@@ -17,6 +17,8 @@ from .views import (
     admin_clear_banner,
     banner_info,
     admin_update_object_identifiers,
+    admin_get_exposure_type_discrepancies,
+    admin_update_exposure_type_user,
 )
 
 app_name = 'adminops-api'
@@ -39,6 +41,9 @@ urlpatterns = [
     path('banner/clear', admin_clear_banner, name='clear_banner'),
     path('banner-info/', banner_info, name='banner_info'),
     path('objects/<int:object_id>/update-identifiers/', admin_update_object_identifiers, name='update_object_identifiers'),
+    # Exposure type classification endpoints
+    path('datafiles/discrepancies/', admin_get_exposure_type_discrepancies, name='exposure_type_discrepancies'),
+    path('datafiles/<int:pk>/exposure-type-user/', admin_update_exposure_type_user, name='update_exposure_type_user'),
 ]
 
 

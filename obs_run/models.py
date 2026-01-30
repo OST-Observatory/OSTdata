@@ -151,6 +151,40 @@ class DataFile(models.Model):
         default=UNKNOWN,
     )
 
+    #   ML-based exposure type classification
+    exposure_type_ml = models.CharField(
+        max_length=2,
+        choices=EXPOSURE_TYPE_POSSIBILITIES,
+        default=UNKNOWN,
+        blank=True,
+        null=True,
+        help_text='Exposure type determined by ML classification model',
+    )
+    exposure_type_ml_confidence = models.FloatField(
+        default=None,
+        blank=True,
+        null=True,
+        help_text='Confidence score from ML classification (0.0-1.0)',
+    )
+    exposure_type_ml_abstained = models.BooleanField(
+        default=False,
+        help_text='Whether the ML model abstained (returned unknown)',
+    )
+
+    #   User-set exposure type
+    exposure_type_user = models.CharField(
+        max_length=2,
+        choices=EXPOSURE_TYPE_POSSIBILITIES,
+        default=None,
+        blank=True,
+        null=True,
+        help_text='Exposure type manually set by user',
+    )
+    exposure_type_user_override = models.BooleanField(
+        default=False,
+        help_text='Override flag to prevent automatic updates to user-set exposure type',
+    )
+
     #   Spectroscopy?
     spectroscopy = models.BooleanField(default=False)
     spectrograph_possibilities = (
@@ -319,6 +353,8 @@ class DataFile(models.Model):
             models.Index(fields=['observation_run'], name='df_run_idx'),
             models.Index(fields=['file_type'], name='df_file_type_idx'),
             models.Index(fields=['exposure_type'], name='df_expo_type_idx'),
+            models.Index(fields=['exposure_type_ml'], name='df_expo_type_ml_idx'),
+            models.Index(fields=['exposure_type_user'], name='df_expo_type_user_idx'),
             models.Index(fields=['exptime'], name='df_exptime_idx'),
             models.Index(fields=['hjd'], name='df_hjd_idx'),
             models.Index(fields=['instrument'], name='df_instrument_idx'),

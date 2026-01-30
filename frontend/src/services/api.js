@@ -412,4 +412,14 @@ export const api = {
   },
   getInstruments: () => fetchWithAuth('/runs/instruments/'),
   getInstrumentCatalog: () => fetchWithAuth('/runs/instrument-catalog/'),
+
+  // Exposure Type Classification (Admin)
+  getExposureTypeDiscrepancies: (params = {}) => {
+    const queryString = new URLSearchParams(params).toString()
+    return fetchWithAuth(`/admin/datafiles/discrepancies/${queryString ? '?' + queryString : ''}`)
+  },
+  updateExposureTypeUser: (datafileId, data) => fetchWithAuth(`/admin/datafiles/${encodeURIComponent(datafileId)}/exposure-type-user/`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  }),
 }

@@ -103,7 +103,23 @@ def add_new_data_file_wrapper(file_path, directory_to_monitor):
     # if suffix not in ['.filepart', '.bck', '.swp']:
     logger.info(f"Evaluating {file_path}...")
     try:
-        observation_run = ObservationRun.objects.get(name=source_path)
+        try:
+            observation_run = ObservationRun.objects.get(name=source_path)
+        except ObservationRun.DoesNotExist:
+            # ObservationRun doesn't exist yet - create it first
+            logger.info(f"ObservationRun '{source_path}' does not exist, creating it first...")
+            run_directory = Path(directory_to_monitor) / source_path
+            if run_directory.exists() and run_directory.is_dir():
+                add_new_observation_run_wrapper(run_directory)
+                # Try to get it again after creation
+                try:
+                    observation_run = ObservationRun.objects.get(name=source_path)
+                except ObservationRun.DoesNotExist:
+                    logger.error(f"Failed to create ObservationRun '{source_path}' for file {file_path}")
+                    return
+            else:
+                logger.warning(f"Cannot create ObservationRun '{source_path}': directory does not exist at {run_directory}")
+                return
 
         #   Analyse directory and add adds associated data
         add_new_data_file(

@@ -11,7 +11,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
 from ostdata.permissions import IsAdminOrSuperuser as IsAdminUser
 from rest_framework.response import Response
-from drf_spectacular.utils import extend_schema, extend_schema_view
+from drf_spectacular.utils import extend_schema, extend_schema_view, OpenApiParameter
 from rest_framework import serializers
 import logging
 logger = logging.getLogger(__name__)
@@ -43,8 +43,11 @@ from obs_run.tasks import (
 )
 from ostdata.services.health import gather_admin_health
 from obs_run.models import ObservationRun, DataFile
+from obs_run.api.serializers import DataFileSerializer
+from obs_run.api.views import DataFilesPagination
 from objects.models import Object, Identifier
 from utilities import _query_object_variants, _query_region_safe
+from django.db.models import Q, F
 
 
 # -------------------- Banner helpers (Redis) --------------------
@@ -808,5 +811,117 @@ def admin_update_object_identifiers(request, object_id):
         return Response({
             'error': f'Unexpected error: {str(e)}',
         }, status=500)
+
+
+@extend_schema(
+    summary='Get exposure type discrepancies',
+    parameters=[
+        OpenApiParameter('header_type', str, OpenApiParameter.QUERY, description='Filter by header exposure type'),
+        OpenApiParameter('ml_type', str, OpenApiParameter.QUERY, description='Filter by ML exposure type'),
+        OpenApiParameter('observation_run', int, OpenApiParameter.QUERY, description='Filter by observation run ID'),
+        OpenApiParameter('has_user_type', bool, OpenApiParameter.QUERY, description='Filter by presence of user-set type'),
+    ],
+)
+@api_view(['GET'])
+@permission_classes([IsAdminUser])
+def admin_get_exposure_type_discrepancies(request):
+    """
+    Get DataFiles where header-based exposure_type differs from ML-classified exposure_type_ml.
+    Only accessible to admin/staff users.
+    Supports filtering by header_type, ml_type, observation_run, and has_user_type.
+    """
+    # Get files where:
+    # 1. exposure_type_ml is NULL (not yet classified), OR
+    # 2. exposure_type != exposure_type_ml (discrepancy)
+    queryset = DataFile.objects.filter(
+        Q(exposure_type_ml__isnull=True) | Q(exposure_type_ml='') | ~Q(exposure_type=F('exposure_type_ml'))
+    ).select_related('observation_run')
+
+    # Filter by header_type
+    header_type = request.query_params.get('header_type')
+    if header_type:
+        queryset = queryset.filter(exposure_type=header_type)
+
+    # Filter by ml_type
+    ml_type = request.query_params.get('ml_type')
+    if ml_type:
+        queryset = queryset.filter(exposure_type_ml=ml_type)
+
+    # Filter by observation_run
+    observation_run_id = request.query_params.get('observation_run')
+    if observation_run_id:
+        try:
+            queryset = queryset.filter(observation_run_id=int(observation_run_id))
+        except ValueError:
+            pass
+
+    # Filter by has_user_type
+    has_user_type = request.query_params.get('has_user_type')
+    if has_user_type is not None:
+        has_user_type_bool = str(has_user_type).lower() in ('true', '1', 'yes')
+        if has_user_type_bool:
+            queryset = queryset.exclude(Q(exposure_type_user__isnull=True) | Q(exposure_type_user=''))
+        else:
+            queryset = queryset.filter(Q(exposure_type_user__isnull=True) | Q(exposure_type_user=''))
+
+    # Pagination
+    paginator = DataFilesPagination()
+    page = paginator.paginate_queryset(queryset, request)
+    if page is not None:
+        serializer = DataFileSerializer(page, many=True)
+        return paginator.get_paginated_response(serializer.data)
+
+    serializer = DataFileSerializer(queryset, many=True)
+    return Response(serializer.data)
+
+
+@extend_schema(
+    summary='Update user-set exposure type',
+    parameters=[
+        OpenApiParameter('pk', int, OpenApiParameter.PATH),
+    ],
+)
+@api_view(['PATCH'])
+@permission_classes([IsAdminUser])
+def admin_update_exposure_type_user(request, pk):
+    """
+    Update the user-set exposure_type_user for a DataFile.
+    Only accessible to admin/staff users.
+    
+    Body:
+    {
+        "exposure_type_user": "LI",
+        "exposure_type_user_override": true
+    }
+    """
+    try:
+        datafile = DataFile.objects.get(pk=pk)
+    except DataFile.DoesNotExist:
+        return Response({"detail": "Not found"}, status=404)
+
+    exposure_type_user = request.data.get('exposure_type_user')
+    exposure_type_user_override = request.data.get('exposure_type_user_override', False)
+
+    # Validate exposure_type_user
+    if exposure_type_user is not None:
+        valid_types = [choice[0] for choice in DataFile.EXPOSURE_TYPE_POSSIBILITIES]
+        if exposure_type_user not in valid_types:
+            return Response(
+                {"detail": f"Invalid exposure_type_user. Must be one of: {valid_types}"},
+                status=400
+            )
+        datafile.exposure_type_user = exposure_type_user
+    elif exposure_type_user is None and 'exposure_type_user' in request.data:
+        # Explicitly set to None to clear the value
+        datafile.exposure_type_user = None
+
+    # Update override flag
+    if isinstance(exposure_type_user_override, bool):
+        datafile.exposure_type_user_override = exposure_type_user_override
+
+    datafile.save(update_fields=['exposure_type_user', 'exposure_type_user_override'])
+
+    serializer = DataFileSerializer(datafile)
+    return Response(serializer.data)
 
 

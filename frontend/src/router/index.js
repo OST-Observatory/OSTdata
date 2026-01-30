@@ -74,6 +74,12 @@ const routes = [
     meta: { requiresAuth: true, requiresAdmin: true, requiresAnyPerms: ['users.acl_maintenance_cleanup','users.acl_maintenance_reconcile','users.acl_maintenance_orphans','users.acl_banner_manage','acl_maintenance_cleanup','acl_maintenance_reconcile','acl_maintenance_orphans','acl_banner_manage'], title: 'Admin – Maintenance', description: 'Data maintenance tools.' }
   },
   {
+    path: '/admin/exposure-type-discrepancies',
+    name: 'admin-exposure-type-discrepancies',
+    component: () => import('@/views/admin/AdminExposureTypeDiscrepancies.vue'),
+    meta: { requiresAuth: true, requiresAdmin: true, title: 'Admin – Exposure Type Discrepancies', description: 'Review and resolve exposure type classification discrepancies.' }
+  },
+  {
     path: '/login',
     name: 'login',
     component: () => import('../views/Login.vue'),

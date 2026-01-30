@@ -733,6 +733,43 @@ def add_new_data_file(path_to_file, observation_run, print_to_terminal=False):
         print_to_terminal=print_to_terminal,
     )
 
+    #   ML-based exposure type classification (if enabled)
+    try:
+        from django.conf import settings
+        if getattr(settings, 'ML_EXPOSURE_TYPE_ENABLED', False):
+            from obs_run.ml_classification import ExposureTypeClassifier
+            classifier = ExposureTypeClassifier()
+            if classifier.is_supported_format(file_type, path_to_file):
+                result = classifier.classify_datafile(data_file)
+                if result.get('error') is None:
+                    data_file.exposure_type_ml = result.get('exposure_type_ml')
+                    data_file.exposure_type_ml_confidence = result.get('exposure_type_ml_confidence')
+                    data_file.exposure_type_ml_abstained = result.get('exposure_type_ml_abstained', False)
+                    # Set spectrograph if ML detected one and no override is set
+                    spectrograph_ml = result.get('spectrograph_ml')
+                    if spectrograph_ml and not data_file.spectrograph_override:
+                        data_file.spectrograph = spectrograph_ml
+                        data_file.save(update_fields=[
+                            'exposure_type_ml',
+                            'exposure_type_ml_confidence',
+                            'exposure_type_ml_abstained',
+                            'spectrograph',
+                        ])
+                    else:
+                        data_file.save(update_fields=[
+                            'exposure_type_ml',
+                            'exposure_type_ml_confidence',
+                            'exposure_type_ml_abstained',
+                        ])
+                    if print_to_terminal:
+                        print(f'ML Classification: {result.get("exposure_type_ml")} '
+                              f'(confidence: {result.get("exposure_type_ml_confidence", 0.0):.3f})')
+                elif print_to_terminal:
+                    logger.warning(f'ML classification error for {path_to_file}: {result.get("error")}')
+    except Exception as e:
+        # Don't fail file addition if ML classification fails
+        logger.warning(f'ML classification failed for {path_to_file}: {e}', exc_info=True)
+
     return True
 
 

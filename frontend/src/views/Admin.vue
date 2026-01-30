@@ -99,6 +99,20 @@
           </v-card-actions>
         </v-card>
       </v-col>
+
+      <v-col cols="12" md="6" lg="4">
+        <v-card variant="outlined" class="mb-4">
+          <v-card-title class="text-h6">Exposure Type Discrepancies</v-card-title>
+          <v-card-text>
+            Review and resolve exposure type classification discrepancies.
+          </v-card-text>
+          <v-card-actions>
+            <v-btn color="primary" :to="{ path: '/admin/exposure-type-discrepancies' }" aria-label="Open Exposure Type Discrepancies">
+              Open Discrepancies
+            </v-btn>
+          </v-card-actions>
+        </v-card>
+      </v-col>
     </v-row>
   </v-container>
 </template>

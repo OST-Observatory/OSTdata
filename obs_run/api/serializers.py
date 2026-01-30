@@ -278,6 +278,8 @@ class SimpleRunSerializer(ModelSerializer):
 class DataFileSerializer(ModelSerializer):
     tags = SerializerMethodField()
     exposure_type_display = SerializerMethodField()
+    exposure_type_ml_display = SerializerMethodField()
+    exposure_type_user_display = SerializerMethodField()
     binning = SerializerMethodField()
     tag_ids = PrimaryKeyRelatedField(
         many=True,
@@ -303,6 +305,15 @@ class DataFileSerializer(ModelSerializer):
             'binning',
             'exposure_type',
             'exposure_type_display',
+            # ML-based exposure type classification
+            'exposure_type_ml',
+            'exposure_type_ml_display',
+            'exposure_type_ml_confidence',
+            'exposure_type_ml_abstained',
+            # User-set exposure type
+            'exposure_type_user',
+            'exposure_type_user_display',
+            'exposure_type_user_override',
             'tags',
             'tag_ids',
             # 'added_by',
@@ -338,7 +349,8 @@ class DataFileSerializer(ModelSerializer):
         request = self.context.get('request')
         if request and not (request.user.is_superuser or request.user.has_perm('users.acl_runs_edit')):
             for field_name in ['exposure_type_override', 'spectroscopy_override', 'spectrograph_override',
-                             'instrument_override', 'telescope_override', 'status_parameters_override']:
+                             'instrument_override', 'telescope_override', 'status_parameters_override',
+                             'exposure_type_user_override']:
                 if field_name in self.fields:
                     self.fields[field_name].read_only = True
 
@@ -355,6 +367,22 @@ class DataFileSerializer(ModelSerializer):
 
     def get_exposure_type_display(self, obj):
         return obj.get_exposure_type_display()
+
+    def get_exposure_type_ml_display(self, obj):
+        if obj.exposure_type_ml:
+            # Get display value from choices
+            for code, label in DataFile.EXPOSURE_TYPE_POSSIBILITIES:
+                if code == obj.exposure_type_ml:
+                    return label
+        return None
+
+    def get_exposure_type_user_display(self, obj):
+        if obj.exposure_type_user:
+            # Get display value from choices
+            for code, label in DataFile.EXPOSURE_TYPE_POSSIBILITIES:
+                if code == obj.exposure_type_user:
+                    return label
+        return None
 
     def get_binning(self, obj):
         try:
