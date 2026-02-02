@@ -208,7 +208,7 @@
           <span class="text-body-2 mr-4">Items per page:</span>
           <v-select
             v-model="itemsPerPage"
-            :items="[10, 25, 50, 100, -1]"
+            :items="[10, 25, 50, 100, 500, 1000, -1]"
             :item-title="item => item === -1 ? 'All' : item.toString()"
             :item-value="item => item"
             density="compact"
