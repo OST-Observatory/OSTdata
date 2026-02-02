@@ -820,6 +820,7 @@ def admin_update_object_identifiers(request, object_id):
         OpenApiParameter('ml_type', str, OpenApiParameter.QUERY, description='Filter by ML exposure type'),
         OpenApiParameter('observation_run', int, OpenApiParameter.QUERY, description='Filter by observation run ID'),
         OpenApiParameter('has_user_type', bool, OpenApiParameter.QUERY, description='Filter by presence of user-set type'),
+        OpenApiParameter('file_name', str, OpenApiParameter.QUERY, description='Filter by file name (case-insensitive partial match)'),
     ],
 )
 @api_view(['GET'])
@@ -863,6 +864,11 @@ def admin_get_exposure_type_discrepancies(request):
             queryset = queryset.exclude(Q(exposure_type_user__isnull=True) | Q(exposure_type_user=''))
         else:
             queryset = queryset.filter(Q(exposure_type_user__isnull=True) | Q(exposure_type_user=''))
+
+    # Filter by file_name (case-insensitive partial match on datafile path)
+    file_name = request.query_params.get('file_name')
+    if file_name:
+        queryset = queryset.filter(datafile__icontains=file_name)
 
     # Pagination
     paginator = DataFilesPagination()

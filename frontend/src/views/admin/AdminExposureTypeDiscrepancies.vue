@@ -65,6 +65,17 @@
               clearable
             />
           </v-col>
+          <v-col cols="12" sm="6" md="3">
+            <v-text-field
+              v-model="filters.file_name"
+              label="File Name"
+              prepend-inner-icon="mdi-file"
+              hide-details
+              density="comfortable"
+              variant="outlined"
+              clearable
+            />
+          </v-col>
           <v-col cols="12" class="d-flex align-end">
             <v-btn color="secondary" variant="text" prepend-icon="mdi-filter-remove" @click="resetFilters">
               Reset Filters
@@ -395,6 +406,7 @@ const filters = ref({
   ml_type: null,
   observation_run: null,
   has_user_type: null,
+  file_name: null,
 })
 
 const exposureTypeItems = [
@@ -512,6 +524,7 @@ const resetFilters = () => {
     ml_type: null,
     observation_run: null,
     has_user_type: null,
+    file_name: null,
   }
   currentPage.value = 1
   fetchDiscrepancies()
@@ -525,6 +538,7 @@ const fetchDiscrepancies = async () => {
     if (filters.value.ml_type) params.ml_type = filters.value.ml_type
     if (filters.value.observation_run) params.observation_run = parseInt(filters.value.observation_run)
     if (filters.value.has_user_type !== null) params.has_user_type = filters.value.has_user_type
+    if (filters.value.file_name) params.file_name = filters.value.file_name
     
     // Add pagination parameters
     params.page = currentPage.value
