@@ -833,9 +833,14 @@ def admin_get_exposure_type_discrepancies(request):
     """
     # Get files where:
     # 1. exposure_type_ml is NULL (not yet classified), OR
-    # 2. exposure_type != exposure_type_ml (discrepancy)
+    # 2. exposure_type_ml is empty string, OR
+    # 3. exposure_type_ml is 'UK' (Unknown), OR
+    # 4. exposure_type != exposure_type_ml (discrepancy)
     queryset = DataFile.objects.filter(
-        Q(exposure_type_ml__isnull=True) | Q(exposure_type_ml='') | ~Q(exposure_type=F('exposure_type_ml'))
+        Q(exposure_type_ml__isnull=True) | 
+        Q(exposure_type_ml='') | 
+        Q(exposure_type_ml='UK') | 
+        ~Q(exposure_type=F('exposure_type_ml'))
     ).select_related('observation_run')
 
     # Filter by header_type
