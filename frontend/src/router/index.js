@@ -80,6 +80,12 @@ const routes = [
     meta: { requiresAuth: true, requiresAdmin: true, title: 'Admin – Exposure Type Discrepancies', description: 'Review and resolve exposure type classification discrepancies.' }
   },
   {
+    path: '/admin/spectrograph-files',
+    name: 'admin-spectrograph-files',
+    component: () => import('@/views/admin/AdminSpectrographFiles.vue'),
+    meta: { requiresAuth: true, requiresAdmin: true, title: 'Admin – Spectrograph Management', description: 'Manage spectrograph property for data files.' }
+  },
+  {
     path: '/login',
     name: 'login',
     component: () => import('../views/Login.vue'),

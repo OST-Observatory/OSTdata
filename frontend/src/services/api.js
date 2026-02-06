@@ -422,4 +422,19 @@ export const api = {
     method: 'PATCH',
     body: JSON.stringify(data),
   }),
+  // Spectrograph Management (Admin)
+  getSpectrographFiles: (params = {}) => {
+    const queryParams = new URLSearchParams()
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') {
+        queryParams.append(key, value)
+      }
+    })
+    const queryString = queryParams.toString()
+    return fetchWithAuth(`/admin/datafiles/spectrograph/${queryString ? `?${queryString}` : ''}`)
+  },
+  updateSpectrograph: (datafileId, data) => fetchWithAuth(`/admin/datafiles/${encodeURIComponent(datafileId)}/spectrograph/`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  }),
 }

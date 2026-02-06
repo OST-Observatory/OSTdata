@@ -113,6 +113,20 @@
           </v-card-actions>
         </v-card>
       </v-col>
+
+      <v-col cols="12" md="6" lg="4">
+        <v-card variant="outlined" class="mb-4">
+          <v-card-title class="text-h6">Spectrograph Management</v-card-title>
+          <v-card-text>
+            Manage spectrograph property for data files with spectrograph set or WAVE exposure type.
+          </v-card-text>
+          <v-card-actions>
+            <v-btn color="primary" :to="{ path: '/admin/spectrograph-files' }" aria-label="Open Spectrograph Management">
+              Open Spectrograph
+            </v-btn>
+          </v-card-actions>
+        </v-card>
+      </v-col>
     </v-row>
   </v-container>
 </template>

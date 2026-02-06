@@ -936,3 +936,111 @@ def admin_update_exposure_type_user(request, pk):
     return Response(serializer.data)
 
 
+@extend_schema(
+    summary='Get DataFiles for spectrograph management',
+    parameters=[
+        OpenApiParameter('spectrograph', str, OpenApiParameter.QUERY, description='Filter by spectrograph type'),
+        OpenApiParameter('exposure_type', str, OpenApiParameter.QUERY, description='Filter by exposure type'),
+        OpenApiParameter('observation_run', int, OpenApiParameter.QUERY, description='Filter by observation run ID'),
+        OpenApiParameter('file_name', str, OpenApiParameter.QUERY, description='Filter by file name (case-insensitive partial match)'),
+    ],
+)
+@api_view(['GET'])
+@permission_classes([IsAdminUser])
+def admin_get_spectrograph_files(request):
+    """
+    Get DataFiles where spectrograph is set or exposure_type is WAVE.
+    Only accessible to admin/staff users.
+    Supports filtering by spectrograph, exposure_type, observation_run, and file_name.
+    """
+    # Get files where:
+    # 1. spectrograph is set (not 'N' / NONE), OR
+    # 2. exposure_type is 'WAVE'
+    queryset = DataFile.objects.filter(
+        Q(spectrograph__in=['D', 'B', 'E']) | Q(exposure_type='WA')
+    ).select_related('observation_run')
+
+    # Filter by spectrograph
+    spectrograph = request.query_params.get('spectrograph')
+    if spectrograph:
+        queryset = queryset.filter(spectrograph=spectrograph)
+
+    # Filter by exposure_type
+    exposure_type = request.query_params.get('exposure_type')
+    if exposure_type:
+        queryset = queryset.filter(exposure_type=exposure_type)
+
+    # Filter by observation_run
+    observation_run_id = request.query_params.get('observation_run')
+    if observation_run_id:
+        try:
+            queryset = queryset.filter(observation_run_id=int(observation_run_id))
+        except ValueError:
+            pass
+
+    # Filter by file_name (case-insensitive partial match on datafile path)
+    file_name = request.query_params.get('file_name')
+    if file_name:
+        queryset = queryset.filter(datafile__icontains=file_name)
+
+    # Pagination
+    paginator = DataFilesPagination()
+    page = paginator.paginate_queryset(queryset, request)
+    if page is not None:
+        serializer = DataFileSerializer(page, many=True)
+        return paginator.get_paginated_response(serializer.data)
+
+    serializer = DataFileSerializer(queryset, many=True)
+    return Response(serializer.data)
+
+
+@extend_schema(
+    summary='Update spectrograph property',
+    parameters=[
+        OpenApiParameter('pk', int, OpenApiParameter.PATH),
+    ],
+)
+@api_view(['PATCH'])
+@permission_classes([IsAdminUser])
+def admin_update_spectrograph(request, pk):
+    """
+    Update the spectrograph property for a DataFile.
+    Only accessible to admin/staff users.
+    
+    Body:
+    {
+        "spectrograph": "D",
+        "spectrograph_override": true
+    }
+    """
+    try:
+        datafile = DataFile.objects.get(pk=pk)
+    except DataFile.DoesNotExist:
+        return Response({"detail": "Not found"}, status=404)
+
+    spectrograph = request.data.get('spectrograph')
+    spectrograph_override = request.data.get('spectrograph_override', False)
+
+    # Validate spectrograph
+    if spectrograph is not None:
+        valid_spectrographs = [choice[0] for choice in DataFile.spectrograph_possibilities]
+        if spectrograph not in valid_spectrographs:
+            return Response(
+                {"detail": f"Invalid spectrograph. Must be one of: {valid_spectrographs}"},
+                status=400
+            )
+        datafile.spectrograph = spectrograph
+    elif spectrograph is None and 'spectrograph' in request.data:
+        # Explicitly set to 'N' (NONE) to clear the value
+        datafile.spectrograph = 'N'
+
+    # Update override flag
+    if isinstance(spectrograph_override, bool):
+        datafile.spectrograph_override = spectrograph_override
+
+    datafile.save(update_fields=['spectrograph', 'spectrograph_override'])
+
+    serializer = DataFileSerializer(datafile)
+    return Response(serializer.data)
+
+

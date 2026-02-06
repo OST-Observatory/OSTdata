@@ -19,6 +19,8 @@ from .views import (
     admin_update_object_identifiers,
     admin_get_exposure_type_discrepancies,
     admin_update_exposure_type_user,
+    admin_get_spectrograph_files,
+    admin_update_spectrograph,
 )
 
 app_name = 'adminops-api'
@@ -44,6 +46,9 @@ urlpatterns = [
     # Exposure type classification endpoints
     path('datafiles/discrepancies/', admin_get_exposure_type_discrepancies, name='exposure_type_discrepancies'),
     path('datafiles/<int:pk>/exposure-type-user/', admin_update_exposure_type_user, name='update_exposure_type_user'),
+    # Spectrograph management endpoints
+    path('datafiles/spectrograph/', admin_get_spectrograph_files, name='spectrograph_files'),
+    path('datafiles/<int:pk>/spectrograph/', admin_update_spectrograph, name='update_spectrograph'),
 ]
 
 
