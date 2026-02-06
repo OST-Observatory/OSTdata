@@ -6,7 +6,7 @@ import numpy as np
 
 from astroquery.simbad import Simbad
 from astropy.coordinates.angles import Angle
-from astropy.coordinates import SkyCoord
+from astropy.coordinates import SkyCoord, EarthLocation, get_body
 import astropy.units as u
 from astropy.io import fits
 from astropy.time import Time
@@ -236,6 +236,253 @@ def get_object_fov_radius(obj, fallback_arcmin=10.0, min_arcmin=1.0, max_arcmin=
     arcsec = int((remaining_arcmin - arcmin) * 60)
     
     return f"{degrees}d{arcmin}m{arcsec}s"
+
+
+def get_observatory_location(data_file):
+    """
+    Extract observatory location from FITS header or use Django settings defaults.
+    
+    Parameters
+    ----------
+    data_file : DataFile
+        DataFile instance with FITS header information
+    
+    Returns
+    -------
+    EarthLocation or None
+        EarthLocation object if valid coordinates found, None otherwise
+    """
+    from django.conf import settings
+    
+    latitude = None
+    longitude = None
+    elevation = 0.0
+    
+    # Try to extract from FITS header
+    try:
+        header = data_file.get_fits_header()
+        
+        # Try FITS standard keys first
+        if 'OBS-LAT' in header:
+            try:
+                lat_val = header['OBS-LAT']
+                # Handle various formats (degrees, degrees:minutes:seconds, etc.)
+                if isinstance(lat_val, (int, float)):
+                    latitude = float(lat_val)
+                elif isinstance(lat_val, str):
+                    # Try parsing as degrees:minutes:seconds or decimal degrees
+                    try:
+                        latitude = Angle(lat_val).degree
+                    except Exception:
+                        latitude = float(lat_val)
+            except (ValueError, TypeError, AttributeError):
+                pass
+        
+        if 'OBS-LONG' in header:
+            try:
+                lon_val = header['OBS-LONG']
+                if isinstance(lon_val, (int, float)):
+                    longitude = float(lon_val)
+                elif isinstance(lon_val, str):
+                    try:
+                        longitude = Angle(lon_val).degree
+                    except Exception:
+                        longitude = float(lon_val)
+            except (ValueError, TypeError, AttributeError):
+                pass
+        
+        if 'OBS-ELEV' in header:
+            try:
+                elevation = float(header['OBS-ELEV'])
+            except (ValueError, TypeError, AttributeError):
+                pass
+        
+        # Try alternative keys if standard keys not found
+        if latitude is None and 'SITELAT' in header:
+            try:
+                lat_val = header['SITELAT']
+                if isinstance(lat_val, (int, float)):
+                    latitude = float(lat_val)
+                elif isinstance(lat_val, str):
+                    try:
+                        latitude = Angle(lat_val).degree
+                    except Exception:
+                        latitude = float(lat_val)
+            except (ValueError, TypeError, AttributeError):
+                pass
+        
+        if longitude is None and 'SITELONG' in header:
+            try:
+                lon_val = header['SITELONG']
+                if isinstance(lon_val, (int, float)):
+                    longitude = float(lon_val)
+                elif isinstance(lon_val, str):
+                    try:
+                        longitude = Angle(lon_val).degree
+                    except Exception:
+                        longitude = float(lon_val)
+            except (ValueError, TypeError, AttributeError):
+                pass
+        
+        if elevation == 0.0 and 'SITEELEV' in header:
+            try:
+                elevation = float(header['SITEELEV'])
+            except (ValueError, TypeError, AttributeError):
+                pass
+        
+        # Try another set of alternative keys
+        if latitude is None and 'LATITUDE' in header:
+            try:
+                lat_val = header['LATITUDE']
+                if isinstance(lat_val, (int, float)):
+                    latitude = float(lat_val)
+                elif isinstance(lat_val, str):
+                    try:
+                        latitude = Angle(lat_val).degree
+                    except Exception:
+                        latitude = float(lat_val)
+            except (ValueError, TypeError, AttributeError):
+                pass
+        
+        if longitude is None and 'LONGITUD' in header:
+            try:
+                lon_val = header['LONGITUD']
+                if isinstance(lon_val, (int, float)):
+                    longitude = float(lon_val)
+                elif isinstance(lon_val, str):
+                    try:
+                        longitude = Angle(lon_val).degree
+                    except Exception:
+                        longitude = float(lon_val)
+            except (ValueError, TypeError, AttributeError):
+                pass
+        
+        if elevation == 0.0 and 'ALTITUDE' in header:
+            try:
+                elevation = float(header['ALTITUDE'])
+            except (ValueError, TypeError, AttributeError):
+                pass
+    
+    except Exception as e:
+        logger.debug(f'Error extracting observatory location from FITS header for data_file {data_file.pk}: {e}')
+    
+    # Fall back to Django settings if header extraction failed
+    if latitude is None:
+        latitude = getattr(settings, 'OBSERVATORY_LATITUDE', None)
+    if longitude is None:
+        longitude = getattr(settings, 'OBSERVATORY_LONGITUDE', None)
+    if elevation == 0.0:
+        elevation = getattr(settings, 'OBSERVATORY_ELEVATION', 0.0)
+    
+    # Validate coordinates
+    if latitude is None or longitude is None:
+        return None
+    
+    if not (-90 <= latitude <= 90):
+        logger.warning(f'Invalid latitude value: {latitude} (must be between -90 and 90)')
+        return None
+    
+    if not (-180 <= longitude <= 180):
+        logger.warning(f'Invalid longitude value: {longitude} (must be between -180 and 180)')
+        return None
+    
+    try:
+        return EarthLocation(lat=latitude * u.deg, lon=longitude * u.deg, height=elevation * u.m)
+    except Exception as e:
+        logger.warning(f'Error creating EarthLocation: {e}')
+        return None
+
+
+def check_solar_system_objects_in_fov(data_file, observatory_location):
+    """
+    Check if any Solar System objects (Sun, Moon, planets) are in the field of view.
+    
+    Parameters
+    ----------
+    data_file : DataFile
+        DataFile instance with observation information
+    observatory_location : EarthLocation
+        Observatory location for calculating object positions
+    
+    Returns
+    -------
+    dict
+        Dictionary with:
+        - 'found': bool indicating if any Solar System object was found
+        - 'objects': list of dicts with 'name', 'separation_deg', 'ra', 'dec' for each object found
+        - 'closest': dict with the closest object found (if any)
+    """
+    if observatory_location is None:
+        return {'found': False, 'objects': [], 'closest': None}
+    
+    # Validate required fields
+    if (data_file.ra == -1 or data_file.ra is None or data_file.ra == 0.0 or
+        data_file.dec == -1 or data_file.dec is None or data_file.dec == 0.0):
+        return {'found': False, 'objects': [], 'closest': None}
+    
+    if data_file.fov_x <= 0 or data_file.fov_y <= 0:
+        return {'found': False, 'objects': [], 'closest': None}
+    
+    if data_file.hjd <= 0:
+        return {'found': False, 'objects': [], 'closest': None}
+    
+    try:
+        # Calculate FOV radius (half-diagonal in degrees)
+        fov_x_deg = float(data_file.fov_x)
+        fov_y_deg = float(data_file.fov_y)
+        fov_radius_deg = np.sqrt(fov_x_deg**2 + fov_y_deg**2) / 2.0
+        
+        # Get observation time
+        obs_time = Time(data_file.hjd, format='jd')
+        
+        # Field center coordinates
+        field_center = SkyCoord(ra=data_file.ra * u.deg, dec=data_file.dec * u.deg, frame='icrs')
+        
+        # List of Solar System objects to check
+        solar_system_bodies = [
+            'sun', 'moon', 'mercury', 'venus', 'mars', 
+            'jupiter', 'saturn', 'uranus', 'neptune'
+        ]
+        
+        found_objects = []
+        
+        # Check each Solar System object
+        for body_name in solar_system_bodies:
+            try:
+                # Get body position at observation time
+                body_coord = get_body(body_name, obs_time, observatory_location)
+                
+                # Calculate angular separation from field center
+                separation = field_center.separation(body_coord)
+                separation_deg = separation.to(u.deg).value
+                
+                # Check if object is within FOV
+                if separation_deg <= fov_radius_deg:
+                    found_objects.append({
+                        'name': body_name.capitalize(),
+                        'separation_deg': separation_deg,
+                        'ra': body_coord.ra.deg,
+                        'dec': body_coord.dec.deg,
+                    })
+            except Exception as e:
+                # Skip this object if there's an error (e.g., ephemeris unavailable)
+                logger.debug(f'Error checking {body_name} for data_file {data_file.pk}: {e}')
+                continue
+        
+        # Find closest object if any were found
+        closest = None
+        if found_objects:
+            closest = min(found_objects, key=lambda x: x['separation_deg'])
+        
+        return {
+            'found': len(found_objects) > 0,
+            'objects': found_objects,
+            'closest': closest,
+        }
+    
+    except Exception as e:
+        logger.warning(f'Error checking Solar System objects in FOV for data_file {data_file.pk}: {e}')
+        return {'found': False, 'objects': [], 'closest': None}
 
 
 def verify_star_classification(obj, data_file=None, enable_extended_search=True):
@@ -870,9 +1117,6 @@ def evaluate_data_file(data_file, observation_run, print_to_terminal=False, skip
             #   Tolerance in degree
             # t = 0.1
             t = 0.5
-            if ('20210224' in str(data_file.datafile) or
-                    '20220106' in str(data_file.datafile)):
-                t = 1.0
 
             if target in special_targets or target in solar_system:
                 objs = Object.objects.filter(name__icontains=target)
@@ -1010,98 +1254,128 @@ def evaluate_data_file(data_file, observation_run, print_to_terminal=False, skip
             else:
                 if print_to_terminal:
                     print('New object (target: {})'.format(target))
-                #   Set Defaults
-                object_ra = data_file.ra
-                object_dec = data_file.dec
-                object_type = 'UK'
-                object_simbad_resolved = False
-                object_name = target
+                
+                #   Check for Solar System objects in field of view before SIMBAD queries
+                #   This check should run before verify_star_classification()
+                solar_system_detected = False
+                try:
+                    # Only check if we have valid FOV and observation time
+                    if (data_file.fov_x > 0 and data_file.fov_y > 0 and 
+                        data_file.hjd > 0 and expo_type == 'LI'):
+                        observatory_location = get_observatory_location(data_file)
+                        if observatory_location is not None:
+                            sso_result = check_solar_system_objects_in_fov(data_file, observatory_location)
+                            if sso_result['found'] and sso_result['closest'] is not None:
+                                solar_system_detected = True
+                                closest_obj = sso_result['closest']
+                                object_name = closest_obj['name']
+                                object_ra = closest_obj['ra']
+                                object_dec = closest_obj['dec']
+                                object_type = 'SO'
+                                object_simbad_resolved = False
+                                
+                                if print_to_terminal:
+                                    logger.info(
+                                        f'Solar System object detected in FOV: {object_name} '
+                                        f'(separation: {closest_obj["separation_deg"]:.3f} deg)'
+                                    )
+                except Exception as e:
+                    # Don't fail object creation if Solar System check fails
+                    logger.warning(f'Error checking Solar System objects in FOV for data_file {data_file.pk}: {e}')
+                
+                #   Set Defaults (will be overridden if Solar System object was detected)
+                if not solar_system_detected:
+                    object_ra = data_file.ra
+                    object_dec = data_file.dec
+                    object_type = 'UK'
+                    object_simbad_resolved = False
+                    object_name = target
 
-                #   Query Simbad for object name (safe, with variants and rate-limit)
-                simbad_tbl = _query_object_variants(target)
+                    #   Query Simbad for object name (safe, with variants and rate-limit)
+                    simbad_tbl = _query_object_variants(target)
 
-                #   Get Simbad coordinates
-                if simbad_tbl is not None and len(simbad_tbl) > 0:
-                    simbad_ra = Angle(
-                        simbad_tbl[0]['ra'],
-                        unit='degree',
-                    ).degree
-                    simbad_dec = Angle(
-                        simbad_tbl[0]['dec'],
-                        unit='degree',
-                    ).degree
-
-                    # #   Tolerance in degree
-                    # tol = 0.5
-                    # tol = 1.
-
-                    if (simbad_ra + t > data_file.ra > simbad_ra - t and
-                            simbad_dec + t > data_file.dec > simbad_dec - t):
-                        object_ra = simbad_ra
-                        object_dec = simbad_dec
-                        object_simbad_resolved = True
-                        object_data_table = simbad_tbl[0]
-
-                    if print_to_terminal:
-                        print('Object resolved based on name:')
-                        print(object_simbad_resolved)
-
-                #   Search Simbad based on coordinates
-                if not object_simbad_resolved:
-                    result_table = _query_region_safe(data_file.ra, data_file.dec, '0d5m0s', row_limit=10)
-
-                    if (result_table is not None and
-                            len(result_table) > 0):
-
-                        #   Get the brightest object if magnitudes
-                        #   are available otherwise use the object
-                        #   with the smallest distance to the
-                        #   coordinates
-                        if np.all(result_table['V'].mask):
-                            index = 0
-                        else:
-                            index = np.argmin(
-                                result_table['V'].data
-                            )
+                    #   Get Simbad coordinates
+                    if simbad_tbl is not None and len(simbad_tbl) > 0:
                         simbad_ra = Angle(
-                            result_table[index]['ra'],
+                            simbad_tbl[0]['ra'],
                             unit='degree',
                         ).degree
                         simbad_dec = Angle(
-                            result_table[index]['dec'],
+                            simbad_tbl[0]['dec'],
                             unit='degree',
                         ).degree
-                        object_ra = simbad_ra
-                        object_dec = simbad_dec
-                        object_simbad_resolved = True
-                        object_data_table = result_table[index]
+
+                        # #   Tolerance in degree
+                        # tol = 0.5
+                        # tol = 1.
+
+                        if (simbad_ra + t > data_file.ra > simbad_ra - t and
+                                simbad_dec + t > data_file.dec > simbad_dec - t):
+                            object_ra = simbad_ra
+                            object_dec = simbad_dec
+                            object_simbad_resolved = True
+                            object_data_table = simbad_tbl[0]
 
                         if print_to_terminal:
-                            print('Object resolved based on coordinates:')
+                            print('Object resolved based on name:')
                             print(object_simbad_resolved)
 
-                #   Set object type based on Simbad
-                if object_simbad_resolved:
-                    # print('object_data_table:')
-                    # print(object_data_table.pprint(max_lines=-1, max_width=-1))
-                    # print(object_data_table)
+                    #   Search Simbad based on coordinates
+                    if not object_simbad_resolved:
+                        result_table = _query_region_safe(data_file.ra, data_file.dec, '0d5m0s', row_limit=10)
 
-                    raw_types = object_data_table['alltypes.otypes']
-                    types_str = '' if raw_types is None else str(raw_types)
-                    # print('types_str:')
-                    # print(types_str)
+                        if (result_table is not None and
+                                len(result_table) > 0):
 
-                    #   Decode information in object string to get a rough object estimate
-                    object_type = detect_object_type_from_simbad_types(types_str)
-                    if object_type is None:
-                        # Fallback: if no specific type detected, check for star
-                        if '*' in types_str:
-                            object_type = 'ST'
+                            #   Get the brightest object if magnitudes
+                            #   are available otherwise use the object
+                            #   with the smallest distance to the
+                            #   coordinates
+                            if np.all(result_table['V'].mask):
+                                index = 0
+                            else:
+                                index = np.argmin(
+                                    result_table['V'].data
+                                )
+                            simbad_ra = Angle(
+                                result_table[index]['ra'],
+                                unit='degree',
+                            ).degree
+                            simbad_dec = Angle(
+                                result_table[index]['dec'],
+                                unit='degree',
+                            ).degree
+                            object_ra = simbad_ra
+                            object_dec = simbad_dec
+                            object_simbad_resolved = True
+                            object_data_table = result_table[index]
 
-                    #   Set default name
-                    main_id = object_data_table['main_id']
-                    if main_id:
-                        object_name = str(main_id)
+                            if print_to_terminal:
+                                print('Object resolved based on coordinates:')
+                                print(object_simbad_resolved)
+
+                    #   Set object type based on Simbad
+                    if object_simbad_resolved:
+                        # print('object_data_table:')
+                        # print(object_data_table.pprint(max_lines=-1, max_width=-1))
+                        # print(object_data_table)
+
+                        raw_types = object_data_table['alltypes.otypes']
+                        types_str = '' if raw_types is None else str(raw_types)
+                        # print('types_str:')
+                        # print(types_str)
+
+                        #   Decode information in object string to get a rough object estimate
+                        object_type = detect_object_type_from_simbad_types(types_str)
+                        if object_type is None:
+                            # Fallback: if no specific type detected, check for star
+                            if '*' in types_str:
+                                object_type = 'ST'
+
+                        #   Set default name
+                        main_id = object_data_table['main_id']
+                        if main_id:
+                            object_name = str(main_id)
 
                 #     Make a new object (new objects don't have override flags set)
                 obj = Object(
@@ -1121,8 +1395,9 @@ def evaluate_data_file(data_file, observation_run, print_to_terminal=False, skip
 
                     #   Verify star classification: if classified as 'ST', perform extended search
                     #   to check if it should actually be a cluster, nebula, or galaxy
+                    #   Skip this check if a Solar System object was detected
                     verification_updated = False
-                    if object_type == 'ST':
+                    if not solar_system_detected and object_type == 'ST':
                         try:
                             # Check if extended search is enabled (can be disabled via environment variable)
                             enable_extended = str(os.environ.get('ENABLE_STAR_VERIFICATION', 'true')).lower() in ('true', '1', 'yes')
@@ -1144,8 +1419,27 @@ def evaluate_data_file(data_file, observation_run, print_to_terminal=False, skip
                             # Don't fail object creation if verification fails
                             logger.warning(f'Error during star classification verification for {obj.name}: {e}')
 
+                    #   Handle Solar System objects: add header name as identifier and update main_target
+                    if solar_system_detected:
+                        # Add header name as an alias if different from detected object name
+                        if target and target.lower() != object_name.lower():
+                            try:
+                                existing_header_id = obj.identifier_set.filter(name__exact=target, info_from_header=True).first()
+                                if not existing_header_id:
+                                    obj.identifier_set.create(
+                                        name=target,
+                                        info_from_header=True,
+                                    )
+                            except Exception as e:
+                                logger.debug(f'Error adding header identifier for Solar System object: {e}')
+                        
+                        # Update datafile target name to match detected Solar System object
+                        if should_allow_auto_update(data_file, 'main_target'):
+                            data_file.main_target = object_name
+                            data_file.save()
+                    
                     #   Set alias names (only if verification didn't already update identifiers)
-                    if object_simbad_resolved and not verification_updated:
+                    elif object_simbad_resolved and not verification_updated:
                         #   Add header name as an alias
                         obj.identifier_set.create(
                             name=target,

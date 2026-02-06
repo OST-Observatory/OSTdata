@@ -423,3 +423,11 @@ ML_EXPOSURE_TYPE_SUPPORTED_FORMATS = env.list('ML_EXPOSURE_TYPE_SUPPORTED_FORMAT
 ML_EXPOSURE_TYPE_TARGET_SIZE = env.list('ML_EXPOSURE_TYPE_TARGET_SIZE', default=[448, 448])  # [width, height]
 ML_EXPOSURE_TYPE_ENABLED = env.bool('ML_EXPOSURE_TYPE_ENABLED', default=False)
 
+# Observatory Location Configuration for Solar System Object Detection
+# These coordinates are used when FITS headers don't contain observatory location information
+# Latitude and longitude should be in decimal degrees (latitude: -90 to 90, longitude: -180 to 180)
+# Elevation should be in meters above sea level
+OBSERVATORY_LATITUDE = env.float('OBSERVATORY_LATITUDE', default=None)
+OBSERVATORY_LONGITUDE = env.float('OBSERVATORY_LONGITUDE', default=None)
+OBSERVATORY_ELEVATION = env.float('OBSERVATORY_ELEVATION', default=0.0)  # meters
+
