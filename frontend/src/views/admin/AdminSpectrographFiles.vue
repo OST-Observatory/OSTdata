@@ -134,6 +134,33 @@
           </v-chip>
         </template>
 
+        <template #item.exposure_type_ml="{ item }">
+          <div v-if="item.exposure_type_ml">
+            <v-chip size="small" :color="getExposureTypeColor(item.exposure_type_ml)" variant="flat">
+              {{ item.exposure_type_ml_display || item.exposure_type_ml }}
+            </v-chip>
+            <div v-if="item.exposure_type_ml_confidence !== null" class="text-caption text-medium-emphasis mt-1">
+              Confidence: {{ (item.exposure_type_ml_confidence * 100).toFixed(1) }}%
+            </div>
+            <v-chip v-if="item.exposure_type_ml_abstained" size="x-small" color="warning" variant="flat" class="mt-1">
+              Abstained
+            </v-chip>
+          </div>
+          <span v-else class="text-medium-emphasis">—</span>
+        </template>
+
+        <template #item.exposure_type_user="{ item }">
+          <div v-if="item.exposure_type_user">
+            <v-chip size="small" :color="getExposureTypeColor(item.exposure_type_user)" variant="flat">
+              {{ item.exposure_type_user_display || item.exposure_type_user }}
+            </v-chip>
+            <v-chip v-if="item.exposure_type_user_override" size="x-small" color="info" variant="flat" class="mt-1">
+              Override
+            </v-chip>
+          </div>
+          <span v-else class="text-medium-emphasis">—</span>
+        </template>
+
         <template #item.spectrograph="{ item }">
           <div v-if="item.spectrograph && item.spectrograph !== 'N'">
             <v-chip size="small" :color="getSpectrographColor(item.spectrograph)" variant="flat">
@@ -399,6 +426,8 @@ const headers = [
   { title: 'File Name', key: 'file_name', sortable: true },
   { title: 'Observation Run', key: 'observation_run_name', sortable: true },
   { title: 'Exposure Type', key: 'exposure_type', sortable: true },
+  { title: 'ML Type', key: 'exposure_type_ml', sortable: true },
+  { title: 'User Type', key: 'exposure_type_user', sortable: true },
   { title: 'Spectrograph', key: 'spectrograph', sortable: true },
   { title: 'Actions', key: 'actions', sortable: false, width: '120px' },
 ]
