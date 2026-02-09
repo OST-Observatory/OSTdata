@@ -582,94 +582,115 @@
           </div>
           <v-skeleton-loader v-if="loadingDataFiles" type="table"></v-skeleton-loader>
           <template v-else>
-            <v-table v-if="filteredDataFiles && filteredDataFiles.length" class="custom-table">
-              <thead>
-                <tr>
-                  <th class="text-primary" style="width:36px">
-                    <v-checkbox v-model="selectAll" density="compact" hide-details @change="toggleSelectAll" aria-label="Select all files" />
-                  </th>
-                  <th class="text-primary">File Name</th>
-                  <th class="text-primary">Time</th>
-                  <th class="text-primary">Target</th>
-                  <th class="text-primary">Coordinates</th>
-                  <th class="text-primary">File Type</th>
-                  <th class="text-primary">Binning</th>
-                  <th class="text-primary">Instrument</th>
-                  <th class="text-primary">Exposure Type</th>
-                  <th class="text-primary">Exp. Time</th>
-                  <th class="text-primary text-right">Tools</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="df in filteredDataFiles" :key="df.pk || df.id">
-                  <td>
-                    <v-checkbox v-model="selectedIds" :value="(df.pk || df.id)" density="compact" hide-details />
-                  </td>
-                  <td>{{ df.file_name }}</td>
-                  <td>{{ formatTimeOnly(df.obs_date) }}</td>
-                  <td>
-                    <template v-if="isLight(df)">
-                      <template v-if="df.header_target_name && df.header_target_name.trim() && df.header_target_name !== '-'">
-                        {{ df.header_target_name }}
-                        <template v-if="df.main_target && df.main_target.trim() && df.main_target !== '-'">
-                          <span class="text-secondary"> (</span>
-                          <router-link
-                            v-if="getObjectIdByTargetName(df.main_target)"
-                            :to="`/objects/${getObjectIdByTargetName(df.main_target)}`"
-                            class="text-decoration-none primary--text"
-                          >{{ df.main_target }}</router-link>
-                          <span v-else>{{ df.main_target }}</span>
-                          <span class="text-secondary">)</span>
-                        </template>
-                      </template>
-                      <span v-else>{{ df.header_target_name || '—' }}</span>
+            <v-data-table
+              v-if="sortedDataFiles && sortedDataFiles.length"
+              :headers="runDataFileHeaders"
+              :items="sortedDataFiles"
+              :items-per-page="dataFilesItemsPerPage === -1 ? sortedDataFiles.length : dataFilesItemsPerPage"
+              :page="dataFilesPage"
+              :sort-by="dfSortBy"
+              @update:sort-by="handleDfSort"
+              hide-default-footer
+              class="custom-table"
+              item-key="pk"
+              item-value="pk"
+            >
+              <template v-slot:header.select>
+                <div class="d-flex justify-center">
+                  <v-checkbox
+                    v-model="selectAll"
+                    density="compact"
+                    hide-details
+                    @change="toggleSelectAll"
+                    aria-label="Select all files"
+                  />
+                </div>
+              </template>
+              <template v-slot:item.select="{ item }">
+                <v-checkbox
+                  v-model="selectedIds"
+                  :value="(item.pk || item.id)"
+                  density="compact"
+                  hide-details
+                  :aria-label="`Select ${item.file_name}`"
+                />
+              </template>
+              <template v-slot:item.file_name="{ item }">
+                {{ item.file_name }}
+              </template>
+              <template v-slot:item.obs_date="{ item }">
+                {{ formatTimeOnly(item.obs_date) }}
+              </template>
+              <template v-slot:item.main_target="{ item }">
+                <template v-if="isLight(item)">
+                  <template v-if="item.header_target_name && item.header_target_name.trim() && item.header_target_name !== '-'">
+                    {{ item.header_target_name }}
+                    <template v-if="item.main_target && item.main_target.trim() && item.main_target !== '-'">
+                      <span class="text-secondary"> (</span>
+                      <router-link
+                        v-if="getObjectIdByTargetName(item.main_target)"
+                        :to="`/objects/${getObjectIdByTargetName(item.main_target)}`"
+                        class="text-decoration-none primary--text"
+                      >{{ item.main_target }}</router-link>
+                      <span v-else>{{ item.main_target }}</span>
+                      <span class="text-secondary">)</span>
                     </template>
-                    <span v-else class="text-secondary">—</span>
-                  </td>
-                  <td>{{ df.ra_hms }} {{ df.dec_dms }}</td>
-                  <td>{{ df.file_type }}</td>
-                  <td>{{ df.binning || '1x1' }}</td>
-                  <td>
-                    <template v-if="df.spectrograph && df.spectrograph !== 'N'">
-                      {{ getSpectrographLabel(df.spectrograph) }} + {{ df.instrument ? ' ' + df.instrument : '' }}
-                    </template>
-                    <template v-else>
-                      {{ df.instrument || '—' }}
-                    </template>
-                  </td>
-                  <td>{{ df.exposure_type_display || df.exposure_type }}</td>
-                  <td>{{ formatExposureTime(df.exptime) }}</td>
-                  <td class="text-right">
-                    <v-btn
-                      v-if="!isSer(df)"
-                      variant="text"
-                      size="small"
-                      icon
-                      aria-label="Preview"
-                      @click="openPreview(df)"
-                    >
-                      <v-icon>mdi-image-search</v-icon>
-                    </v-btn>
-                    <v-btn
-                      variant="text"
-                      size="small"
-                      icon
-                      :disabled="String(df.file_type || '').toUpperCase() !== 'FITS'"
-                      :aria-label="`View FITS header for ${df.file_name}`"
-                      @click="openHeader(df)"
-                    >
-                      <v-icon>mdi-file-document-outline</v-icon>
-                    </v-btn>
-                    <v-btn variant="text" size="small" icon :href="api.getDataFileDownloadUrl(df.pk || df.id)" :aria-label="`Download ${df.file_name}`">
-                      <v-icon>mdi-download</v-icon>
-                    </v-btn>
-                  </td>
-                </tr>
-              </tbody>
-            </v-table>
-            <!-- <div class="d-flex align-center mt-2" v-if="dataFiles && dataFiles.length">
-              <v-btn color="primary" variant="text" :disabled="!selectedIds.length" @click="downloadSelected">Download selected ({{ selectedIds.length }})</v-btn>
-            </div> -->
+                  </template>
+                  <span v-else>{{ item.header_target_name || '—' }}</span>
+                </template>
+                <span v-else class="text-secondary">—</span>
+              </template>
+              <template v-slot:item.coordinates="{ item }">
+                {{ item.ra_hms }} {{ item.dec_dms }}
+              </template>
+              <template v-slot:item.file_type="{ item }">
+                {{ item.file_type }}
+              </template>
+              <template v-slot:item.binning="{ item }">
+                {{ item.binning || '1x1' }}
+              </template>
+              <template v-slot:item.instrument="{ item }">
+                <template v-if="item.spectrograph && item.spectrograph !== 'N'">
+                  {{ getSpectrographLabel(item.spectrograph) }}{{ item.instrument ? ' ' + item.instrument : '' }}
+                </template>
+                <template v-else>
+                  {{ item.instrument || '—' }}
+                </template>
+              </template>
+              <template v-slot:item.exposure_type_display="{ item }">
+                {{ item.exposure_type_display || item.exposure_type }}
+              </template>
+              <template v-slot:item.exptime="{ item }">
+                {{ formatExposureTime(item.exptime) }}
+              </template>
+              <template v-slot:item.tools="{ item }">
+                <div class="d-flex justify-end">
+                  <v-btn
+                    v-if="!isSer(item)"
+                    variant="text"
+                    size="small"
+                    icon
+                    aria-label="Preview"
+                    @click="openPreview(item)"
+                  >
+                    <v-icon>mdi-image-search</v-icon>
+                  </v-btn>
+                  <v-btn
+                    variant="text"
+                    size="small"
+                    icon
+                    :disabled="String(item.file_type || '').toUpperCase() !== 'FITS'"
+                    :aria-label="`View FITS header for ${item.file_name}`"
+                    @click="openHeader(item)"
+                  >
+                    <v-icon>mdi-file-document-outline</v-icon>
+                  </v-btn>
+                  <v-btn variant="text" size="small" icon :href="api.getDataFileDownloadUrl(item.pk || item.id)" :aria-label="`Download ${item.file_name}`">
+                    <v-icon>mdi-download</v-icon>
+                  </v-btn>
+                </div>
+              </template>
+            </v-data-table>
             <div v-else class="text-caption text-secondary">No data files found for this run.</div>
           </template>
         </v-card-text>
@@ -921,6 +942,7 @@ const getSpectrographLabel = (spectrograph) => {
 const dfFilterFileName = ref('')
 const dfFilterPixelsMin = ref(null)
 const dfFilterPixelsMax = ref(null)
+const dfSortBy = ref([{ key: 'obs_date', order: 'desc' }])
 const exposureTypeOptions = [
   { title: 'Light (LI)', value: 'LI' },
   { title: 'Wave (WA)', value: 'WA' },
@@ -1199,9 +1221,70 @@ const filteredDataFiles = computed(() => {
   if (dfFilterBinning.value) {
     items = items.filter(f => (f.binning || '').toLowerCase() === String(dfFilterBinning.value).toLowerCase())
   }
-  console.log('items', items);
   return items
 })
+
+// Sort function for data files
+const sortDataFiles = (items, sortBy) => {
+  if (!sortBy || sortBy.length === 0) return items
+  
+  const sorted = [...items]
+  const sort = sortBy[0]
+  const key = sort.key
+  const order = sort.order === 'desc' ? -1 : 1
+  
+  sorted.sort((a, b) => {
+    let aVal = a[key]
+    let bVal = b[key]
+    
+    // Handle special cases
+    if (key === 'obs_date') {
+      aVal = a.obs_date ? new Date(a.obs_date).getTime() : 0
+      bVal = b.obs_date ? new Date(b.obs_date).getTime() : 0
+    } else if (key === 'exptime') {
+      aVal = a.exptime || 0
+      bVal = b.exptime || 0
+    } else if (key === 'binning') {
+      // Parse binning like "2x2" to numeric value for sorting
+      const parseBinning = (bin) => {
+        if (!bin) return 0
+        const match = String(bin).match(/(\d+)x(\d+)/)
+        return match ? parseInt(match[1]) * parseInt(match[2]) : 0
+      }
+      aVal = parseBinning(a.binning)
+      bVal = parseBinning(b.binning)
+    } else if (key === 'exposure_type_display') {
+      aVal = a.exposure_type_display || a.exposure_type || ''
+      bVal = b.exposure_type_display || b.exposure_type || ''
+    } else if (key === 'main_target') {
+      // For sorting by target, use main_target if available, otherwise header_target_name
+      aVal = (a.main_target && a.main_target !== '-') ? a.main_target : (a.header_target_name || '')
+      bVal = (b.main_target && b.main_target !== '-') ? b.main_target : (b.header_target_name || '')
+    }
+    
+    // Handle null/undefined
+    if (aVal == null) aVal = ''
+    if (bVal == null) bVal = ''
+    
+    // Compare
+    if (typeof aVal === 'string' && typeof bVal === 'string') {
+      return aVal.localeCompare(bVal) * order
+    }
+    if (aVal < bVal) return -1 * order
+    if (aVal > bVal) return 1 * order
+    return 0
+  })
+  
+  return sorted
+}
+
+const sortedDataFiles = computed(() => {
+  return sortDataFiles(filteredDataFiles.value, dfSortBy.value)
+})
+
+const handleDfSort = (newSortBy) => {
+  dfSortBy.value = newSortBy.length > 0 ? newSortBy : [{ key: 'obs_date', order: 'desc' }]
+}
 
 // Binning options derived from loaded files
 // (defined once - remove duplicates)
@@ -1428,6 +1511,21 @@ const handleDfItemsPerPageChange = () => {
   dataFilesPage.value = 1
   fetchRunDataFiles()
 }
+
+// Define headers for data files table
+const runDataFileHeaders = [
+  { title: '', key: 'select', sortable: false, width: 48 },
+  { title: 'File Name', key: 'file_name', sortable: true },
+  { title: 'Time', key: 'obs_date', sortable: true },
+  { title: 'Target', key: 'main_target', sortable: true },
+  { title: 'Coordinates', key: 'coordinates', sortable: false },
+  { title: 'File Type', key: 'file_type', sortable: true },
+  { title: 'Binning', key: 'binning', sortable: true },
+  { title: 'Instrument', key: 'instrument', sortable: true },
+  { title: 'Exposure Type', key: 'exposure_type_display', sortable: true },
+  { title: 'Exp. Time', key: 'exptime', sortable: true },
+  { title: 'Tools', key: 'tools', sortable: false, align: 'end' },
+]
 
 watch([run, dateString], () => {
   try {
