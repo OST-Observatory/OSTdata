@@ -849,13 +849,18 @@ def refresh_dashboard_stats(self):
         aware_datetime = make_aware(dtime_naive)
         
         # === FILES: Single aggregated query ===
-        file_stats = DataFile.objects.aggregate(
+        # Annotate with effective_exposure_type for spectra counting
+        from utilities import annotate_effective_exposure_type
+        datafiles_annotated = annotate_effective_exposure_type(DataFile.objects.all())
+        file_stats = datafiles_annotated.aggregate(
             total=Count('pk'),
             bias=Count('pk', filter=get_effective_exposure_type_filter('BI', '')),
             darks=Count('pk', filter=get_effective_exposure_type_filter('DA', '')),
             flats=Count('pk', filter=get_effective_exposure_type_filter('FL', '')),
             lights=Count('pk', filter=get_effective_exposure_type_filter('LI', '')),
             waves=Count('pk', filter=get_effective_exposure_type_filter('WA', '')),
+            # Spectra: Light frames with spectrograph != 'N' (NONE)
+            spectra=Count('pk', filter=Q(effective_exposure_type='LI') & ~Q(spectrograph='N')),
             fits=Count('pk', filter=Q(file_type='FITS')),
             jpeg=Count('pk', filter=Q(file_type='JPG')),
             cr2=Count('pk', filter=Q(file_type='CR2')),
@@ -906,6 +911,7 @@ def refresh_dashboard_stats(self):
                 'flats': file_stats['flats'] or 0,
                 'lights': file_stats['lights'] or 0,
                 'waves': file_stats['waves'] or 0,
+                'spectra': file_stats['spectra'] or 0,
                 'fits': file_stats['fits'] or 0,
                 'jpeg': file_stats['jpeg'] or 0,
                 'cr2': file_stats['cr2'] or 0,
