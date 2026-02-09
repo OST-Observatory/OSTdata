@@ -57,7 +57,8 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         output_path = options['output']
         max_per_class = options['max_per_class']
-        min_year = options['min_year']
+        # Django converts --min-year to min_year in options
+        min_year = options.get('min_year') or options.get('min-year', 2021)
         formats = [f.upper() for f in options['formats']]
         seed = options['seed']
         train_ratio, val_ratio, test_ratio = options['split']
@@ -92,16 +93,24 @@ class Command(BaseCommand):
         self.stdout.write(f'  Data directory: {data_directory}')
         
         # Filter files:
-        # 1. Files from min_year onwards (obs_date starts with year)
+        # 1. Files from min_year onwards (obs_date year >= min_year)
         # 2. Only specified formats
         # 3. Only files where exposure_type_user is set OR exposure_type_ml == exposure_type
         queryset = DataFile.objects.filter(
             file_type__in=formats
-        ).filter(
-            Q(obs_date__startswith=str(min_year)) |
-            Q(obs_date__startswith=f'{min_year}-') |
-            Q(obs_date__regex=rf'^{min_year}.*')
         )
+        
+        # Build filter for years >= min_year
+        # obs_date is a string field, typically in format "YYYY-MM-DD HH:MM:SS" or "YYYY-MM-DD"
+        # We need to match all years >= min_year
+        year_filters = Q()
+        current_year = min_year
+        max_year = 2100  # Reasonable upper limit
+        for year in range(current_year, max_year + 1):
+            year_str = str(year)
+            year_filters |= Q(obs_date__startswith=year_str)
+        
+        queryset = queryset.filter(year_filters)
         
         # Filter for reliable exposure type:
         # exposure_type_user is set OR exposure_type_ml == exposure_type
