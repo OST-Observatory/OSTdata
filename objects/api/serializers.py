@@ -97,7 +97,10 @@ class ObjectListSerializer(ModelSerializer):
         for run in runs:
             # DataFiles linked to this object within this run
             df_qs = obj.datafiles.filter(observation_run=run)
-            df_science = df_qs.filter(exposure_type='LI')
+            # Use effective exposure type for filtering
+            from utilities import annotate_effective_exposure_type
+            df_qs = annotate_effective_exposure_type(df_qs)
+            df_science = df_qs.filter(effective_exposure_type='LI')
             try:
                 n_total = df_qs.count()
             except Exception:
@@ -121,8 +124,8 @@ class ObjectListSerializer(ModelSerializer):
                     + df_qs.filter(file_type__exact='TIFF').count()
                 )
                 n_ser = df_qs.filter(file_type__exact='SER').count()
-                n_flat = df_qs.filter(exposure_type__exact='FL').count()
-                n_dark = df_qs.filter(exposure_type__exact='DA').count()
+                n_flat = df_qs.filter(effective_exposure_type='FL').count()
+                n_dark = df_qs.filter(effective_exposure_type='DA').count()
             except Exception:
                 n_fits = n_img = n_ser = n_flat = n_dark = 0
 
@@ -249,14 +252,17 @@ class ObjectListSerializer(ModelSerializer):
 
     def get_n_light(self, obj):
         try:
-            return obj.datafiles.filter(exposure_type='LI').count()
+            from utilities import annotate_effective_exposure_type
+            return annotate_effective_exposure_type(obj.datafiles.all()).filter(effective_exposure_type='LI').count()
         except Exception:
             return 0
 
     def get_light_expo_time(self, obj):
         try:
+            from utilities import annotate_effective_exposure_type
             total = 0
-            for f in obj.datafiles.filter(exposure_type='LI').only('exptime'):
+            light_files = annotate_effective_exposure_type(obj.datafiles.all()).filter(effective_exposure_type='LI')
+            for f in light_files.only('exptime'):
                 try:
                     if getattr(f, 'exptime', 0) and f.exptime > 0:
                         total += f.exptime

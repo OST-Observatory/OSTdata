@@ -24,10 +24,11 @@ from drf_spectacular.utils import extend_schema, OpenApiParameter, extend_schema
 import logging
 logger = logging.getLogger(__name__)
 
-from obs_run.models import ObservationRun
+from obs_run.models import ObservationRun, DataFile
 from objects.models import Object
 from obs_run.utils import normalize_alias, INSTRUMENT_ALIASES, INSTRUMENT_CATALOG, check_and_set_override, get_override_field_name
 from .serializers import RunSerializer
+from utilities import get_effective_exposure_type_filter, annotate_effective_exposure_type
 from .filter import RunFilter
 from ..plotting import (
     plot_visibility,
@@ -102,9 +103,9 @@ class RunViewSet(viewsets.ModelViewSet):
                 Count('datafile', filter=Q(datafile__file_type__exact='TIFF'))
             ),
             n_ser=Count('datafile', filter=Q(datafile__file_type__exact='SER')),
-            n_light=Count('datafile', filter=Q(datafile__exposure_type__exact='LI')),
-            n_flat=Count('datafile', filter=Q(datafile__exposure_type__exact='FL')),
-            n_dark=Count('datafile', filter=Q(datafile__exposure_type__exact='DA')),
+            n_light=Count('datafile', filter=get_effective_exposure_type_filter('LI', 'datafile__')),
+            n_flat=Count('datafile', filter=get_effective_exposure_type_filter('FL', 'datafile__')),
+            n_dark=Count('datafile', filter=get_effective_exposure_type_filter('DA', 'datafile__')),
             expo_time=Sum('datafile__exptime', filter=Q(datafile__exptime__gt=0)),
             n_datafiles=Count('datafile'),
         )
@@ -443,12 +444,12 @@ def getDashboardStats(request):
     # === FILES: Single aggregated query ===
     file_stats = DataFile.objects.aggregate(
         total=Count('pk'),
-        # Exposure types
-        bias=Count('pk', filter=Q(exposure_type='BI')),
-        darks=Count('pk', filter=Q(exposure_type='DA')),
-        flats=Count('pk', filter=Q(exposure_type='FL')),
-        lights=Count('pk', filter=Q(exposure_type='LI')),
-        waves=Count('pk', filter=Q(exposure_type='WA')),
+        # Exposure types (using effective exposure type)
+        bias=Count('pk', filter=get_effective_exposure_type_filter('BI', '')),
+        darks=Count('pk', filter=get_effective_exposure_type_filter('DA', '')),
+        flats=Count('pk', filter=get_effective_exposure_type_filter('FL', '')),
+        lights=Count('pk', filter=get_effective_exposure_type_filter('LI', '')),
+        waves=Count('pk', filter=get_effective_exposure_type_filter('WA', '')),
         # File types
         fits=Count('pk', filter=Q(file_type='FITS')),
         jpeg=Count('pk', filter=Q(file_type='JPG')),
@@ -611,11 +612,10 @@ def dark_finder_search(request):
         # Normalize instrument using INSTRUMENT_ALIASES
         normalized_instrument = normalize_alias(instrument, INSTRUMENT_ALIASES)
         
-        # Build query for dark frames
-        queryset = DataFile.objects.filter(
-            exposure_type='DA',
-            observation_run__is_public=True
-        )
+        # Build query for dark frames (using effective exposure type)
+        queryset = annotate_effective_exposure_type(
+            DataFile.objects.filter(observation_run__is_public=True)
+        ).filter(effective_exposure_type='DA')
         
         # Find all possible instrument variants
         possible_instruments = [normalized_instrument]

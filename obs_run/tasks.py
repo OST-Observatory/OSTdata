@@ -15,7 +15,7 @@ import json
 
 from obs_run.models import DownloadJob, DataFile, ObservationRun
 from obs_run.utils import should_allow_auto_update
-from utilities import add_new_data_file
+from utilities import add_new_data_file, get_effective_exposure_type_filter
 
 logger = logging.getLogger(__name__)
 
@@ -152,7 +152,10 @@ def build_zip_task(self, job_id: int):
             v = f['main_target']
             qs = qs.filter(Q(main_target__icontains=v) | Q(header_target_name__icontains=v))
         if f.get('exposure_type'):
-            qs = qs.filter(exposure_type__in=f['exposure_type'])
+            # Use effective exposure type for filtering
+            from utilities import annotate_effective_exposure_type
+            qs = annotate_effective_exposure_type(qs)
+            qs = qs.filter(effective_exposure_type__in=f['exposure_type'])
         if f.get('spectroscopy') is not None:
             qs = qs.filter(spectroscopy=bool(f['spectroscopy']))
         if f.get('exptime_min') is not None:
@@ -848,11 +851,11 @@ def refresh_dashboard_stats(self):
         # === FILES: Single aggregated query ===
         file_stats = DataFile.objects.aggregate(
             total=Count('pk'),
-            bias=Count('pk', filter=Q(exposure_type='BI')),
-            darks=Count('pk', filter=Q(exposure_type='DA')),
-            flats=Count('pk', filter=Q(exposure_type='FL')),
-            lights=Count('pk', filter=Q(exposure_type='LI')),
-            waves=Count('pk', filter=Q(exposure_type='WA')),
+            bias=Count('pk', filter=get_effective_exposure_type_filter('BI', '')),
+            darks=Count('pk', filter=get_effective_exposure_type_filter('DA', '')),
+            flats=Count('pk', filter=get_effective_exposure_type_filter('FL', '')),
+            lights=Count('pk', filter=get_effective_exposure_type_filter('LI', '')),
+            waves=Count('pk', filter=get_effective_exposure_type_filter('WA', '')),
             fits=Count('pk', filter=Q(file_type='FITS')),
             jpeg=Count('pk', filter=Q(file_type='JPG')),
             cr2=Count('pk', filter=Q(file_type='CR2')),

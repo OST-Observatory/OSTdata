@@ -340,6 +340,40 @@ class DataFile(models.Model):
         else:
             return '-'
 
+    #   Effective exposure type based on priority logic
+    @property
+    def effective_exposure_type(self):
+        """
+        Determine the effective exposure type based on priority:
+        1. exposure_type_user (if set, not None, not empty string)
+        2. exposure_type_ml (if set AND matches exposure_type header value)
+        3. 'UK' (Unknown) if exposure_type_ml is set but doesn't match exposure_type
+        4. exposure_type (header-based, fallback)
+        """
+        # Priority 1: User-set type
+        if self.exposure_type_user and self.exposure_type_user.strip():
+            return self.exposure_type_user
+        
+        # Priority 2 & 3: ML type
+        if self.exposure_type_ml and self.exposure_type_ml.strip():
+            if self.exposure_type_ml == self.exposure_type:
+                return self.exposure_type_ml
+            else:
+                return self.UNKNOWN  # 'UK'
+        
+        # Priority 4: Header-based type
+        return self.exposure_type
+
+    def get_effective_exposure_type_display(self):
+        """
+        Get the human-readable label for the effective exposure type.
+        """
+        effective_type = self.effective_exposure_type
+        for code, label in self.EXPOSURE_TYPE_POSSIBILITIES:
+            if code == effective_type:
+                return label
+        return 'Unknown'
+
     #   String representation of self
     def __str__(self):
         return "{} - {} - {}".format(

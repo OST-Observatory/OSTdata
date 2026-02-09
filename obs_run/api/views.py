@@ -9,6 +9,7 @@ from obs_run.models import ObservationRun, DataFile
 
 from .serializers import DataFileSerializer
 from .filter import DataFileFilter
+from utilities import annotate_effective_exposure_type
 
 from django.http import HttpResponse
 from io import BytesIO
@@ -257,7 +258,9 @@ def download_run_datafiles(request, run_pk):
         val = q_params.get('main_target')
         qs = qs.filter(Q(main_target__icontains=val) | Q(header_target_name__icontains=val))
     if q_params.getlist('exposure_type'):
-        qs = qs.filter(exposure_type__in=q_params.getlist('exposure_type'))
+        # Use effective exposure type for filtering
+        qs = annotate_effective_exposure_type(qs)
+        qs = qs.filter(effective_exposure_type__in=q_params.getlist('exposure_type'))
     if q_params.get('spectroscopy') is not None:
         val = q_params.get('spectroscopy')
         if val.lower() in ('true', '1', 'yes'):
@@ -343,7 +346,9 @@ def download_datafiles_bulk(request):
         val = q_params.get('main_target')
         qs = qs.filter(Q(main_target__icontains=val) | Q(header_target_name__icontains=val))
     if q_params.getlist('exposure_type'):
-        qs = qs.filter(exposure_type__in=q_params.getlist('exposure_type'))
+        # Use effective exposure type for filtering
+        qs = annotate_effective_exposure_type(qs)
+        qs = qs.filter(effective_exposure_type__in=q_params.getlist('exposure_type'))
     if q_params.get('spectroscopy') is not None:
         val = q_params.get('spectroscopy')
         if isinstance(val, str):

@@ -872,7 +872,7 @@
                     {{ formatDate(item.obs_date) }}
                   </template>
                   <template v-slot:item.main_target="{ item }">
-                    <template v-if="(item.exposure_type || '').toUpperCase() === 'LI'">
+                    <template v-if="(item.effective_exposure_type || item.exposure_type_display === 'Light' || (item.exposure_type || '').toUpperCase() === 'LI')">
                       <template v-if="item.header_target_name && item.header_target_name.trim() && item.header_target_name !== '-'">
                         {{ item.header_target_name }}
                         <template v-if="item.main_target && item.main_target.trim() && item.main_target !== '-'">
@@ -1896,7 +1896,7 @@ const filteredDataFiles = computed(() => {
   }
   if (Array.isArray(dfFilterExposureTypes.value) && dfFilterExposureTypes.value.length) {
     const set = new Set(dfFilterExposureTypes.value)
-    items = items.filter(f => set.has(f.exposure_type))
+    items = items.filter(f => set.has(f.effective_exposure_type || f.exposure_type))
   }
   if (dfFilterSpectroscopy.value !== null && dfFilterSpectroscopy.value !== undefined && dfFilterSpectroscopy.value !== '') {
     items = items.filter(f => Boolean(f.spectroscopy) === Boolean(dfFilterSpectroscopy.value))

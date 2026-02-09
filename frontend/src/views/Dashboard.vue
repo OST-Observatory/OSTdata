@@ -478,7 +478,7 @@ export default {
       'Dark Frames': 'darks',
       'Flat Frames': 'flats',
       'Light Frames': 'lights',
-      '2D spectra': 'spectra',
+      'Spectra': 'spectra',
       'Other Frames': 'other'
     }
 

@@ -21,6 +21,7 @@ from .serializers import ObjectListSerializer
 from obs_run.api.serializers import RunSerializer, DataFileSerializer
 
 from .filter import ObjectFilter
+from utilities import annotate_effective_exposure_type, get_effective_exposure_type_filter
 
 from django.contrib.gis.db.models.functions import Distance
 from django.contrib.gis.geos import Point
@@ -335,9 +336,9 @@ class getObjectRunViewSet(viewsets.ModelViewSet):
                       + Count('datafile', filter=Q(datafile__file_type__exact='CR2'))
                       + Count('datafile', filter=Q(datafile__file_type__exact='TIFF')),
                 n_ser=Count('datafile', filter=Q(datafile__file_type__exact='SER')),
-                n_light=Count('datafile', filter=Q(datafile__exposure_type__exact='LI')),
-                n_flat=Count('datafile', filter=Q(datafile__exposure_type__exact='FL')),
-                n_dark=Count('datafile', filter=Q(datafile__exposure_type__exact='DA')),
+                n_light=Count('datafile', filter=get_effective_exposure_type_filter('LI', 'datafile__')),
+                n_flat=Count('datafile', filter=get_effective_exposure_type_filter('FL', 'datafile__')),
+                n_dark=Count('datafile', filter=get_effective_exposure_type_filter('DA', 'datafile__')),
                 expo_time=Sum('datafile__exptime', filter=Q(datafile__exptime__gt=0)),
                 n_datafiles=Count('datafile'),
             )
@@ -486,7 +487,7 @@ class ObjectVuetifyViewSet(viewsets.ModelViewSet):
         n_light_max = self.request.query_params.get('n_light_max', None)
         if n_light_min is not None or n_light_max is not None:
             queryset = queryset.annotate(
-                num_li=Count('datafiles', filter=Q(datafiles__exposure_type='LI'))
+                num_li=Count('datafiles', filter=get_effective_exposure_type_filter('LI', 'datafiles__'))
             )
             try:
                 if n_light_min is not None and str(n_light_min).strip() != '':

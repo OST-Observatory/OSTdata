@@ -278,6 +278,8 @@ class SimpleRunSerializer(ModelSerializer):
 class DataFileSerializer(ModelSerializer):
     tags = SerializerMethodField()
     exposure_type_display = SerializerMethodField()
+    effective_exposure_type = SerializerMethodField()
+    effective_exposure_type_display = SerializerMethodField()
     exposure_type_ml_display = SerializerMethodField()
     exposure_type_user_display = SerializerMethodField()
     binning = SerializerMethodField()
@@ -305,6 +307,9 @@ class DataFileSerializer(ModelSerializer):
             'binning',
             'exposure_type',
             'exposure_type_display',
+            # Effective exposure type (priority-based)
+            'effective_exposure_type',
+            'effective_exposure_type_display',
             # ML-based exposure type classification
             'exposure_type_ml',
             'exposure_type_ml_display',
@@ -366,7 +371,14 @@ class DataFileSerializer(ModelSerializer):
         return path.name
 
     def get_exposure_type_display(self, obj):
-        return obj.get_exposure_type_display()
+        # Return effective exposure type display instead of raw exposure_type
+        return obj.get_effective_exposure_type_display()
+
+    def get_effective_exposure_type(self, obj):
+        return obj.effective_exposure_type
+
+    def get_effective_exposure_type_display(self, obj):
+        return obj.get_effective_exposure_type_display()
 
     def get_exposure_type_ml_display(self, obj):
         if obj.exposure_type_ml:

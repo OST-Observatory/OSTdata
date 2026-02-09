@@ -1417,7 +1417,7 @@ const getObjectIdByTargetName = (name) => {
 }
 
 const isLight = (df) => {
-  const code = (df?.exposure_type || '').toUpperCase()
+  const code = (df?.effective_exposure_type || df?.exposure_type || '').toUpperCase()
   return code === 'LI' || df?.exposure_type_display === 'Light'
 }
 

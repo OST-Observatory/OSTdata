@@ -5,6 +5,7 @@ import re
 
 from obs_run.models import ObservationRun, DataFile
 from tags.models import Tag
+from utilities import annotate_effective_exposure_type
 
 from ostdata.custom_permissions import (
     get_allowed_model_to_view_for_user,
@@ -245,3 +246,14 @@ class DataFileFilter(filters.FilterSet):
         for t in tokens:
             q &= (Q(main_target__icontains=t) | Q(header_target_name__icontains=t))
         return queryset.filter(q)
+
+    def filter_effective_exposure_type(self, queryset, name, value):
+        """
+        Filter by effective exposure type using the priority logic.
+        """
+        if not value:
+            return queryset
+        # Annotate queryset with effective_exposure_type
+        queryset = annotate_effective_exposure_type(queryset)
+        # Filter by effective_exposure_type
+        return queryset.filter(effective_exposure_type__in=value)
