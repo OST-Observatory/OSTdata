@@ -6,7 +6,8 @@ from obs_run.ml_classification import ExposureTypeClassifier
 from pathlib import Path
 import logging
 import time
-
+from utilities import update_observation_run_photometry_spectroscopy, update_object_photometry_spectroscopy
+                    
 logger = logging.getLogger(__name__)
 
 
@@ -175,6 +176,15 @@ class Command(BaseCommand):
                         df.spectrograph = spectrograph_ml
                         update_fields.append('spectrograph')
                     df.save(update_fields=update_fields)
+                    
+                    # Automatically update photometry/spectroscopy flags for associated observation runs and objects
+                    # Update observation run
+                    if df.observation_run:
+                        update_observation_run_photometry_spectroscopy(df.observation_run)
+                    
+                    # Update all associated objects
+                    for obj in df.object_set.all():
+                        update_object_photometry_spectroscopy(obj)
 
                 if result.get('exposure_type_ml_abstained', False):
                     abstained += 1

@@ -46,7 +46,7 @@ from obs_run.models import ObservationRun, DataFile
 from obs_run.api.serializers import DataFileSerializer
 from obs_run.api.views import DataFilesPagination
 from objects.models import Object, Identifier
-from utilities import _query_object_variants, _query_region_safe
+from utilities import _query_object_variants, _query_region_safe, update_observation_run_photometry_spectroscopy, update_object_photometry_spectroscopy
 from django.db.models import Q, F
 
 
@@ -1039,6 +1039,15 @@ def admin_update_spectrograph(request, pk):
         datafile.spectrograph_override = spectrograph_override
 
     datafile.save(update_fields=['spectrograph', 'spectrograph_override'])
+
+    # Automatically update photometry/spectroscopy flags for associated observation runs and objects
+    # Update observation run
+    if datafile.observation_run:
+        update_observation_run_photometry_spectroscopy(datafile.observation_run)
+    
+    # Update all associated objects
+    for obj in datafile.object_set.all():
+        update_object_photometry_spectroscopy(obj)
 
     serializer = DataFileSerializer(datafile)
     return Response(serializer.data)

@@ -238,6 +238,98 @@ def get_object_fov_radius(obj, fallback_arcmin=10.0, min_arcmin=1.0, max_arcmin=
     return f"{degrees}d{arcmin}m{arcsec}s"
 
 
+def update_observation_run_photometry_spectroscopy(observation_run):
+    """
+    Automatically update photometry and spectroscopy flags for an ObservationRun
+    based on associated DataFiles.
+    
+    Only updates if override flags are not set.
+    
+    Parameters
+    ----------
+    observation_run : ObservationRun
+        ObservationRun instance to update
+    """
+    if not observation_run:
+        return
+    
+    # Check if override flags are set - if so, skip automatic update
+    if not should_allow_auto_update(observation_run, 'photometry') and \
+       not should_allow_auto_update(observation_run, 'spectroscopy'):
+        return
+    
+    # Get all Light frames associated with this observation run
+    light_files = observation_run.datafile_set.filter(exposure_type='LI')
+    
+    # Check for spectroscopy: Light files with spectrograph != 'N' (NONE)
+    has_spectroscopy = light_files.exclude(spectrograph='N').exists()
+    
+    # Check for photometry: Light files with spectrograph == 'N' (NONE)
+    has_photometry = light_files.filter(spectrograph='N').exists()
+    
+    # Update fields only if override flags allow it
+    update_fields = []
+    
+    if should_allow_auto_update(observation_run, 'spectroscopy'):
+        if observation_run.spectroscopy != has_spectroscopy:
+            observation_run.spectroscopy = has_spectroscopy
+            update_fields.append('spectroscopy')
+    
+    if should_allow_auto_update(observation_run, 'photometry'):
+        if observation_run.photometry != has_photometry:
+            observation_run.photometry = has_photometry
+            update_fields.append('photometry')
+    
+    if update_fields:
+        observation_run.save(update_fields=update_fields)
+
+
+def update_object_photometry_spectroscopy(obj):
+    """
+    Automatically update photometry and spectroscopy flags for an Object
+    based on associated DataFiles.
+    
+    Only updates if override flags are not set.
+    
+    Parameters
+    ----------
+    obj : Object
+        Object instance to update
+    """
+    if not obj:
+        return
+    
+    # Check if override flags are set - if so, skip automatic update
+    if not should_allow_auto_update(obj, 'photometry') and \
+       not should_allow_auto_update(obj, 'spectroscopy'):
+        return
+    
+    # Get all Light frames associated with this object
+    light_files = obj.datafiles.filter(exposure_type='LI')
+    
+    # Check for spectroscopy: Light files with spectrograph != 'N' (NONE)
+    has_spectroscopy = light_files.exclude(spectrograph='N').exists()
+    
+    # Check for photometry: Light files with spectrograph == 'N' (NONE)
+    has_photometry = light_files.filter(spectrograph='N').exists()
+    
+    # Update fields only if override flags allow it
+    update_fields = []
+    
+    if should_allow_auto_update(obj, 'spectroscopy'):
+        if obj.spectroscopy != has_spectroscopy:
+            obj.spectroscopy = has_spectroscopy
+            update_fields.append('spectroscopy')
+    
+    if should_allow_auto_update(obj, 'photometry'):
+        if obj.photometry != has_photometry:
+            obj.photometry = has_photometry
+            update_fields.append('photometry')
+    
+    if update_fields:
+        obj.save(update_fields=update_fields)
+
+
 def get_observatory_location(data_file):
     """
     Extract observatory location from FITS header or use Django settings defaults.
@@ -1008,6 +1100,13 @@ def add_new_data_file(path_to_file, observation_run, print_to_terminal=False):
                             'exposure_type_ml_confidence',
                             'exposure_type_ml_abstained',
                         ])
+                    
+                    # Automatically update photometry/spectroscopy flags for associated observation runs and objects
+                    if data_file.observation_run:
+                        update_observation_run_photometry_spectroscopy(data_file.observation_run)
+                    for obj in data_file.object_set.all():
+                        update_object_photometry_spectroscopy(obj)
+                    
                     if print_to_terminal:
                         print(f'ML Classification: {result.get("exposure_type_ml")} '
                               f'(confidence: {result.get("exposure_type_ml_confidence", 0.0):.3f})')
@@ -1208,6 +1307,11 @@ def evaluate_data_file(data_file, observation_run, print_to_terminal=False, skip
                             name=target,
                             info_from_header=True,
                         )
+                    
+                    #   Automatically update photometry/spectroscopy flags for object and observation run
+                    if not dry_run:
+                        update_object_photometry_spectroscopy(obj)
+                        update_observation_run_photometry_spectroscopy(observation_run)
                 
                 return {'status': 'assigned', 'object': obj}
 
@@ -1230,6 +1334,9 @@ def evaluate_data_file(data_file, observation_run, print_to_terminal=False, skip
                     obj.observation_run.add(observation_run)
                     obj.datafiles.add(data_file)
                     obj.save()
+                    #   Automatically update photometry/spectroscopy flags for object and observation run
+                    update_object_photometry_spectroscopy(obj)
+                    update_observation_run_photometry_spectroscopy(observation_run)
                 return {'status': 'new_object_created', 'new_object': obj}
 
             #   Handling of special targets
@@ -1494,6 +1601,10 @@ def evaluate_data_file(data_file, observation_run, print_to_terminal=False, skip
                         if should_allow_auto_update(data_file, 'main_target'):
                             data_file.main_target = obj.name
                             data_file.save()
+                    
+                    #   Automatically update photometry/spectroscopy flags for object and observation run
+                    update_object_photometry_spectroscopy(obj)
+                    update_observation_run_photometry_spectroscopy(observation_run)
                 
                 return {'status': 'new_object_created', 'new_object': obj}
         
