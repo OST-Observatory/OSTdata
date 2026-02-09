@@ -629,7 +629,14 @@
                   <td>{{ df.ra_hms }} {{ df.dec_dms }}</td>
                   <td>{{ df.file_type }}</td>
                   <td>{{ df.binning || '1x1' }}</td>
-                  <td>{{ df.instrument || '—' }}</td>
+                  <td>
+                    <template v-if="df.spectrograph && df.spectrograph !== 'N'">
+                      {{ getSpectrographLabel(df.spectrograph) }} + {{ df.instrument ? ' ' + df.instrument : '' }}
+                    </template>
+                    <template v-else>
+                      {{ df.instrument || '—' }}
+                    </template>
+                  </td>
                   <td>{{ df.exposure_type_display || df.exposure_type }}</td>
                   <td>{{ formatExposureTime(df.exptime) }}</td>
                   <td class="text-right">
@@ -900,6 +907,17 @@ const dfFilterExpMin = ref(null)
 const dfFilterExpMax = ref(null)
 const dfFilterExposureTypes = ref([])
 const dfFilterSpectroscopy = ref(null)
+
+// Get spectrograph display label
+const getSpectrographLabel = (spectrograph) => {
+  const labels = {
+    'D': 'DADOS',
+    'B': 'BACHES',
+    'E': 'EINSTEIN_TOWER',
+    'N': 'NONE',
+  }
+  return labels[spectrograph] || spectrograph
+}
 const dfFilterFileName = ref('')
 const dfFilterPixelsMin = ref(null)
 const dfFilterPixelsMax = ref(null)

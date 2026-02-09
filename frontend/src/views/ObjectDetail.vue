@@ -900,7 +900,12 @@
                     {{ item.binning || '1x1' }}
                   </template>
                   <template v-slot:item.instrument="{ item }">
-                    {{ item.instrument || '—' }}
+                    <template v-if="item.spectrograph && item.spectrograph !== 'N'">
+                      {{ getSpectrographLabel(item.spectrograph) }} + {{ item.instrument ? ' ' + item.instrument : '' }}
+                    </template>
+                    <template v-else>
+                      {{ item.instrument || '—' }}
+                    </template>
                   </template>
                   <template v-slot:item.exposure_type_display="{ item }">
                     {{ item.exposure_type_display || item.exposure_type }}
@@ -1994,6 +1999,17 @@ const toggleSelectAllPageItems = () => {
 // For Object Detail, link target always resolves to the current object id
 const getObjectIdByTargetName = (name) => {
   return object.value?.pk || object.value?.id || route.params.id
+}
+
+// Get spectrograph display label
+const getSpectrographLabel = (spectrograph) => {
+  const labels = {
+    'D': 'DADOS',
+    'B': 'BACHES',
+    'E': 'EINSTEIN_TOWER',
+    'N': 'NONE',
+  }
+  return labels[spectrograph] || spectrograph
 }
 
 const objDfTotalPages = computed(() => {
