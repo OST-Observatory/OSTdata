@@ -35,3 +35,5 @@ generate_skychart/
 *.env
 old/
 frontend/dist/
+cnn_training_data.json
+
