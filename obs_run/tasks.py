@@ -976,7 +976,8 @@ def plate_solve_pending_files(self):
     
     Processes up to PLATE_SOLVING_BATCH_SIZE files per run (default: 10).
     """
-    from django.db.models import Q
+    from django.db.models import Q, Case, When, Value, F
+    from django.db.models import CharField
     from pathlib import Path
     
     try:
@@ -1000,8 +1001,32 @@ def plate_solve_pending_files(self):
         )
         
         # Annotate with effective_exposure_type and filter for Light frames
-        queryset = annotate_effective_exposure_type(queryset)
-        queryset = queryset.filter(effective_exposure_type='LI')
+        # Use a different annotation name to avoid conflict with the property
+        queryset = queryset.annotate(
+            annotated_effective_exposure_type=Case(
+                # Priority 1: User-set type
+                When(
+                    Q(exposure_type_user__isnull=False) & ~Q(exposure_type_user=''),
+                    then='exposure_type_user'
+                ),
+                # Priority 2: ML type matches header type
+                When(
+                    Q(exposure_type_ml__isnull=False) & 
+                    ~Q(exposure_type_ml='') & 
+                    Q(exposure_type_ml=F('exposure_type')),
+                    then='exposure_type_ml'
+                ),
+                # Priority 3: ML type doesn't match header type -> Unknown
+                When(
+                    Q(exposure_type_ml__isnull=False) & ~Q(exposure_type_ml=''),
+                    then=Value('UK')
+                ),
+                # Priority 4: Header-based type
+                default='exposure_type',
+                output_field=CharField(max_length=2)
+            )
+        )
+        queryset = queryset.filter(annotated_effective_exposure_type='LI')
         
         # Limit to batch size
         files_to_process = list(queryset[:batch_size])
