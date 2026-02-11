@@ -332,6 +332,63 @@
           </v-card-text>
         </v-card>
       </v-col>
+
+      <v-col cols="12" md="6" v-if="canReconcile">
+        <v-card class="mb-4">
+          <v-card-title class="text-h6">
+            <div class="d-flex align-center" style="gap: 8px">
+              <span>Plate Solving</span>
+              <v-chip
+                size="x-small"
+                :color="taskStatusColor(periodic?.plate_solve_pending_files)"
+                variant="flat"
+              >
+                {{ taskStatusLabel(periodic?.plate_solve_pending_files) }}
+              </v-chip>
+            </div>
+          </v-card-title>
+          <v-card-text>
+            <div class="text-caption text-medium-emphasis mb-2">
+              Automatically plate solve Light frames. Processes files in batches via Celery Beat.
+            </div>
+            <div class="d-flex align-center mb-2" style="gap: 12px; flex-wrap: wrap">
+              <v-switch
+                :model-value="plateSolvingTaskEnabled"
+                :loading="busy.plateSolvingToggle"
+                color="primary"
+                inset
+                hide-details
+                label="Task enabled"
+                @update:model-value="togglePlateSolvingTask"
+              />
+              <v-btn color="primary" prepend-icon="mdi-star-four-points" :loading="busy.plateSolving" :disabled="!plateSolvingTaskEnabled" @click="triggerPlateSolving">
+                Trigger now
+              </v-btn>
+              <v-btn color="secondary" variant="text" prepend-icon="mdi-open-in-new" :to="{ path: '/admin/plate-solving' }" class="ml-2">
+                View unsolved files
+              </v-btn>
+            </div>
+            <div class="text-caption text-medium-emphasis">
+              Last run:
+              <span v-if="periodic?.plate_solve_pending_files?.last_run">
+                {{ formatRelative(periodic.plate_solve_pending_files.last_run, periodic.plate_solve_pending_files.age_seconds) }}
+              </span>
+              <span v-else>—</span>
+            </div>
+            <div v-if="periodic?.plate_solve_pending_files?.data" class="mt-2">
+              <div class="text-caption text-medium-emphasis">Summary</div>
+              <div class="text-caption">
+                processed: {{ periodic.plate_solve_pending_files.data.processed ?? '—' }},
+                succeeded: {{ periodic.plate_solve_pending_files.data.succeeded ?? '—' }},
+                failed: {{ periodic.plate_solve_pending_files.data.failed ?? '—' }}
+              </div>
+            </div>
+            <div v-if="periodic?.plate_solve_pending_files?.last_error" class="text-error text-caption mt-1">
+              {{ periodic.plate_solve_pending_files.last_error }}
+            </div>
+          </v-card-text>
+        </v-card>
+      </v-col>
     </v-row>
     <v-row>
       <v-col cols="12" md="12" v-if="auth.isAdmin">
@@ -536,7 +593,7 @@ import { useAuthStore } from '@/store/auth'
 const notify = useNotifyStore()
 const auth = useAuthStore()
 const loading = ref(false)
-const busy = ref({ cleanup: false, reconcile: false, scan: false, orphans: false, orphanObj: false, banner: false, dashboardStats: false, overrideFlags: false })
+const busy = ref({ cleanup: false, reconcile: false, scan: false, orphans: false, orphanObj: false, banner: false, dashboardStats: false, plateSolving: false, plateSolvingToggle: false, overrideFlags: false })
 const health = ref({ periodic: {}, settings: {} })
 const overrideFlagsData = ref(null)
 const loadingOverrideFlags = ref(false)
@@ -714,6 +771,34 @@ const triggerDashboardStats = async () => {
     notify.error('Failed to enqueue dashboard stats refresh')
   } finally {
     busy.value.dashboardStats = false
+    setTimeout(refreshHealth, 1500)
+  }
+}
+
+const plateSolvingTaskEnabled = computed(() => health.value?.features?.plate_solving_enabled ?? false)
+
+const togglePlateSolvingTask = async (enabled) => {
+  busy.value.plateSolvingToggle = true
+  try {
+    await api.setPlateSolvingTaskEnabled(enabled)
+    notify.success(enabled ? 'Plate solving task enabled' : 'Plate solving task disabled')
+    setTimeout(refreshHealth, 500)
+  } catch (e) {
+    notify.error('Failed to update plate solving task status')
+  } finally {
+    busy.value.plateSolvingToggle = false
+  }
+}
+
+const triggerPlateSolving = async () => {
+  busy.value.plateSolving = true
+  try {
+    await api.adminMaintenanceTriggerPlateSolve()
+    notify.success('Plate solving task enqueued')
+  } catch (e) {
+    notify.error('Failed to enqueue plate solving task')
+  } finally {
+    busy.value.plateSolving = false
     setTimeout(refreshHealth, 1500)
   }
 }

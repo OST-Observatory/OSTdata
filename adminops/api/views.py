@@ -40,14 +40,17 @@ from obs_run.tasks import (
     cleanup_orphans_and_hashcheck,
     scan_missing_filesystem,
     cleanup_orphan_objects,
+    plate_solve_pending_files,
 )
 from ostdata.services.health import gather_admin_health
 from obs_run.models import ObservationRun, DataFile
 from obs_run.api.serializers import DataFileSerializer
 from obs_run.api.views import DataFilesPagination
 from objects.models import Object, Identifier
-from utilities import _query_object_variants, _query_region_safe, update_observation_run_photometry_spectroscopy, update_object_photometry_spectroscopy
-from django.db.models import Q, F
+from utilities import _query_object_variants, _query_region_safe, update_observation_run_photometry_spectroscopy, update_object_photometry_spectroscopy, annotate_effective_exposure_type
+from obs_run.plate_solving import PlateSolvingService, solve_and_update_datafile
+from django.db.models import Q, F, Count, Case, When, Value
+from django.db.models import CharField
 
 
 # -------------------- Banner helpers (Redis) --------------------
@@ -104,6 +107,13 @@ def _banner_clear():
         return True
     except Exception:
         return False
+
+
+# Plate Solving Task: use redis_helpers to avoid circular imports with obs_run.tasks
+from adminops.redis_helpers import (
+    plate_solving_task_enabled_get as _plate_solving_task_enabled_get,
+    plate_solving_task_enabled_set as _plate_solving_task_enabled_set,
+)
 
 
 # -------------------- Admin endpoints --------------------
@@ -589,6 +599,23 @@ def admin_trigger_refresh_dashboard_stats(request):
         return Response({'enqueued': False, 'error': str(e)}, status=400)
 
 
+@api_view(['POST'])
+@permission_classes([IsAdminUser])
+@extend_schema(summary='Trigger plate solving', responses={'202': {'type': 'object'}}, tags=['Admin'])
+def admin_trigger_plate_solve_task(request):
+    """
+    Manually trigger plate solving for pending files.
+    """
+    if not (request.user.is_superuser or request.user.has_perm('users.acl_maintenance_reconcile')):
+        return Response({'detail': 'Forbidden'}, status=403)
+    try:
+        res = plate_solve_pending_files.delay()
+        return Response({'enqueued': True, 'task_id': getattr(res, 'id', None)}, status=202)
+    except Exception as e:
+        logger.exception("admin_trigger_plate_solve_task failed: %s", e)
+        return Response({'enqueued': False, 'error': str(e)}, status=400)
+
+
 @extend_schema(
     summary='Update object identifiers from SIMBAD',
     description='Query SIMBAD and update identifiers for an object. Supports matching by name or coordinates.',
@@ -1051,5 +1078,199 @@ def admin_update_spectrograph(request, pk):
 
     serializer = DataFileSerializer(datafile)
     return Response(serializer.data)
+
+
+@extend_schema(
+    summary='Get unsolved plate files',
+    parameters=[
+        OpenApiParameter('observation_run', int, OpenApiParameter.QUERY, description='Filter by observation run ID'),
+        OpenApiParameter('file_name', str, OpenApiParameter.QUERY, description='Filter by file name (case-insensitive partial match)'),
+    ],
+)
+@api_view(['GET'])
+@permission_classes([IsAdminUser])
+def admin_get_unsolved_plate_files(request):
+    """
+    Get DataFiles where plate_solved=False.
+    Only accessible to admin/staff users.
+    Supports filtering by observation_run and file_name.
+        Only shows Light frames (effective_exposure_type='LI'), excluding spectra.
+    """
+    # Get files where plate_solved=False, excluding spectra
+    queryset = DataFile.objects.filter(
+        plate_solved=False,
+        spectrograph='N',  # Exclude spectra (only show files without spectrograph)
+        spectroscopy=False  # Exclude files marked as spectroscopy
+    ).select_related('observation_run')
+    
+    # Annotate with effective_exposure_type and filter for Light frames only
+    # Use a different annotation name to avoid conflict with the property
+    queryset = queryset.annotate(
+        annotated_effective_exposure_type=Case(
+            # Priority 1: User-set type
+            When(
+                Q(exposure_type_user__isnull=False) & ~Q(exposure_type_user=''),
+                then='exposure_type_user'
+            ),
+            # Priority 2: ML type matches header type
+            When(
+                Q(exposure_type_ml__isnull=False) & 
+                ~Q(exposure_type_ml='') & 
+                Q(exposure_type_ml=F('exposure_type')),
+                then='exposure_type_ml'
+            ),
+            # Priority 3: ML type doesn't match header type -> Unknown
+            When(
+                Q(exposure_type_ml__isnull=False) & ~Q(exposure_type_ml=''),
+                then=Value('UK')
+            ),
+            # Priority 4: Header-based type
+            default='exposure_type',
+            output_field=CharField(max_length=2)
+        )
+    )
+    queryset = queryset.filter(annotated_effective_exposure_type='LI')
+    
+    # Apply additional filters (after annotation so they work correctly)
+    # Filter by observation_run
+    observation_run_id = request.query_params.get('observation_run')
+    if observation_run_id:
+        try:
+            queryset = queryset.filter(observation_run_id=int(observation_run_id))
+        except ValueError:
+            pass
+    
+    # Filter by file_name (case-insensitive partial match on datafile path)
+    file_name = request.query_params.get('file_name')
+    if file_name:
+        queryset = queryset.filter(datafile__icontains=file_name)
+    
+    # Pagination
+    paginator = DataFilesPagination()
+    page = paginator.paginate_queryset(queryset, request)
+    if page is not None:
+        serializer = DataFileSerializer(page, many=True)
+        return paginator.get_paginated_response(serializer.data)
+    
+    serializer = DataFileSerializer(queryset, many=True)
+    return Response(serializer.data)
+
+
+@extend_schema(
+    summary='Trigger plate solving for specific files',
+    parameters=[],
+)
+@api_view(['POST'])
+@permission_classes([IsAdminUser])
+def admin_trigger_plate_solve(request):
+    """
+    Manually trigger plate solving for specific DataFiles.
+    Only accessible to admin/staff users.
+    
+    Body:
+    {
+        "file_ids": [1, 2, 3]
+    }
+    """
+    file_ids = request.data.get('file_ids', [])
+    if not file_ids or not isinstance(file_ids, list):
+        return Response({"detail": "file_ids must be a non-empty list"}, status=400)
+    
+    try:
+        files = DataFile.objects.filter(
+            pk__in=file_ids,
+            wcs_override=False,
+            spectrograph='N',  # Exclude spectra
+            spectroscopy=False  # Exclude files marked as spectroscopy
+        )
+        if files.count() != len(file_ids):
+            return Response({"detail": "Some files not found, have wcs_override=True, or are spectra (spectrograph != 'N' OR spectroscopy=True)"}, status=400)
+        
+        service = PlateSolvingService()
+        if not service.solvers:
+            return Response({"detail": "No plate solving tools available"}, status=503)
+        
+        results = []
+        for datafile in files:
+            result = solve_and_update_datafile(datafile, service=service, save=True)
+            results.append({
+                'file_id': datafile.pk,
+                'success': result['success'],
+                'tool': result.get('tool'),
+                'error': result.get('error')
+            })
+        
+        return Response({'results': results})
+    except Exception as e:
+        logger.exception(f'Unexpected error in admin_trigger_plate_solve: {e}')
+        return Response({'error': f'Unexpected error: {str(e)}'}, status=500)
+
+
+@extend_schema(
+    summary='Get plate solving statistics',
+    parameters=[],
+)
+@api_view(['GET'])
+@permission_classes([IsAdminUser])
+def admin_plate_solve_stats(request):
+    """
+    Get plate solving statistics.
+    Only accessible to admin/staff users.
+    """
+    try:
+        # Count unsolved files (Light frames only, excluding spectra)
+        queryset = DataFile.objects.filter(
+            wcs_override=False,
+            spectrograph='N',  # Exclude spectra
+            spectroscopy=False  # Exclude files marked as spectroscopy
+        )
+        queryset = annotate_effective_exposure_type(queryset)
+        queryset = queryset.filter(effective_exposure_type='LI')
+        
+        stats = queryset.aggregate(
+            total_light=Count('pk'),
+            solved=Count('pk', filter=Q(plate_solved=True)),
+            unsolved=Count('pk', filter=Q(plate_solved=False)),
+            attempted=Count('pk', filter=Q(plate_solve_attempted_at__isnull=False)),
+        )
+        
+        return Response(stats)
+    except Exception as e:
+        logger.exception(f'Error getting plate solve stats: {e}')
+        return Response({'error': f'Unexpected error: {str(e)}'}, status=500)
+
+
+@extend_schema(
+    summary='Get plate solving task enabled status',
+    parameters=[],
+)
+@api_view(['GET'])
+@permission_classes([IsAdminUser])
+def admin_get_plate_solving_task_enabled(request):
+    """Get plate solving task enabled status. Redis override takes precedence over settings."""
+    from django.conf import settings
+    redis_value = _plate_solving_task_enabled_get()
+    enabled = redis_value if redis_value is not None else getattr(settings, 'PLATE_SOLVING_ENABLED', False)
+    return Response({
+        'enabled': enabled,
+        'source': 'redis' if redis_value is not None else 'settings',
+    })
+
+
+@extend_schema(
+    summary='Set plate solving task enabled status',
+    parameters=[],
+)
+@api_view(['POST'])
+@permission_classes([IsAdminUser])
+def admin_set_plate_solving_task_enabled(request):
+    """Set plate solving task enabled status in Redis. Admins can toggle without restart."""
+    enabled = request.data.get('enabled', False)
+    if not isinstance(enabled, bool):
+        return Response({'detail': 'enabled must be a boolean'}, status=400)
+    success = _plate_solving_task_enabled_set(enabled)
+    if success:
+        return Response({'enabled': enabled, 'message': 'Plate solving task status updated'})
+    return Response({'detail': 'Failed to update (Redis unavailable)'}, status=500)
 
 

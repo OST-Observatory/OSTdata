@@ -176,6 +176,26 @@ if env.bool('ENABLE_DASHBOARD_STATS_REFRESH', default=False):
 
 DOWNLOAD_JOB_TTL_HOURS = env.int('DOWNLOAD_JOB_TTL_HOURS', default=72)
 
+# Plate Solving Configuration
+PLATE_SOLVING_ENABLED = env.bool('PLATE_SOLVING_ENABLED', default=False)
+PLATE_SOLVING_TOOLS = env.list('PLATE_SOLVING_TOOLS', default=['watney'])  # Ordered list
+PLATE_SOLVING_FOV_MARGIN = env.float('PLATE_SOLVING_FOV_MARGIN', default=0.2)  # 20% margin
+PLATE_SOLVING_MAX_RADIUS = env.float('PLATE_SOLVING_MAX_RADIUS', default=30.0)  # degrees
+PLATE_SOLVING_MIN_RADIUS = env.float('PLATE_SOLVING_MIN_RADIUS', default=0.11)  # degrees
+PLATE_SOLVING_TIMEOUT_SECONDS = env.int('PLATE_SOLVING_TIMEOUT_SECONDS', default=600)  # 10 minutes
+PLATE_SOLVING_BATCH_SIZE = env.int('PLATE_SOLVING_BATCH_SIZE', default=10)  # Files per batch
+
+# Watney-specific settings
+WATNEY_SOLVE_PATH = env('WATNEY_SOLVE_PATH', default='watney-solve')
+
+# Enable Celery Beat schedule for plate solving if enabled
+if PLATE_SOLVING_ENABLED:
+    CELERY_BEAT_SCHEDULE['plate_solve_pending_files'] = {
+        'task': 'obs_run.tasks.plate_solve_pending_files',
+        'schedule': crontab(minute='*/30'),  # Every 30 minutes
+        'args': (),
+    }
+
 # CORS
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",

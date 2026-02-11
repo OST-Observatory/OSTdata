@@ -344,6 +344,35 @@ class DataFileSerializer(ModelSerializer):
             'instrument_override',
             'telescope_override',
             'status_parameters_override',
+            # Plate solving fields
+            'plate_solved',
+            'plate_solve_attempted_at',
+            'plate_solve_error',
+            'plate_solve_tool',
+            'wcs_override',
+            # WCS fields
+            'wcs_ra',
+            'wcs_dec',
+            'wcs_ra_hms',
+            'wcs_dec_dms',
+            'wcs_field_radius',
+            'wcs_orientation',
+            'wcs_pix_scale',
+            'wcs_parity',
+            'wcs_field_width',
+            'wcs_field_height',
+            'wcs_cd1_1',
+            'wcs_cd1_2',
+            'wcs_cd2_1',
+            'wcs_cd2_2',
+            'wcs_cdelt1',
+            'wcs_cdelt2',
+            'wcs_crota1',
+            'wcs_crota2',
+            'wcs_crpix1',
+            'wcs_crpix2',
+            'wcs_crval1',
+            'wcs_crval2',
         ]
         # read_only_fields = ('pk', 'added_by')
         read_only_fields = ('pk',)
@@ -375,6 +404,13 @@ class DataFileSerializer(ModelSerializer):
         return obj.get_effective_exposure_type_display()
 
     def get_effective_exposure_type(self, obj):
+        # Check for annotated_effective_exposure_type first (used to avoid property conflicts)
+        if hasattr(obj, '__dict__') and 'annotated_effective_exposure_type' in obj.__dict__:
+            return obj.__dict__['annotated_effective_exposure_type']
+        # Check if effective_exposure_type is an annotated field (from QuerySet annotation)
+        if hasattr(obj, '__dict__') and 'effective_exposure_type' in obj.__dict__:
+            return obj.__dict__['effective_exposure_type']
+        # Fall back to property if no annotation exists
         return obj.effective_exposure_type
 
     def get_effective_exposure_type_display(self, obj):

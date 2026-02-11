@@ -275,6 +275,38 @@ class DataFile(models.Model):
     instrument_override = models.BooleanField(default=False)
     telescope_override = models.BooleanField(default=False)
     status_parameters_override = models.BooleanField(default=False)
+    wcs_override = models.BooleanField(default=False)
+
+    #   Plate Solving
+    plate_solved = models.BooleanField(default=False)
+    plate_solve_attempted_at = models.DateTimeField(null=True, blank=True)
+    plate_solve_error = models.TextField(null=True, blank=True)
+    plate_solve_tool = models.CharField(max_length=50, null=True, blank=True)
+
+    #   WCS (World Coordinate System) parameters from plate solving
+    wcs_ra = models.FloatField(null=True, blank=True)
+    wcs_dec = models.FloatField(null=True, blank=True)
+    wcs_ra_hms = models.CharField(max_length=20, null=True, blank=True)
+    wcs_dec_dms = models.CharField(max_length=20, null=True, blank=True)
+    wcs_field_radius = models.FloatField(null=True, blank=True)
+    wcs_orientation = models.FloatField(null=True, blank=True)
+    wcs_pix_scale = models.FloatField(null=True, blank=True)
+    wcs_parity = models.CharField(max_length=20, null=True, blank=True)
+    wcs_field_width = models.FloatField(null=True, blank=True)
+    wcs_field_height = models.FloatField(null=True, blank=True)
+    # FITS WCS parameters
+    wcs_cd1_1 = models.FloatField(null=True, blank=True)
+    wcs_cd1_2 = models.FloatField(null=True, blank=True)
+    wcs_cd2_1 = models.FloatField(null=True, blank=True)
+    wcs_cd2_2 = models.FloatField(null=True, blank=True)
+    wcs_cdelt1 = models.FloatField(null=True, blank=True)
+    wcs_cdelt2 = models.FloatField(null=True, blank=True)
+    wcs_crota1 = models.FloatField(null=True, blank=True)
+    wcs_crota2 = models.FloatField(null=True, blank=True)
+    wcs_crpix1 = models.FloatField(null=True, blank=True)
+    wcs_crpix2 = models.FloatField(null=True, blank=True)
+    wcs_crval1 = models.FloatField(null=True, blank=True)
+    wcs_crval2 = models.FloatField(null=True, blank=True)
 
     #   Get information
     def set_info(self):

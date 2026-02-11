@@ -15,7 +15,8 @@ import json
 
 from obs_run.models import DownloadJob, DataFile, ObservationRun
 from obs_run.utils import should_allow_auto_update
-from utilities import add_new_data_file, get_effective_exposure_type_filter
+from utilities import add_new_data_file, get_effective_exposure_type_filter, annotate_effective_exposure_type
+from obs_run.plate_solving import PlateSolvingService, solve_and_update_datafile
 
 logger = logging.getLogger(__name__)
 
@@ -958,4 +959,82 @@ def refresh_dashboard_stats(self):
     except Exception as e:
         _health_error('refresh_dashboard_stats', e)
         logger.error("Failed to refresh dashboard stats: %s", e)
+        raise self.retry(exc=e)
+
+
+@shared_task(bind=True, max_retries=2, default_retry_delay=60)
+def plate_solve_pending_files(self):
+    """
+    Background task to plate solve pending Light frames.
+    
+    Processes files where:
+    - effective_exposure_type == 'LI' (Light frames)
+    - plate_solved == False OR plate_solve_attempted_at is None
+    - wcs_override == False (don't overwrite manual values)
+    - spectrograph == 'N' (exclude spectra)
+    - spectroscopy == False (exclude files marked as spectroscopy)
+    
+    Processes up to PLATE_SOLVING_BATCH_SIZE files per run (default: 10).
+    """
+    from django.db.models import Q
+    from pathlib import Path
+    
+    try:
+        from adminops.redis_helpers import plate_solving_task_enabled_get
+        redis_enabled = plate_solving_task_enabled_get()
+        # Redis override takes precedence; if not set, use settings
+        enabled = redis_enabled if redis_enabled is not None else getattr(settings, 'PLATE_SOLVING_ENABLED', False)
+        if not enabled:
+            logger.info("Plate solving task is disabled, skipping")
+            return {'skipped': True, 'reason': 'disabled'}
+        
+        batch_size = getattr(settings, 'PLATE_SOLVING_BATCH_SIZE', 10)
+        
+        # Query for Light frames that need plate solving
+        # Exclude spectra: spectrograph != 'N' OR spectroscopy=True
+        queryset = DataFile.objects.filter(
+            Q(plate_solved=False) | Q(plate_solve_attempted_at__isnull=True),
+            wcs_override=False,
+            spectrograph='N',  # Exclude spectra (only process files without spectrograph)
+            spectroscopy=False  # Exclude files marked as spectroscopy
+        )
+        
+        # Annotate with effective_exposure_type and filter for Light frames
+        queryset = annotate_effective_exposure_type(queryset)
+        queryset = queryset.filter(effective_exposure_type='LI')
+        
+        # Limit to batch size
+        files_to_process = list(queryset[:batch_size])
+        
+        if not files_to_process:
+            result = {'processed': 0, 'succeeded': 0, 'failed': 0}
+            _health_set('plate_solve_pending_files', result)
+            return result
+        
+        logger.info(f"Plate solving {len(files_to_process)} files")
+        
+        service = PlateSolvingService()
+        succeeded = 0
+        failed = 0
+        
+        for datafile in files_to_process:
+            result = solve_and_update_datafile(datafile, service=service, save=True)
+            if result['success']:
+                succeeded += 1
+                logger.info(f"Successfully plate solved file {datafile.pk}: {Path(datafile.datafile).name}")
+            else:
+                failed += 1
+        
+        result = {
+            'processed': len(files_to_process),
+            'succeeded': succeeded,
+            'failed': failed
+        }
+        _health_set('plate_solve_pending_files', result)
+        logger.info(f"Plate solving batch complete: {succeeded} succeeded, {failed} failed")
+        return result
+        
+    except Exception as e:
+        _health_error('plate_solve_pending_files', e)
+        logger.error("Failed to plate solve pending files: %s", e)
         raise self.retry(exc=e)

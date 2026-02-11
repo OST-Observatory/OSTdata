@@ -586,6 +586,73 @@ You can trigger a manual refresh via:
 - **Admin UI**: Navigate to Admin → Maintenance and click "Refresh now" on the "Refresh Dashboard Stats" card.
 - **Admin API**: `POST /api/admin/maintenance/refresh-dashboard-stats/`
 
+### Optional plate solving for Light frames (Celery Beat)
+
+OSTdata can automatically plate solve Light frames (excluding spectra) using external tools like Watney. Plate solving extracts World Coordinate System (WCS) information from astronomical images, including RA/Dec coordinates, field radius, orientation, pixel scale, and FITS WCS parameters.
+
+**Configuration:**
+
+1. Enable plate solving in `ostdata/.env`:
+
+```
+PLATE_SOLVING_ENABLED=true
+```
+
+2. Configure plate solving tool (Watney example):
+
+```
+# Watney-specific settings
+WATNEY_SOLVE_PATH=watney-solve  # Path to watney-solve executable
+
+# Plate solving parameters
+PLATE_SOLVING_TOOLS=watney  # Ordered list of tools to try (fallback if one fails)
+PLATE_SOLVING_FOV_MARGIN=0.2  # 20% margin for FOV radius calculation
+PLATE_SOLVING_MAX_RADIUS=30.0  # Maximum search radius in degrees
+PLATE_SOLVING_MIN_RADIUS=0.1  # Minimum search radius in degrees
+PLATE_SOLVING_TIMEOUT_SECONDS=600  # Timeout per file (10 minutes)
+PLATE_SOLVING_BATCH_SIZE=10  # Files processed per Celery Beat run
+```
+
+3. Ensure Celery Beat is running (see Celery section). The task runs every 30 minutes by default and processes up to `PLATE_SOLVING_BATCH_SIZE` files per run.
+
+**Admin Control:**
+
+Admins can enable/disable the plate solving task without restarting services:
+
+- **Admin UI**: Navigate to Admin → Maintenance and toggle the "Task enabled" switch on the "Plate Solving" card.
+- **Admin API**: 
+  - Get status: `GET /api/admin/datafiles/plate-solving/task-enabled/`
+  - Set status: `POST /api/admin/datafiles/plate-solving/task-enabled/set/` with `{"enabled": true/false}`
+
+The Redis override takes precedence over the `PLATE_SOLVING_ENABLED` setting. If Redis is unavailable, the setting value is used.
+
+**Manual Processing:**
+
+- **Management Command**: Process files retroactively with rate limiting:
+  ```
+  python manage.py plate_solve_files --limit 100 --rate 2  # Max 2 files per minute
+  python manage.py plate_solve_files --dry-run  # Preview without processing
+  python manage.py plate_solve_files --force  # Re-solve already solved files
+  ```
+
+- **Admin UI**: Navigate to Admin → Plate Solving to view unsolved files, trigger solving for specific files, and view statistics.
+
+**Filtering:**
+
+Plate solving is only applied to:
+- Light frames (`effective_exposure_type='LI'`)
+- Files without spectrograph (`spectrograph='N'`)
+- Files not marked as spectroscopy (`spectroscopy=False`)
+- Files without `wcs_override` flag set
+
+**WCS Data:**
+
+Solved files store WCS information in the `DataFile` model:
+- Position: `wcs_ra`, `wcs_dec`, `wcs_ra_hms`, `wcs_dec_dms`
+- Field: `wcs_field_radius`, `wcs_field_width`, `wcs_field_height`
+- Orientation: `wcs_orientation`, `wcs_pix_scale`, `wcs_parity`
+- FITS WCS: `wcs_cd1_1`, `wcs_cd1_2`, `wcs_cd2_1`, `wcs_cd2_2`, `wcs_crpix1`, `wcs_crpix2`, `wcs_crval1`, `wcs_crval2`, `wcs_cdelt1`, `wcs_cdelt2`, `wcs_crota1`, `wcs_crota2`
+
 ## Async Download Jobs (Celery)
 
 This project supports asynchronous preparation of ZIP archives for data files using Celery. You can run tasks synchronously (eager mode, no Redis needed) or with Redis for real async behavior. Production notes included below.

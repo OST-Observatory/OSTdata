@@ -44,9 +44,16 @@ def gather_admin_health() -> Dict[str, Any]:
             'result_backend': getattr(settings, 'CELERY_RESULT_BACKEND', ''),
             'task_always_eager': bool(getattr(settings, 'CELERY_TASK_ALWAYS_EAGER', False)),
         }
+        try:
+            from adminops.redis_helpers import plate_solving_task_enabled_get
+            redis_enabled = plate_solving_task_enabled_get()
+            plate_solving_enabled = redis_enabled if redis_enabled is not None else bool(getattr(settings, 'PLATE_SOLVING_ENABLED', False))
+        except Exception:
+            plate_solving_enabled = bool(getattr(settings, 'PLATE_SOLVING_ENABLED', False))
         data['features'] = {
             'fs_reconcile_enabled': bool(getattr(settings, 'ENABLE_FS_RECONCILE', False)),
             'download_cleanup_enabled': bool(getattr(settings, 'ENABLE_DOWNLOAD_CLEANUP', False)),
+            'plate_solving_enabled': plate_solving_enabled,
         }
     except Exception:
         data['celery'] = {}

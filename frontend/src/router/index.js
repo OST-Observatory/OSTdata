@@ -86,6 +86,12 @@ const routes = [
     meta: { requiresAuth: true, requiresAdmin: true, title: 'Admin – Spectrograph Management', description: 'Manage spectrograph property for data files.' }
   },
   {
+    path: '/admin/plate-solving',
+    name: 'admin-plate-solving',
+    component: () => import('@/views/admin/AdminPlateSolving.vue'),
+    meta: { requiresAuth: true, requiresAdmin: true, title: 'Admin – Plate Solving', description: 'Manage plate solving for data files.' }
+  },
+  {
     path: '/login',
     name: 'login',
     component: () => import('../views/Login.vue'),

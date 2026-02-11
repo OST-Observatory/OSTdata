@@ -370,6 +370,7 @@ export const api = {
     return fetchWithAuth('/admin/maintenance/orphan-objects/', { method: 'POST', body: JSON.stringify(body) })
   },
   adminMaintenanceRefreshDashboardStats: () => fetchWithAuth('/admin/maintenance/refresh-dashboard-stats/', { method: 'POST' }),
+  adminMaintenanceTriggerPlateSolve: () => fetchWithAuth('/admin/maintenance/plate-solving/', { method: 'POST' }),
   // Admin - Runs date tools
   adminSetRunDate: (runId, payload = {}) => fetchWithAuth(`/admin/runs/${encodeURIComponent(runId)}/set-date/`, { method: 'POST', body: JSON.stringify(payload) }),
   adminRecomputeRunDate: (runId) => fetchWithAuth(`/admin/runs/${encodeURIComponent(runId)}/recompute-date/`, { method: 'POST' }),
@@ -436,5 +437,26 @@ export const api = {
   updateSpectrograph: (datafileId, data) => fetchWithAuth(`/admin/datafiles/${encodeURIComponent(datafileId)}/spectrograph/`, {
     method: 'PATCH',
     body: JSON.stringify(data),
+  }),
+  // Plate Solving (Admin)
+  getUnsolvedPlateFiles: (params = {}) => {
+    const queryParams = new URLSearchParams()
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') {
+        queryParams.append(key, value)
+      }
+    })
+    const queryString = queryParams.toString()
+    return fetchWithAuth(`/admin/datafiles/plate-solving/unsolved/${queryString ? `?${queryString}` : ''}`)
+  },
+  triggerPlateSolve: (fileIds) => fetchWithAuth('/admin/datafiles/plate-solving/trigger/', {
+    method: 'POST',
+    body: JSON.stringify({ file_ids: fileIds }),
+  }),
+  getPlateSolveStats: () => fetchWithAuth('/admin/datafiles/plate-solving/stats/'),
+  getPlateSolvingTaskEnabled: () => fetchWithAuth('/admin/datafiles/plate-solving/task-enabled/'),
+  setPlateSolvingTaskEnabled: (enabled) => fetchWithAuth('/admin/datafiles/plate-solving/task-enabled/set/', {
+    method: 'POST',
+    body: JSON.stringify({ enabled }),
   }),
 }

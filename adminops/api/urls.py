@@ -7,6 +7,7 @@ from .views import (
     admin_trigger_scan_missing,
     admin_trigger_orphan_objects,
     admin_trigger_refresh_dashboard_stats,
+    admin_trigger_plate_solve_task,
     admin_run_set_date,
     admin_run_recompute_date,
     admin_clear_override_flag,
@@ -21,6 +22,11 @@ from .views import (
     admin_update_exposure_type_user,
     admin_get_spectrograph_files,
     admin_update_spectrograph,
+    admin_get_unsolved_plate_files,
+    admin_trigger_plate_solve,
+    admin_plate_solve_stats,
+    admin_get_plate_solving_task_enabled,
+    admin_set_plate_solving_task_enabled,
 )
 
 app_name = 'adminops-api'
@@ -33,6 +39,7 @@ urlpatterns = [
     path('maintenance/scan-missing/', admin_trigger_scan_missing, name='scan_missing'),
     path('maintenance/orphan-objects/', admin_trigger_orphan_objects, name='orphan_objects'),
     path('maintenance/refresh-dashboard-stats/', admin_trigger_refresh_dashboard_stats, name='refresh_dashboard_stats'),
+    path('maintenance/plate-solving/', admin_trigger_plate_solve_task, name='trigger_plate_solve_task'),
     path('runs/<int:run_id>/set-date/', admin_run_set_date, name='run_set_date'),
     path('runs/<int:run_id>/recompute-date/', admin_run_recompute_date, name='run_recompute_date'),
     path('override-flags/<str:model_type>/<int:instance_id>/<str:field_name>/clear/', admin_clear_override_flag, name='clear_override_flag'),
@@ -49,6 +56,12 @@ urlpatterns = [
     # Spectrograph management endpoints
     path('datafiles/spectrograph/', admin_get_spectrograph_files, name='spectrograph_files'),
     path('datafiles/<int:pk>/spectrograph/', admin_update_spectrograph, name='update_spectrograph'),
+    # Plate solving endpoints
+    path('datafiles/plate-solving/unsolved/', admin_get_unsolved_plate_files, name='unsolved_plate_files'),
+    path('datafiles/plate-solving/trigger/', admin_trigger_plate_solve, name='trigger_plate_solve'),
+    path('datafiles/plate-solving/stats/', admin_plate_solve_stats, name='plate_solve_stats'),
+    path('datafiles/plate-solving/task-enabled/', admin_get_plate_solving_task_enabled, name='plate_solving_task_enabled'),
+    path('datafiles/plate-solving/task-enabled/set/', admin_set_plate_solving_task_enabled, name='set_plate_solving_task_enabled'),
 ]
 
 
