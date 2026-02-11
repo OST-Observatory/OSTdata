@@ -187,6 +187,9 @@ PLATE_SOLVING_BATCH_SIZE = env.int('PLATE_SOLVING_BATCH_SIZE', default=10)  # Fi
 
 # Watney-specific settings
 WATNEY_SOLVE_PATH = env('WATNEY_SOLVE_PATH', default='watney-solve')
+# Supported file formats for Watney (comma-separated, lowercase, without dot)
+# Default: fits,fit,fts,tiff,tif (Watney does not support PNG)
+WATNEY_SUPPORTED_FORMATS = env.list('WATNEY_SUPPORTED_FORMATS', default=['fits', 'fit', 'fts', 'tiff', 'tif'])
 
 # Enable Celery Beat schedule for plate solving if enabled
 if PLATE_SOLVING_ENABLED:

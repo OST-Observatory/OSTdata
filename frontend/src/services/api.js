@@ -459,4 +459,5 @@ export const api = {
     method: 'POST',
     body: JSON.stringify({ enabled }),
   }),
+  getObservationRunsForPlateSolving: () => fetchWithAuth('/admin/datafiles/plate-solving/observation-runs/'),
 }

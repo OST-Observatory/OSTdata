@@ -36,17 +36,30 @@
       <v-card-text>
         <v-row>
           <v-col cols="12" sm="6" md="3">
-            <v-text-field
-              v-model="filters.observation_run"
-              label="Observation Run ID"
+            <v-select
+              v-model="filters.observation_run_name"
+              :items="observationRuns"
+              item-title="name"
+              item-value="id"
+              label="Observation Run"
               prepend-inner-icon="mdi-telescope"
               hide-details
               density="comfortable"
               variant="outlined"
-              type="number"
-              min="1"
               clearable
-            />
+              @update:model-value="handleFilterChange"
+            >
+              <template #item="{ item, props }">
+                <v-list-item v-bind="props">
+                  <template #title>
+                    <div class="d-flex flex-column">
+                      <span>{{ item.raw.name }}</span>
+                      <span class="text-caption text-medium-emphasis">{{ formatDate(item.raw.obs_date) }}</span>
+                    </div>
+                  </template>
+                </v-list-item>
+              </template>
+            </v-select>
           </v-col>
           <v-col cols="12" sm="6" md="3">
             <v-text-field
@@ -57,6 +70,44 @@
               density="comfortable"
               variant="outlined"
               clearable
+              @update:model-value="handleFilterChange"
+            />
+          </v-col>
+          <v-col cols="12" sm="6" md="3">
+            <v-text-field
+              v-model="filters.instrument"
+              label="Instrument"
+              prepend-inner-icon="mdi-camera"
+              hide-details
+              density="comfortable"
+              variant="outlined"
+              clearable
+              @update:model-value="handleFilterChange"
+            />
+          </v-col>
+          <v-col cols="12" sm="6" md="3">
+            <v-text-field
+              v-model="filters.file_type"
+              label="File Type"
+              prepend-inner-icon="mdi-file-code"
+              hide-details
+              density="comfortable"
+              variant="outlined"
+              clearable
+              @update:model-value="handleFilterChange"
+            />
+          </v-col>
+          <v-col cols="12" sm="6" md="3">
+            <v-select
+              v-model="filters.status"
+              :items="statusOptions"
+              label="Status"
+              prepend-inner-icon="mdi-filter"
+              hide-details
+              density="comfortable"
+              variant="outlined"
+              clearable
+              @update:model-value="handleFilterChange"
             />
           </v-col>
           <v-col cols="12" class="d-flex align-end">
@@ -105,11 +156,14 @@
         @update:selected="onUpdateSelected"
         @update:modelValue="onUpdateSelected"
         @update:selection="onUpdateSelected"
+        @update:options="handleSortChange"
         :loading="loading"
         class="custom-table"
         :items-length="totalItems"
         :items-per-page="itemsPerPage === -1 ? totalItems : itemsPerPage"
         hide-default-footer
+        :sort-by="[{ key: sortBy, order: sortOrder }]"
+        :multi-sort="false"
       >
         <template #loading>
           <LoadingState type="table" />
@@ -126,6 +180,14 @@
           <router-link :to="`/observation-runs/${item.observation_run}`" class="text-primary text-decoration-none">
             {{ item.observation_run_name }}
           </router-link>
+        </template>
+
+        <template #item.instrument="{ item }">
+          <span>{{ item.instrument || '—' }}</span>
+        </template>
+
+        <template #item.file_type="{ item }">
+          <v-chip size="small" variant="outlined">{{ item.file_type || '—' }}</v-chip>
         </template>
 
         <template #item.exposure_type="{ item }">
@@ -312,15 +374,31 @@ const itemsPerPage = ref(25)
 const stats = ref(null)
 
 const filters = ref({
-  observation_run: null,
+  observation_run_name: null,
   file_name: null,
+  instrument: null,
+  file_type: null,
+  status: null,
 })
 
+const observationRuns = ref([])
+const statusOptions = [
+  { title: 'Unsolved', value: 'unsolved' },
+  { title: 'Solved', value: 'solved' },
+  { title: 'Attempted', value: 'attempted' },
+  { title: 'Error', value: 'error' },
+]
+
+const sortBy = ref('pk')
+const sortOrder = ref('asc')
+
 const headers = [
-  { title: 'File Name', key: 'file_name', sortable: false },
-  { title: 'Observation Run', key: 'observation_run_name', sortable: false },
+  { title: 'File Name', key: 'file_name', sortable: true },
+  { title: 'Observation Run', key: 'observation_run_name', sortable: true },
+  { title: 'Instrument', key: 'instrument', sortable: true },
+  { title: 'File Type', key: 'file_type', sortable: true },
   { title: 'Exposure Type', key: 'exposure_type', sortable: false },
-  { title: 'Last Attempt', key: 'plate_solve_attempted_at', sortable: false },
+  { title: 'Last Attempt', key: 'plate_solve_attempted_at', sortable: true },
   { title: 'Error', key: 'plate_solve_error', sortable: false },
   { title: 'Actions', key: 'actions', sortable: false, width: '120px' },
 ]
@@ -395,8 +473,40 @@ const truncateError = (error) => {
 
 const resetFilters = () => {
   filters.value = {
-    observation_run: null,
+    observation_run_name: null,
     file_name: null,
+    instrument: null,
+    file_type: null,
+    status: null,
+  }
+  sortBy.value = 'pk'
+  sortOrder.value = 'asc'
+  currentPage.value = 1
+  fetchUnsolvedFiles()
+}
+
+const handleFilterChange = () => {
+  currentPage.value = 1
+  fetchUnsolvedFiles()
+}
+
+const handleSortChange = (options) => {
+  // Handle sort changes from v-data-table
+  if (options && options.sortBy && options.sortBy.length > 0) {
+    const sort = options.sortBy[0]
+    // Map frontend keys to backend keys
+    const keyMap = {
+      'file_name': 'datafile',
+      'observation_run_name': 'observation_run',
+      'plate_solve_attempted_at': 'plate_solve_attempted_at',
+      'instrument': 'instrument',
+      'file_type': 'file_type',
+    }
+    sortBy.value = keyMap[sort.key] || sort.key || 'pk'
+    sortOrder.value = sort.order || 'asc'
+  } else {
+    sortBy.value = 'pk'
+    sortOrder.value = 'asc'
   }
   currentPage.value = 1
   fetchUnsolvedFiles()
@@ -410,12 +520,30 @@ const fetchStats = async () => {
   }
 }
 
+const fetchObservationRuns = async () => {
+  try {
+    const response = await api.getObservationRunsForPlateSolving()
+    if (response.results) {
+      observationRuns.value = response.results
+    }
+  } catch (error) {
+    notify.error('Failed to fetch observation runs', error)
+  }
+}
+
 const fetchUnsolvedFiles = async () => {
   loading.value = true
   try {
     const params = {}
-    if (filters.value.observation_run) params.observation_run = parseInt(filters.value.observation_run)
+    if (filters.value.observation_run_name) params.observation_run_name = filters.value.observation_run_name
     if (filters.value.file_name) params.file_name = filters.value.file_name
+    if (filters.value.instrument) params.instrument = filters.value.instrument
+    if (filters.value.file_type) params.file_type = filters.value.file_type
+    if (filters.value.status) params.status = filters.value.status
+    
+    // Add sorting parameters
+    params.sort_by = sortBy.value
+    params.sort_order = sortOrder.value
     
     // Add pagination parameters
     params.page = currentPage.value
@@ -562,6 +690,7 @@ const triggerSolveSingle = async (item) => {
 
 onMounted(() => {
   fetchStats()
+  fetchObservationRuns()
   fetchUnsolvedFiles()
 })
 </script>

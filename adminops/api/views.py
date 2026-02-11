@@ -1096,9 +1096,8 @@ def admin_get_unsolved_plate_files(request):
     Supports filtering by observation_run and file_name.
         Only shows Light frames (effective_exposure_type='LI'), excluding spectra.
     """
-    # Get files where plate_solved=False, excluding spectra
+    # Base queryset: exclude spectra
     queryset = DataFile.objects.filter(
-        plate_solved=False,
         spectrograph='N',  # Exclude spectra (only show files without spectrograph)
         spectroscopy=False  # Exclude files marked as spectroscopy
     ).select_related('observation_run')
@@ -1132,18 +1131,67 @@ def admin_get_unsolved_plate_files(request):
     queryset = queryset.filter(annotated_effective_exposure_type='LI')
     
     # Apply additional filters (after annotation so they work correctly)
-    # Filter by observation_run
+    # Filter by observation_run (by ID or name)
     observation_run_id = request.query_params.get('observation_run')
+    observation_run_name = request.query_params.get('observation_run_name')
     if observation_run_id:
         try:
             queryset = queryset.filter(observation_run_id=int(observation_run_id))
         except ValueError:
             pass
+    elif observation_run_name:
+        queryset = queryset.filter(observation_run__name__icontains=observation_run_name)
     
     # Filter by file_name (case-insensitive partial match on datafile path)
     file_name = request.query_params.get('file_name')
     if file_name:
         queryset = queryset.filter(datafile__icontains=file_name)
+    
+    # Filter by instrument
+    instrument = request.query_params.get('instrument')
+    if instrument:
+        queryset = queryset.filter(instrument__icontains=instrument)
+    
+    # Filter by file_type
+    file_type = request.query_params.get('file_type')
+    if file_type:
+        queryset = queryset.filter(file_type__iexact=file_type)
+    
+    # Filter by plate solving status
+    # 'solved': plate_solved=True
+    # 'unsolved': plate_solved=False
+    # 'attempted': plate_solve_attempted_at is not null
+    # 'error': plate_solve_error is not null
+    status_filter = request.query_params.get('status')
+    if status_filter:
+        if status_filter == 'solved':
+            queryset = queryset.filter(plate_solved=True)
+        elif status_filter == 'unsolved':
+            queryset = queryset.filter(plate_solved=False)
+        elif status_filter == 'attempted':
+            queryset = queryset.filter(plate_solve_attempted_at__isnull=False)
+        elif status_filter == 'error':
+            queryset = queryset.filter(plate_solve_error__isnull=False)
+    
+    # Legacy: if no status filter, default to unsolved (for backward compatibility)
+    if not status_filter:
+        queryset = queryset.filter(plate_solved=False)
+    
+    # Apply sorting (default: pk ascending for reproducible pagination)
+    sort_by = request.query_params.get('sort_by', 'pk')
+    sort_order = request.query_params.get('sort_order', 'asc')
+    
+    # Validate sort_by field (prevent SQL injection)
+    allowed_sort_fields = ['pk', 'datafile', 'observation_run', 'instrument', 'file_type', 
+                          'plate_solve_attempted_at', 'obs_date']
+    if sort_by not in allowed_sort_fields:
+        sort_by = 'pk'
+    
+    # Apply sorting
+    if sort_order.lower() == 'desc':
+        queryset = queryset.order_by(f'-{sort_by}', 'pk')  # Always include pk for stable sorting
+    else:
+        queryset = queryset.order_by(sort_by, 'pk')  # Always include pk for stable sorting
     
     # Pagination
     paginator = DataFilesPagination()
@@ -1154,6 +1202,40 @@ def admin_get_unsolved_plate_files(request):
     
     serializer = DataFileSerializer(queryset, many=True)
     return Response(serializer.data)
+
+
+@extend_schema(
+    summary='Get list of observation runs for plate solving filter',
+    parameters=[],
+)
+@api_view(['GET'])
+@permission_classes([IsAdminUser])
+def admin_get_observation_runs_for_plate_solving(request):
+    """
+    Get list of observation runs that have Light frames (for plate solving filter dropdown).
+    Only accessible to admin/staff users.
+    """
+    from django.db.models import Subquery, OuterRef
+
+    # Get the first obs_date from datafiles of each run (for display)
+    first_obs_date = DataFile.objects.filter(
+        observation_run_id=OuterRef('pk')
+    ).order_by('pk').values('obs_date')[:1]
+
+    # Get observation runs that have Light frames (excluding spectra)
+    queryset = ObservationRun.objects.filter(
+        datafile__spectrograph='N',
+        datafile__spectroscopy=False,
+        datafile__exposure_type='LI'  # At least header-based Light frames
+    ).distinct().annotate(
+        obs_date=Subquery(first_obs_date)
+    ).order_by('-mid_observation_jd')[:100]
+
+    runs = [{'id': r.id, 'name': r.name, 'obs_date': r.obs_date or ''} for r in queryset]
+
+    return Response({
+        'results': runs
+    })
 
 
 @extend_schema(

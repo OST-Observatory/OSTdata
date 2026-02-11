@@ -52,6 +52,15 @@ class PlateSolver(ABC):
         """Return the identifier name of this solver."""
         pass
 
+    def get_supported_formats(self) -> List[str]:
+        """
+        Return list of supported file extensions (lowercase, without dot).
+        
+        Returns:
+            List of supported extensions, e.g., ['fits', 'fit', 'fts', 'tiff', 'tif']
+        """
+        return []  # Default: no formats specified (all formats allowed)
+
 
 class WatneySolver(PlateSolver):
     """Watney plate solver implementation."""
@@ -70,6 +79,13 @@ class WatneySolver(PlateSolver):
 
     def get_name(self) -> str:
         return 'watney'
+
+    def get_supported_formats(self) -> List[str]:
+        """
+        Return list of supported file extensions for Watney.
+        Configurable via WATNEY_SUPPORTED_FORMATS setting.
+        """
+        return getattr(settings, 'WATNEY_SUPPORTED_FORMATS', ['fits', 'fit', 'fts', 'tiff', 'tif'])
 
     def is_available(self) -> bool:
         """Check if watney-solve is available."""
@@ -155,7 +171,6 @@ class WatneySolver(PlateSolver):
 
         cmd = [
             self.executable_path,
-            'solve',
             'blind',
             '--image', str(image_path),
             '--min-radius', str(min_radius),
@@ -253,7 +268,17 @@ class PlateSolvingService:
             logger.error("No plate solving tools available")
             return None
 
+        # Check file extension against supported formats
+        image_path_obj = Path(image_path)
+        file_ext = image_path_obj.suffix.lstrip('.').lower()
+        
         for solver in self.solvers:
+            # Check if solver supports this file format
+            supported_formats = solver.get_supported_formats()
+            if supported_formats and file_ext not in supported_formats:
+                logger.debug(f"Skipping {solver.get_name()} - format '{file_ext}' not supported (supported: {supported_formats})")
+                continue
+            
             try:
                 logger.info(f"Attempting plate solve with {solver.get_name()} for {image_path}")
                 result = solver.solve(image_path, min_radius, max_radius)
@@ -330,6 +355,24 @@ def solve_and_update_datafile(datafile, service=None, save=True):
         image_path = Path(datafile.datafile)
         if not image_path.exists():
             error_msg = f"File not found: {image_path}"
+            if save:
+                datafile.plate_solve_attempted_at = timezone.now()
+                datafile.plate_solve_error = error_msg
+                datafile.save(update_fields=['plate_solve_attempted_at', 'plate_solve_error'])
+            return {'success': False, 'error': error_msg, 'tool': None}
+        
+        # Check if any solver supports this file format
+        file_ext = image_path.suffix.lstrip('.').lower()
+        supported_by_any = False
+        for solver in service.solvers:
+            supported_formats = solver.get_supported_formats()
+            if not supported_formats or file_ext in supported_formats:
+                supported_by_any = True
+                break
+        
+        if not supported_by_any:
+            error_msg = f"File format '{file_ext}' not supported by any available plate solver"
+            logger.warning(f"Skipping plate solve for {image_path}: {error_msg}")
             if save:
                 datafile.plate_solve_attempted_at = timezone.now()
                 datafile.plate_solve_error = error_msg

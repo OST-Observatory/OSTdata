@@ -27,6 +27,7 @@ from .views import (
     admin_plate_solve_stats,
     admin_get_plate_solving_task_enabled,
     admin_set_plate_solving_task_enabled,
+    admin_get_observation_runs_for_plate_solving,
 )
 
 app_name = 'adminops-api'
@@ -62,6 +63,7 @@ urlpatterns = [
     path('datafiles/plate-solving/stats/', admin_plate_solve_stats, name='plate_solve_stats'),
     path('datafiles/plate-solving/task-enabled/', admin_get_plate_solving_task_enabled, name='plate_solving_task_enabled'),
     path('datafiles/plate-solving/task-enabled/set/', admin_set_plate_solving_task_enabled, name='set_plate_solving_task_enabled'),
+    path('datafiles/plate-solving/observation-runs/', admin_get_observation_runs_for_plate_solving, name='observation_runs_for_plate_solving'),
 ]
 
 
