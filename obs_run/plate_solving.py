@@ -7,6 +7,8 @@ Currently supports Watney, with extensibility for additional solvers.
 
 from __future__ import annotations
 
+import shutil
+import os
 import json
 import logging
 import subprocess
@@ -71,15 +73,58 @@ class WatneySolver(PlateSolver):
 
     def is_available(self) -> bool:
         """Check if watney-solve is available."""
-        try:
-            result = subprocess.run(
-                [self.executable_path, '--version'],
-                capture_output=True,
-                timeout=5,
-                text=True
-            )
-            return result.returncode == 0
-        except (FileNotFoundError, subprocess.TimeoutExpired, Exception):
+        try:            
+            # First check if executable exists and is accessible
+            exec_path = Path(self.executable_path)
+            
+            # If path doesn't exist, try to find it in PATH
+            if not exec_path.exists() or not exec_path.is_file():
+                full_path = shutil.which(self.executable_path)
+                if full_path:
+                    exec_path = Path(full_path)
+                    logger.debug(f"Found watney-solve in PATH: {full_path}")
+                else:
+                    logger.warning(f"watney-solve executable not found: {self.executable_path} (not in PATH either)")
+                    return False
+            
+            # Check if file exists and is executable
+            if not exec_path.exists():
+                logger.warning(f"watney-solve path does not exist: {exec_path}")
+                return False
+            
+            if not os.access(exec_path, os.X_OK):
+                logger.warning(f"watney-solve is not executable: {exec_path}")
+                return False
+            
+            # Try to run with --help or --version (some tools may not support --version)
+            for test_flag in ['--help', '--version']:
+                try:
+                    result = subprocess.run(
+                        [str(exec_path), test_flag],
+                        capture_output=True,
+                        timeout=5,
+                        text=True
+                    )
+                    # If it doesn't error out (or returns help text), it's likely available
+                    if result.returncode == 0:
+                        logger.debug(f"watney-solve is available (tested with {test_flag})")
+                        return True
+                    # Some tools may return non-zero but still be available (e.g., show help on stderr)
+                    if result.stderr and ('help' in result.stderr.lower() or 'usage' in result.stderr.lower()):
+                        logger.debug(f"watney-solve appears available (help text found)")
+                        return True
+                except subprocess.TimeoutExpired:
+                    logger.warning(f"watney-solve {test_flag} timed out")
+                    continue
+                except Exception as e:
+                    logger.debug(f"Error testing watney-solve with {test_flag}: {e}")
+                    continue
+            
+            # If --help/--version don't work but file exists and is executable, assume it's available
+            logger.info(f"watney-solve file exists and is executable: {exec_path}")
+            return True
+        except Exception as e:
+            logger.warning(f"Error checking watney-solve availability: {e}")
             return False
 
     def solve(self, image_path: str, min_radius: float, max_radius: float) -> Dict:
@@ -172,16 +217,23 @@ class PlateSolvingService:
         """Create solver instances from Django settings."""
         solver_list = []
         tool_names = getattr(settings, 'PLATE_SOLVING_TOOLS', ['watney'])
+        watney_path = getattr(settings, 'WATNEY_SOLVE_PATH', 'watney-solve')
+
+        logger.info(f"Creating plate solvers from settings: tools={tool_names}, watney_path={watney_path}")
 
         for tool_name in tool_names:
             if tool_name == 'watney':
                 solver = WatneySolver()
                 if solver.is_available():
                     solver_list.append(solver)
+                    logger.info(f"Watney solver available at: {solver.executable_path}")
                 else:
-                    logger.warning(f"Watney solver configured but not available")
+                    logger.warning(f"Watney solver configured but not available (path: {solver.executable_path})")
             else:
                 logger.warning(f"Unknown plate solving tool: {tool_name}")
+
+        if not solver_list:
+            logger.error(f"No plate solving tools available. Configured tools: {tool_names}")
 
         return solver_list
 
