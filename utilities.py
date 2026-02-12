@@ -1579,6 +1579,8 @@ def evaluate_data_file(data_file, observation_run, print_to_terminal=False, skip
                             # Fallback: if no specific type detected, check for star
                             if '*' in types_str:
                                 object_type = 'ST'
+                            else:
+                                object_type = 'UK'  # Unknown - never leave object_type as None (DB constraint)
 
                         #   Set default name
                         main_id = object_data_table['main_id']
@@ -1586,6 +1588,9 @@ def evaluate_data_file(data_file, observation_run, print_to_terminal=False, skip
                             object_name = str(main_id)
 
                 #     Make a new object (new objects don't have override flags set)
+                # Ensure object_type is never None (DB NOT NULL constraint)
+                if object_type is None:
+                    object_type = 'UK'
                 obj = Object(
                     name=object_name,
                     ra=object_ra,
