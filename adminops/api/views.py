@@ -47,7 +47,7 @@ from obs_run.models import ObservationRun, DataFile
 from obs_run.api.serializers import DataFileSerializer
 from obs_run.api.views import DataFilesPagination
 from objects.models import Object, Identifier
-from utilities import _query_object_variants, _query_region_safe, update_observation_run_photometry_spectroscopy, update_object_photometry_spectroscopy, annotate_effective_exposure_type
+from utilities import _query_object_variants, _query_region_safe, update_observation_run_photometry_spectroscopy, update_object_photometry_spectroscopy, annotate_effective_exposure_type, evaluate_data_file
 from obs_run.plate_solving import PlateSolvingService, solve_and_update_datafile
 from django.db.models import Q, F, Count, Case, When, Value
 from django.db.models import CharField
@@ -958,6 +958,18 @@ def admin_update_exposure_type_user(request, pk):
         datafile.exposure_type_user_override = exposure_type_user_override
 
     datafile.save(update_fields=['exposure_type_user', 'exposure_type_user_override'])
+
+    # Re-evaluate object association when set to Light (LI) so coordinate-based
+    # resolution can run for files that were previously misclassified
+    if exposure_type_user == 'LI' and datafile.observation_run:
+        try:
+            evaluate_data_file(datafile, datafile.observation_run, skip_if_object_has_overrides=True)
+            update_observation_run_photometry_spectroscopy(datafile.observation_run)
+            for obj in datafile.object_set.all():
+                update_object_photometry_spectroscopy(obj)
+        except Exception as e:
+            logger.warning(f'Re-evaluation after exposure_type_user=LI failed for datafile {datafile.pk}: {e}')
+        datafile.refresh_from_db()
 
     serializer = DataFileSerializer(datafile)
     return Response(serializer.data)

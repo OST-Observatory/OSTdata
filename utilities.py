@@ -1177,14 +1177,15 @@ def add_new_data_file(path_to_file, observation_run, print_to_terminal=False):
     )
     data_file.save()
 
-    #   Evaluate data file
-    evaluate_data_file(
-        data_file,
-        observation_run,
-        print_to_terminal=print_to_terminal,
-    )
+    #   Populate header info (exposure_type, ra, dec, etc.) before ML and evaluation
+    try:
+        data_file.set_info()
+        data_file.save()
+    except Exception as e:
+        logger.warning(f'Error in set_info() for data_file {data_file.pk}: {e}')
 
-    #   ML-based exposure type classification (if enabled)
+    #   ML-based exposure type classification (if enabled) - run before evaluate_data_file
+    #   so effective_exposure_type can consider ML result for object association
     try:
         from django.conf import settings
         if getattr(settings, 'ML_EXPOSURE_TYPE_ENABLED', False):
@@ -1213,12 +1214,6 @@ def add_new_data_file(path_to_file, observation_run, print_to_terminal=False):
                             'exposure_type_ml_abstained',
                         ])
                     
-                    # Automatically update photometry/spectroscopy flags for associated observation runs and objects
-                    if data_file.observation_run:
-                        update_observation_run_photometry_spectroscopy(data_file.observation_run)
-                    for obj in data_file.object_set.all():
-                        update_object_photometry_spectroscopy(obj)
-                    
                     if print_to_terminal:
                         print(f'ML Classification: {result.get("exposure_type_ml")} '
                               f'(confidence: {result.get("exposure_type_ml_confidence", 0.0):.3f})')
@@ -1227,6 +1222,23 @@ def add_new_data_file(path_to_file, observation_run, print_to_terminal=False):
     except Exception as e:
         # Don't fail file addition if ML classification fails
         logger.warning(f'ML classification failed for {path_to_file}: {e}', exc_info=True)
+
+    #   Evaluate data file (object association) - runs after ML so effective_exposure_type
+    #   can consider exposure_type_ml when deciding if this is a Light frame
+    evaluate_data_file(
+        data_file,
+        observation_run,
+        print_to_terminal=print_to_terminal,
+    )
+
+    #   Update photometry/spectroscopy flags after object association
+    try:
+        if data_file.observation_run:
+            update_observation_run_photometry_spectroscopy(data_file.observation_run)
+        for obj in data_file.object_set.all():
+            update_object_photometry_spectroscopy(obj)
+    except Exception as e:
+        logger.warning(f'Error updating photometry/spectroscopy flags: {e}')
 
     return True
 
@@ -1300,10 +1312,6 @@ def evaluate_data_file(data_file, observation_run, print_to_terminal=False, skip
     expo_type = data_file.effective_exposure_type  # Use effective exposure type
     target_lower = target.lower()
 
-    #   Define special targets
-    special_targets = [
-        'Autosave Image', 'calib', 'mosaic', 'ThAr',
-    ]
     solar_system = [
         'Sun', 'sun', 'Mercury', 'mercury', 'Venus', 'venus', 'Moon', 'moon',
         'Mond', 'mond', 'Mars', 'mars', 'Jupiter', 'jupiter', 'Saturn',
@@ -1329,7 +1337,7 @@ def evaluate_data_file(data_file, observation_run, print_to_terminal=False, skip
             # t = 0.1
             t = 0.5
 
-            if target in special_targets or target in solar_system:
+            if target in solar_system:
                 objs = Object.objects.filter(name__icontains=target)
             else:
                 # First, filter by a bounding box to reduce candidates
@@ -1451,25 +1459,6 @@ def evaluate_data_file(data_file, observation_run, print_to_terminal=False, skip
                     update_observation_run_photometry_spectroscopy(observation_run)
                 return {'status': 'new_object_created', 'new_object': obj}
 
-            #   Handling of special targets
-            elif obj is None and target in special_targets:
-                if print_to_terminal:
-                    print('New object (target: {})'.format(target))
-                #     Make a new object
-                obj = Object(
-                    name=target,
-                    ra=data_file.ra,
-                    dec=data_file.dec,
-                    object_type='UK',
-                    simbad_resolved=False,
-                    first_hjd=data_file.hjd,
-                )
-                if not dry_run:
-                    obj.save()
-                    obj.observation_run.add(observation_run)
-                    obj.datafiles.add(data_file)
-                    obj.save()
-                return {'status': 'new_object_created', 'new_object': obj}
             else:
                 if print_to_terminal:
                     print('New object (target: {})'.format(target))

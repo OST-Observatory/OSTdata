@@ -199,6 +199,14 @@ if PLATE_SOLVING_ENABLED:
         'args': (),
     }
 
+# Orphan Objects cleanup - removes Objects with no DataFiles (e.g. after special_targets removal)
+if env.bool('ENABLE_ORPHAN_OBJECTS_CLEANUP', default=False):
+    CELERY_BEAT_SCHEDULE['cleanup_orphan_objects'] = {
+        'task': 'obs_run.tasks.cleanup_orphan_objects',
+        'schedule': crontab(minute=0, hour='4'),  # Daily at 4:00
+        'kwargs': {'dry_run': False},
+    }
+
 # CORS
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
