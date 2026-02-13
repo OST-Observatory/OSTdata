@@ -15,7 +15,10 @@ import json
 
 from obs_run.models import DownloadJob, DataFile, ObservationRun
 from obs_run.utils import should_allow_auto_update
-from utilities import add_new_data_file, get_effective_exposure_type_filter, annotate_effective_exposure_type
+from utilities import (
+    add_new_data_file, get_effective_exposure_type_filter, annotate_effective_exposure_type,
+    evaluate_data_file, update_observation_run_photometry_spectroscopy, update_object_photometry_spectroscopy,
+)
 from obs_run.plate_solving import PlateSolvingService, solve_and_update_datafile
 
 logger = logging.getLogger(__name__)
@@ -154,7 +157,6 @@ def build_zip_task(self, job_id: int):
             qs = qs.filter(Q(main_target__icontains=v) | Q(header_target_name__icontains=v))
         if f.get('exposure_type'):
             # Use effective exposure type for filtering
-            from utilities import annotate_effective_exposure_type
             qs = annotate_effective_exposure_type(qs)
             qs = qs.filter(effective_exposure_type__in=f['exposure_type'])
         if f.get('spectroscopy') is not None:
@@ -851,7 +853,6 @@ def refresh_dashboard_stats(self):
         
         # === FILES: Single aggregated query ===
         # Annotate with effective_exposure_type for spectra counting
-        from utilities import annotate_effective_exposure_type
         datafiles_annotated = annotate_effective_exposure_type(DataFile.objects.all())
         file_stats = datafiles_annotated.aggregate(
             total=Count('pk'),
@@ -1063,3 +1064,100 @@ def plate_solve_pending_files(self):
         _health_error('plate_solve_pending_files', e)
         logger.error("Failed to plate solve pending files: %s", e)
         raise self.retry(exc=e)
+
+
+@shared_task(bind=True)
+def re_evaluate_plate_solved_files(self):
+    """
+    Re-run evaluate_data_file for plate-solved files when:
+    1. No header coordinates were present (ra==-1 or dec==-1), or
+    2. WCS center coordinates differ from header (ra,dec) by more than threshold.
+
+    Only processes files with re_evaluated_after_plate_solve=False (avoids double evaluation,
+    independent of Redis persistence).
+    """
+    from astropy.coordinates import SkyCoord
+    import astropy.units as u
+    from django.db.models import Q, F, Case, When, Value, CharField
+
+    try:
+        from adminops.redis_helpers import plate_solving_task_enabled_get
+        redis_enabled = plate_solving_task_enabled_get()
+        enabled = redis_enabled if redis_enabled is not None else getattr(settings, 'PLATE_SOLVING_ENABLED', False)
+        if not enabled:
+            logger.info("Plate solving task is disabled, skipping re-evaluation")
+            return {'skipped': True, 'reason': 'disabled'}
+    except Exception:
+        enabled = getattr(settings, 'PLATE_SOLVING_ENABLED', False)
+        if not enabled:
+            return {'skipped': True, 'reason': 'disabled'}
+
+    threshold_arcmin = getattr(settings, 'PLATE_SOLVING_RE_EVAL_COORD_THRESHOLD_ARCMIN', 5.0)
+    batch_size = getattr(settings, 'PLATE_SOLVING_RE_EVAL_BATCH_SIZE', 50)
+
+    # Only process files not yet re-evaluated (flag-based, avoids double evaluation, Redis-independent)
+    queryset = DataFile.objects.filter(
+        plate_solved=True,
+        re_evaluated_after_plate_solve=False,
+        wcs_override=False,
+        spectrograph='N',
+        spectroscopy=False,
+    ).select_related('observation_run')
+    queryset = queryset.annotate(
+        annotated_effective_exposure_type=Case(
+            When(Q(exposure_type_user__isnull=False) & ~Q(exposure_type_user=''), then='exposure_type_user'),
+            When(
+                Q(exposure_type_ml__isnull=False) & ~Q(exposure_type_ml='') & Q(exposure_type_ml=F('exposure_type')),
+                then='exposure_type_ml'
+            ),
+            When(Q(exposure_type_ml__isnull=False) & ~Q(exposure_type_ml=''), then=Value('UK')),
+            default='exposure_type',
+            output_field=CharField(max_length=2)
+        )
+    )
+    queryset = queryset.filter(annotated_effective_exposure_type='LI')
+
+    evaluated = 0
+    skipped = 0
+    errors = 0
+
+    for datafile in queryset[:batch_size]:
+        try:
+            condition1 = (datafile.ra in (-1, None) or datafile.dec in (-1, None))
+            condition2 = False
+            if not condition1 and datafile.wcs_ra is not None and datafile.wcs_dec is not None:
+                c_header = SkyCoord(ra=datafile.ra * u.deg, dec=datafile.dec * u.deg)
+                c_wcs = SkyCoord(ra=datafile.wcs_ra * u.deg, dec=datafile.wcs_dec * u.deg)
+                sep_arcmin = c_header.separation(c_wcs).arcmin
+                condition2 = sep_arcmin > threshold_arcmin
+
+            if condition1 or condition2:
+                if datafile.observation_run and datafile.wcs_ra is not None and datafile.wcs_dec is not None:
+                    # Use WCS coordinates for object lookup (header had none or differed significantly)
+                    datafile.ra = datafile.wcs_ra
+                    datafile.dec = datafile.wcs_dec
+                    datafile.save(update_fields=['ra', 'dec'])
+                    evaluate_data_file(datafile, datafile.observation_run, skip_if_object_has_overrides=True)
+                    update_observation_run_photometry_spectroscopy(datafile.observation_run)
+                    for obj in datafile.object_set.all():
+                        update_object_photometry_spectroscopy(obj)
+                    evaluated += 1
+                    logger.debug(f"Re-evaluated plate-solved file {datafile.pk} (cond1={condition1}, cond2={condition2})")
+                else:
+                    skipped += 1
+            else:
+                skipped += 1
+            # Mark as processed to avoid double evaluation (independent of Redis persistence)
+            DataFile.objects.filter(pk=datafile.pk).update(re_evaluated_after_plate_solve=True)
+        except Exception as e:
+            errors += 1
+            logger.warning(f"Re-evaluation failed for datafile {datafile.pk}: {e}")
+            # Still mark as processed to avoid retrying failed files indefinitely
+            DataFile.objects.filter(pk=datafile.pk).update(re_evaluated_after_plate_solve=True)
+
+    result = {'evaluated': evaluated, 'skipped': skipped, 'errors': errors}
+    _health_set('re_evaluate_plate_solved_files', result)
+    if evaluated or errors:
+        logger.info(f"Re-evaluation of plate-solved files: {result}")
+    return result
+

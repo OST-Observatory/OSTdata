@@ -186,6 +186,11 @@ PLATE_SOLVING_TIMEOUT_SECONDS = env.int('PLATE_SOLVING_TIMEOUT_SECONDS', default
 PLATE_SOLVING_BATCH_SIZE = env.int('PLATE_SOLVING_BATCH_SIZE', default=10)  # Files per batch
 # For nearby search: search radius in degrees around center coordinate (used when ra/dec known)
 PLATE_SOLVING_NEARBY_SEARCH_RADIUS = env.float('PLATE_SOLVING_NEARBY_SEARCH_RADIUS', default=5.0)
+# Re-evaluation: threshold (arcmin) for WCS vs header coord difference to trigger re-eval
+PLATE_SOLVING_RE_EVAL_COORD_THRESHOLD_ARCMIN = env.float(
+    'PLATE_SOLVING_RE_EVAL_COORD_THRESHOLD_ARCMIN', default=5.0
+)
+PLATE_SOLVING_RE_EVAL_BATCH_SIZE = env.int('PLATE_SOLVING_RE_EVAL_BATCH_SIZE', default=50)
 
 # Watney-specific settings
 WATNEY_SOLVE_PATH = env('WATNEY_SOLVE_PATH', default='watney-solve')
@@ -198,6 +203,11 @@ if PLATE_SOLVING_ENABLED:
     CELERY_BEAT_SCHEDULE['plate_solve_pending_files'] = {
         'task': 'obs_run.tasks.plate_solve_pending_files',
         'schedule': crontab(minute='*/30'),  # Every 30 minutes
+        'args': (),
+    }
+    CELERY_BEAT_SCHEDULE['re_evaluate_plate_solved_files'] = {
+        'task': 'obs_run.tasks.re_evaluate_plate_solved_files',
+        'schedule': crontab(minute=0, hour='*/2'),  # Every 2 hours
         'args': (),
     }
 

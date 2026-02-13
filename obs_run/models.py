@@ -282,6 +282,10 @@ class DataFile(models.Model):
     plate_solve_attempted_at = models.DateTimeField(null=True, blank=True)
     plate_solve_error = models.TextField(null=True, blank=True)
     plate_solve_tool = models.CharField(max_length=50, null=True, blank=True)
+    re_evaluated_after_plate_solve = models.BooleanField(
+        default=False,
+        help_text='True if re_evaluate_plate_solved_files has processed this file (avoids double evaluation).'
+    )
 
     #   WCS (World Coordinate System) parameters from plate solving
     wcs_ra = models.FloatField(null=True, blank=True)

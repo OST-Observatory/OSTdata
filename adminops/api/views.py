@@ -41,6 +41,7 @@ from obs_run.tasks import (
     scan_missing_filesystem,
     cleanup_orphan_objects,
     plate_solve_pending_files,
+    re_evaluate_plate_solved_files,
 )
 from ostdata.services.health import gather_admin_health
 from obs_run.models import ObservationRun, DataFile
@@ -613,6 +614,28 @@ def admin_trigger_plate_solve_task(request):
         return Response({'enqueued': True, 'task_id': getattr(res, 'id', None)}, status=202)
     except Exception as e:
         logger.exception("admin_trigger_plate_solve_task failed: %s", e)
+        return Response({'enqueued': False, 'error': str(e)}, status=400)
+
+
+@api_view(['POST'])
+@permission_classes([IsAdminUser])
+@extend_schema(
+    summary='Re-evaluate plate-solved files',
+    description='Re-run object association for plate-solved files where header had no coords or WCS differs from header by > threshold.',
+    responses={'202': {'type': 'object'}},
+    tags=['Admin']
+)
+def admin_trigger_re_evaluate_plate_solved(request):
+    """
+    Manually trigger re-evaluation of plate-solved files (evaluate_data_file).
+    """
+    if not (request.user.is_superuser or request.user.has_perm('users.acl_maintenance_reconcile')):
+        return Response({'detail': 'Forbidden'}, status=403)
+    try:
+        res = re_evaluate_plate_solved_files.delay()
+        return Response({'enqueued': True, 'task_id': getattr(res, 'id', None)}, status=202)
+    except Exception as e:
+        logger.exception("admin_trigger_re_evaluate_plate_solved failed: %s", e)
         return Response({'enqueued': False, 'error': str(e)}, status=400)
 
 

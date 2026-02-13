@@ -612,9 +612,13 @@ PLATE_SOLVING_MIN_RADIUS=0.1  # Minimum search radius in degrees
 PLATE_SOLVING_NEARBY_SEARCH_RADIUS=5.0  # Search radius (deg) for nearby mode when ra/dec known
 PLATE_SOLVING_TIMEOUT_SECONDS=600  # Timeout per file (10 minutes)
 PLATE_SOLVING_BATCH_SIZE=10  # Files processed per Celery Beat run
+
+# Re-evaluation of plate-solved files (object association)
+PLATE_SOLVING_RE_EVAL_COORD_THRESHOLD_ARCMIN=5.0  # Arcmin: re-eval when WCS differs from header by more
+PLATE_SOLVING_RE_EVAL_BATCH_SIZE=50  # Files per re-evaluation run
 ```
 
-3. Ensure Celery Beat is running (see Celery section). The task runs every 30 minutes by default and processes up to `PLATE_SOLVING_BATCH_SIZE` files per run.
+3. Ensure Celery Beat is running (see Celery section). The plate solving task runs every 30 minutes by default and processes up to `PLATE_SOLVING_BATCH_SIZE` files per run.
 
 **Admin Control:**
 
@@ -649,6 +653,21 @@ Plate solving is only applied to:
 - Files without spectrograph (`spectrograph='N'`)
 - Files not marked as spectroscopy (`spectroscopy=False`)
 - Files without `wcs_override` flag set
+
+**Re-evaluation of Plate-Solved Files:**
+
+A Celery Beat task `re_evaluate_plate_solved_files` runs every 2 hours (when plate solving is enabled) to re-run object association (`evaluate_data_file`) for plate-solved files when:
+
+1. **No header coordinates**: The FITS header had no RA/Dec (ra=-1 or dec=-1). The task uses WCS coordinates from plate solving for object lookup and updates the DataFile's ra/dec accordingly.
+2. **WCS differs from header**: The plate-solved center (wcs_ra, wcs_dec) differs from the header coordinates (ra, dec) by more than `PLATE_SOLVING_RE_EVAL_COORD_THRESHOLD_ARCMIN` arcminutes (default: 5). The task updates ra/dec from WCS and re-evaluates.
+
+To avoid double evaluation, the task uses a per-file flag `re_evaluated_after_plate_solve` on DataFile. Only files with this flag `False` are considered; after processing (success or skip), the flag is set to `True`. This is independent of Redis persistence.
+
+Configuration:
+- `PLATE_SOLVING_RE_EVAL_COORD_THRESHOLD_ARCMIN` (default 5.0): Arcmin threshold for condition 2.
+- `PLATE_SOLVING_RE_EVAL_BATCH_SIZE` (default 50): Max files per run.
+
+Admin API: `POST /api/admin/maintenance/re-evaluate-plate-solved/` to trigger manually.
 
 **WCS Data:**
 
