@@ -30,6 +30,9 @@
               >
                 {{ taskStatusLabel(health.periodic?.scan_missing_filesystem) }}
               </v-chip>
+              <v-chip v-if="health.features?.scan_missing_enabled" size="x-small" color="success" variant="outlined">
+                Beat scheduled
+              </v-chip>
             </div>
           </v-card-title>
           <v-card-text>
@@ -186,6 +189,9 @@
                 variant="flat"
               >
                 {{ taskStatusLabel(periodic?.cleanup_orphans_hashcheck) }}
+              </v-chip>
+              <v-chip v-if="health.features?.orphans_hashcheck_enabled" size="x-small" color="success" variant="outlined">
+                Beat scheduled
               </v-chip>
             </div>
           </v-card-title>
@@ -385,6 +391,51 @@
             </div>
             <div v-if="periodic?.plate_solve_pending_files?.last_error" class="text-error text-caption mt-1">
               {{ periodic.plate_solve_pending_files.last_error }}
+            </div>
+          </v-card-text>
+        </v-card>
+      </v-col>
+
+      <v-col cols="12" md="6" v-if="canReconcile && health.features?.plate_solving_enabled">
+        <v-card class="mb-4">
+          <v-card-title class="text-h6">
+            <div class="d-flex align-center" style="gap: 8px">
+              <span>Re-evaluate Plate-Solved Files</span>
+              <v-chip
+                size="x-small"
+                :color="taskStatusColor(periodic?.re_evaluate_plate_solved_files)"
+                variant="flat"
+              >
+                {{ taskStatusLabel(periodic?.re_evaluate_plate_solved_files) }}
+              </v-chip>
+            </div>
+          </v-card-title>
+          <v-card-text>
+            <div class="text-caption text-medium-emphasis mb-2">
+              Re-run object association for plate-solved files where header had no coords or WCS differs from header. Runs every 2 hours via Celery Beat when plate solving is enabled.
+            </div>
+            <div class="mb-2">
+              <v-btn color="primary" prepend-icon="mdi-refresh" :loading="busy.reEvaluatePlateSolved" @click="triggerReEvaluatePlateSolved">
+                Trigger now
+              </v-btn>
+            </div>
+            <div class="text-caption text-medium-emphasis">
+              Last run:
+              <span v-if="periodic?.re_evaluate_plate_solved_files?.last_run">
+                {{ formatRelative(periodic.re_evaluate_plate_solved_files.last_run, periodic.re_evaluate_plate_solved_files.age_seconds) }}
+              </span>
+              <span v-else>—</span>
+            </div>
+            <div v-if="periodic?.re_evaluate_plate_solved_files?.data" class="mt-2">
+              <div class="text-caption text-medium-emphasis">Summary</div>
+              <div class="text-caption">
+                evaluated: {{ periodic.re_evaluate_plate_solved_files.data.evaluated ?? 0 }},
+                skipped: {{ periodic.re_evaluate_plate_solved_files.data.skipped ?? 0 }},
+                errors: {{ periodic.re_evaluate_plate_solved_files.data.errors ?? 0 }}
+              </div>
+            </div>
+            <div v-if="periodic?.re_evaluate_plate_solved_files?.last_error" class="text-error text-caption mt-1">
+              {{ periodic.re_evaluate_plate_solved_files.last_error }}
             </div>
           </v-card-text>
         </v-card>
@@ -593,7 +644,7 @@ import { useAuthStore } from '@/store/auth'
 const notify = useNotifyStore()
 const auth = useAuthStore()
 const loading = ref(false)
-const busy = ref({ cleanup: false, reconcile: false, scan: false, orphans: false, orphanObj: false, banner: false, dashboardStats: false, plateSolving: false, plateSolvingToggle: false, overrideFlags: false })
+const busy = ref({ cleanup: false, reconcile: false, scan: false, orphans: false, orphanObj: false, banner: false, dashboardStats: false, plateSolving: false, plateSolvingToggle: false, reEvaluatePlateSolved: false, overrideFlags: false })
 const health = ref({ periodic: {}, settings: {} })
 const overrideFlagsData = ref(null)
 const loadingOverrideFlags = ref(false)
@@ -799,6 +850,19 @@ const triggerPlateSolving = async () => {
     notify.error('Failed to enqueue plate solving task')
   } finally {
     busy.value.plateSolving = false
+    setTimeout(refreshHealth, 1500)
+  }
+}
+
+const triggerReEvaluatePlateSolved = async () => {
+  busy.value.reEvaluatePlateSolved = true
+  try {
+    await api.adminMaintenanceReEvaluatePlateSolved()
+    notify.success('Re-evaluate plate-solved files task enqueued')
+  } catch (e) {
+    notify.error('Failed to enqueue re-evaluate task')
+  } finally {
+    busy.value.reEvaluatePlateSolved = false
     setTimeout(refreshHealth, 1500)
   }
 }

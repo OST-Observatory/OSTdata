@@ -581,6 +581,19 @@ This schedules a Celery Beat task that runs every 30 minutes and caches the resu
 
 The dashboard endpoint will serve cached data when available, falling back to on-demand computation if the cache is empty.
 
+### Optional Scan Missing Files & Orphans/Hash-Check (Celery Beat)
+
+These maintenance tasks are listed on Admin → Maintenance and can be triggered manually. To run them automatically via Celery Beat:
+
+- **Scan missing files (ingest)**: Walks the archive to ingest files not yet in the DB. Daily at 02:00 when enabled.
+  ```
+  ENABLE_SCAN_MISSING_FILESYSTEM=true
+  ```
+- **Orphans & Hash-Drift Check**: Scans for orphan DataFiles and missing/changed hashes. Daily at 03:30 when enabled.
+  ```
+  ENABLE_ORPHANS_HASHCHECK=true
+  ```
+
 You can trigger a manual refresh via:
 
 - **Admin UI**: Navigate to Admin → Maintenance and click "Refresh now" on the "Refresh Dashboard Stats" card.

@@ -190,7 +190,7 @@
         <v-card>
           <v-card-title class="text-h6">Periodic Tasks</v-card-title>
           <v-card-text>
-            <div v-for="name in ['cleanup_expired_downloads', 'reconcile_filesystem', 'cleanup_orphans_hashcheck', 'scan_missing_filesystem', 'cleanup_orphan_objects']" :key="name" class="mb-3">
+            <div v-for="name in ['cleanup_expired_downloads', 'reconcile_filesystem', 'cleanup_orphans_hashcheck', 'scan_missing_filesystem', 'cleanup_orphan_objects', 'plate_solve_pending_files', 're_evaluate_plate_solved_files']" :key="name" class="mb-3">
               <div class="d-flex align-center" style="gap: 8px">
                 <div class="text-subtitle-2">{{ name }}</div>
                 <v-chip

@@ -54,6 +54,8 @@ def gather_admin_health() -> Dict[str, Any]:
             'fs_reconcile_enabled': bool(getattr(settings, 'ENABLE_FS_RECONCILE', False)),
             'download_cleanup_enabled': bool(getattr(settings, 'ENABLE_DOWNLOAD_CLEANUP', False)),
             'plate_solving_enabled': plate_solving_enabled,
+            'scan_missing_enabled': bool(getattr(settings, 'ENABLE_SCAN_MISSING_FILESYSTEM', False)),
+            'orphans_hashcheck_enabled': bool(getattr(settings, 'ENABLE_ORPHANS_HASHCHECK', False)),
         }
     except Exception:
         data['celery'] = {}

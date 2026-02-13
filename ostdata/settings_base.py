@@ -173,6 +173,18 @@ if env.bool('ENABLE_DASHBOARD_STATS_REFRESH', default=False):
         'schedule': crontab(minute='*/30'),
         'args': (),
     }
+if env.bool('ENABLE_SCAN_MISSING_FILESYSTEM', default=False):
+    CELERY_BEAT_SCHEDULE['scan_missing_filesystem'] = {
+        'task': 'obs_run.tasks.scan_missing_filesystem',
+        'schedule': crontab(minute=0, hour='2'),  # Daily at 2:00
+        'kwargs': {'dry_run': False},
+    }
+if env.bool('ENABLE_ORPHANS_HASHCHECK', default=False):
+    CELERY_BEAT_SCHEDULE['cleanup_orphans_hashcheck'] = {
+        'task': 'obs_run.tasks.cleanup_orphans_and_hashcheck',
+        'schedule': crontab(minute=30, hour='3'),  # Daily at 3:30
+        'kwargs': {'dry_run': False, 'fix_missing_hashes': True},
+    }
 
 DOWNLOAD_JOB_TTL_HOURS = env.int('DOWNLOAD_JOB_TTL_HOURS', default=72)
 
