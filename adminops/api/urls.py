@@ -1,5 +1,7 @@
 from django.urls import path
 from .views import (
+    admin_list_all_datafiles,
+    admin_re_evaluate_datafiles,
     admin_health,
     admin_trigger_cleanup_downloads,
     admin_trigger_reconcile,
@@ -53,6 +55,9 @@ urlpatterns = [
     path('banner/clear', admin_clear_banner, name='clear_banner'),
     path('banner-info/', banner_info, name='banner_info'),
     path('objects/<int:object_id>/update-identifiers/', admin_update_object_identifiers, name='update_object_identifiers'),
+    # DataFiles list (all) and re-evaluate
+    path('datafiles/', admin_list_all_datafiles, name='list_all_datafiles'),
+    path('datafiles/re-evaluate/', admin_re_evaluate_datafiles, name='re_evaluate_datafiles'),
     # Exposure type classification endpoints
     path('datafiles/discrepancies/', admin_get_exposure_type_discrepancies, name='exposure_type_discrepancies'),
     path('datafiles/<int:pk>/exposure-type-user/', admin_update_exposure_type_user, name='update_exposure_type_user'),

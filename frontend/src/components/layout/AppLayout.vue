@@ -60,6 +60,11 @@
         <v-tooltip activator="parent" location="bottom">Tags</v-tooltip>
       </v-btn>
 
+      <v-btn v-if="isAdmin" icon to="/datafiles" aria-label="Open Data Files" class="on-secondary nav-btn nav-gap" :class="{ 'nav-active': isActive('/datafiles') }" :aria-current="isActive('/datafiles') ? 'page' : undefined" @mouseenter="prefetchRoute('/datafiles')">
+        <v-icon>mdi-file-document-multiple</v-icon>
+        <v-tooltip activator="parent" location="bottom">Data Files</v-tooltip>
+      </v-btn>
+
       <v-btn icon to="/dark-finder" aria-label="Open Dark Finder" class="on-secondary nav-btn nav-gap" :class="{ 'nav-active': isActive('/dark-finder') }" :aria-current="isActive('/dark-finder') ? 'page' : undefined" @mouseenter="prefetchRoute('/dark-finder')">
         <v-icon>mdi-image-filter-black-white</v-icon>
         <v-tooltip activator="parent" location="bottom">Dark Frame Finder</v-tooltip>
@@ -127,6 +132,9 @@
           <v-list-item to="/observation-runs" :aria-current="isActive('/observation-runs') ? 'page' : undefined"><v-list-item-title>Observation runs</v-list-item-title></v-list-item>
           <v-list-item to="/objects" :aria-current="isActive('/objects') ? 'page' : undefined"><v-list-item-title>Objects</v-list-item-title></v-list-item>
           <v-list-item to="/tags" :aria-current="isActive('/tags') ? 'page' : undefined"><v-list-item-title>Tags</v-list-item-title></v-list-item>
+          <template v-if="isAdmin">
+            <v-list-item to="/datafiles" :aria-current="isActive('/datafiles') ? 'page' : undefined"><v-list-item-title>Data Files</v-list-item-title></v-list-item>
+          </template>
           <v-list-item to="/dark-finder" :aria-current="isActive('/dark-finder') ? 'page' : undefined"><v-list-item-title>Dark Frame Finder</v-list-item-title></v-list-item>
           <template v-if="isAdmin">
             <v-list-item to="/admin" :aria-current="isActive('/admin') ? 'page' : undefined"><v-list-item-title>Admin</v-list-item-title></v-list-item>

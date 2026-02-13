@@ -44,6 +44,12 @@ const routes = [
     meta: { requiresAuth: false, title: 'Tags', description: 'View and manage tags used to organize objects and files.' }
   },
   {
+    path: '/datafiles',
+    name: 'datafiles',
+    component: () => import('@/views/DataFilesView.vue'),
+    meta: { requiresAuth: true, requiresAdmin: true, title: 'Data Files', description: 'Browse and filter all data files.' }
+  },
+  {
     path: '/admin',
     name: 'admin',
     component: () => import('@/views/Admin.vue'),

@@ -1391,3 +1391,107 @@ def admin_set_plate_solving_task_enabled(request):
     return Response({'detail': 'Failed to update (Redis unavailable)'}, status=500)
 
 
+@extend_schema(
+    summary='List all DataFiles (admin)',
+    parameters=[
+        OpenApiParameter('page', int, description='Page number'),
+        OpenApiParameter('limit', int, description='Page size (-1 for all)'),
+        OpenApiParameter('ordering', str, description='Sort field, prefix with - for desc'),
+    ],
+)
+@api_view(['GET'])
+@permission_classes([IsAdminUser])
+def admin_list_all_datafiles(request):
+    """
+    List all DataFiles with filtering. Staff/Admin only. No run visibility restriction.
+    """
+    from adminops.api.filters import AdminDataFileFilter
+
+    queryset = DataFile.objects.select_related('observation_run').all()
+    filterset = AdminDataFileFilter(request.query_params, queryset=queryset, request=request)
+    queryset = filterset.qs
+
+    # Ordering
+    ordering = request.query_params.get('ordering', '-pk')
+    allowed_sort = ['pk', 'datafile', 'observation_run', 'file_type', 'instrument', 'main_target',
+                    'exposure_type', 'exptime', 'obs_date', 'plate_solved', 'plate_solve_attempted_at']
+    if ordering.lstrip('-') in allowed_sort:
+        queryset = queryset.order_by(ordering, 'pk')
+    else:
+        queryset = queryset.order_by('-pk', 'pk')
+
+    paginator = DataFilesPagination()
+    page = paginator.paginate_queryset(queryset, request)
+    if page is not None:
+        serializer = DataFileSerializer(page, many=True, context={'request': request})
+        return paginator.get_paginated_response(serializer.data)
+
+    serializer = DataFileSerializer(queryset, many=True, context={'request': request})
+    return Response(serializer.data)
+
+
+@extend_schema(
+    summary='Re-evaluate selected DataFiles',
+    request=serializers.Serializer,
+)
+@api_view(['POST'])
+@permission_classes([IsAdminUser])
+def admin_re_evaluate_datafiles(request):
+    """
+    Run evaluate_data_file for selected plate-solved DataFiles.
+    Body: { "ids": [1, 2, 3] }
+    """
+    from astropy.coordinates import SkyCoord
+    import astropy.units as u
+    from django.conf import settings
+
+    ids = request.data.get('ids', [])
+    if not ids or not isinstance(ids, list):
+        return Response({'detail': 'ids must be a non-empty list'}, status=400)
+
+    threshold_arcmin = getattr(settings, 'PLATE_SOLVING_RE_EVAL_COORD_THRESHOLD_ARCMIN', 5.0)
+
+    queryset = DataFile.objects.filter(
+        pk__in=ids,
+        plate_solved=True,
+        wcs_ra__isnull=False,
+        wcs_dec__isnull=False,
+    ).select_related('observation_run')
+
+    evaluated = 0
+    skipped = 0
+    errors = 0
+
+    for datafile in queryset:
+        try:
+            condition1 = (datafile.ra in (-1, None) or datafile.dec in (-1, None))
+            condition2 = False
+            if not condition1:
+                c_header = SkyCoord(ra=datafile.ra * u.deg, dec=datafile.dec * u.deg)
+                c_wcs = SkyCoord(ra=datafile.wcs_ra * u.deg, dec=datafile.wcs_dec * u.deg)
+                sep_arcmin = c_header.separation(c_wcs).arcmin
+                condition2 = sep_arcmin > threshold_arcmin
+
+            if condition1 or condition2:
+                if datafile.observation_run:
+                    datafile.ra = datafile.wcs_ra
+                    datafile.dec = datafile.wcs_dec
+                    datafile.save(update_fields=['ra', 'dec'])
+                    evaluate_data_file(datafile, datafile.observation_run, skip_if_object_has_overrides=True)
+                    update_observation_run_photometry_spectroscopy(datafile.observation_run)
+                    for obj in datafile.object_set.all():
+                        update_object_photometry_spectroscopy(obj)
+                    evaluated += 1
+                else:
+                    skipped += 1
+            else:
+                skipped += 1
+            DataFile.objects.filter(pk=datafile.pk).update(re_evaluated_after_plate_solve=True)
+        except Exception as e:
+            errors += 1
+            logger.warning('Re-evaluation failed for datafile %s: %s', datafile.pk, e)
+            DataFile.objects.filter(pk=datafile.pk).update(re_evaluated_after_plate_solve=True)
+
+    return Response({'evaluated': evaluated, 'skipped': skipped, 'errors': errors})
+
+
