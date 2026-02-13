@@ -609,6 +609,7 @@ PLATE_SOLVING_TOOLS=watney  # Ordered list of tools to try (fallback if one fail
 PLATE_SOLVING_FOV_MARGIN=0.2  # 20% margin for FOV radius calculation
 PLATE_SOLVING_MAX_RADIUS=30.0  # Maximum search radius in degrees
 PLATE_SOLVING_MIN_RADIUS=0.1  # Minimum search radius in degrees
+PLATE_SOLVING_NEARBY_SEARCH_RADIUS=5.0  # Search radius (deg) for nearby mode when ra/dec known
 PLATE_SOLVING_TIMEOUT_SECONDS=600  # Timeout per file (10 minutes)
 PLATE_SOLVING_BATCH_SIZE=10  # Files processed per Celery Beat run
 ```
@@ -636,6 +637,10 @@ The Redis override takes precedence over the `PLATE_SOLVING_ENABLED` setting. If
   ```
 
 - **Admin UI**: Navigate to Admin → Plate Solving to view unsolved files, trigger solving for specific files, and view statistics.
+
+**Nearby vs. Blind Search:**
+
+When a DataFile has valid RA/Dec coordinates in its header, the solver first tries a faster nearby (localized) search. If that fails, it falls back to blind search. Nearby search uses `--field-radius` (derived from FOV) and `--search-radius` (configurable via `PLATE_SOLVING_NEARBY_SEARCH_RADIUS`).
 
 **Filtering:**
 

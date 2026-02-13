@@ -16,9 +16,23 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Dict, Optional, List
 
+from astropy.coordinates import Angle
 from django.conf import settings
 
 logger = logging.getLogger(__name__)
+
+
+def _ra_dec_valid(ra: float, dec: float) -> bool:
+    """Check if ra/dec are valid for use in nearby search."""
+    if ra is None or dec is None:
+        return False
+    if ra == -1 or dec == -1:
+        return False
+    try:
+        # Basic range check: ra 0-360, dec -90 to 90
+        return 0 <= float(ra) <= 360 and -90 <= float(dec) <= 90
+    except (TypeError, ValueError):
+        return False
 
 
 class PlateSolver(ABC):
@@ -60,6 +74,30 @@ class PlateSolver(ABC):
             List of supported extensions, e.g., ['fits', 'fit', 'fts', 'tiff', 'tif']
         """
         return []  # Default: no formats specified (all formats allowed)
+
+    def solve_nearby(
+        self,
+        image_path: str,
+        ra_deg: float,
+        dec_deg: float,
+        field_radius: float,
+        search_radius: float,
+    ) -> Optional[Dict]:
+        """
+        Attempt to solve an image using known approximate coordinates (nearby/localized search).
+        More efficient than blind search when coordinates are available.
+
+        Args:
+            image_path: Path to the image file
+            ra_deg: Approximate RA in degrees (0-360)
+            dec_deg: Approximate Dec in degrees (-90 to 90)
+            field_radius: Telescope field radius in degrees (0.1-16)
+            search_radius: Search radius in degrees around center
+
+        Returns:
+            Solution dictionary if successful, None if not supported or failed
+        """
+        return None  # Default: not implemented
 
 
 class WatneySolver(PlateSolver):
@@ -213,6 +251,75 @@ class WatneySolver(PlateSolver):
                 raise
             raise RuntimeError(f"Unexpected error running Watney: {e}")
 
+    def solve_nearby(
+        self,
+        image_path: str,
+        ra_deg: float,
+        dec_deg: float,
+        field_radius: float,
+        search_radius: float,
+    ) -> Optional[Dict]:
+        """
+        Solve using Watney nearby mode (known approximate coordinates).
+        """
+        image_path_obj = Path(image_path)
+        if not image_path_obj.exists():
+            raise FileNotFoundError(f"Image file not found: {image_path}")
+
+        # Clamp field_radius to Watney range 0.1-16
+        field_radius = max(0.1, min(16.0, field_radius))
+        search_radius = max(0.1, min(90.0, search_radius))
+
+        # Convert ra/dec to HMS/DMS format for Watney
+        ra_hms = Angle(ra_deg, unit='degree').to_string(unit='hour', sep=' ')
+        dec_dms = Angle(dec_deg, unit='degree').to_string(unit='degree', sep=' ')
+
+        cmd = [
+            self.executable_path,
+            'nearby',
+            '--image', str(image_path),
+            '--manual',
+            '--ra', ra_hms,
+            '--dec', dec_dms,
+            '--field-radius', str(field_radius),
+            '--search-radius', str(search_radius),
+            '--extended',
+            '--out-format', 'json',
+        ]
+
+        try:
+            logger.debug(f"Running Watney nearby: {' '.join(cmd)}")
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                timeout=self.timeout,
+                text=True,
+                check=False,
+            )
+
+            if result.returncode != 0:
+                error_msg = result.stderr or result.stdout or "Unknown error"
+                raise RuntimeError(f"Watney nearby failed with exit code {result.returncode}: {error_msg}")
+
+            try:
+                output = json.loads(result.stdout)
+            except json.JSONDecodeError as e:
+                raise ValueError(f"Failed to parse Watney JSON output: {e}\nOutput: {result.stdout}")
+
+            if not output.get('success', False):
+                raise RuntimeError("Watney nearby returned success=false")
+
+            return output
+
+        except subprocess.TimeoutExpired:
+            raise TimeoutError(f"Watney nearby solver timed out after {self.timeout} seconds")
+        except FileNotFoundError:
+            raise FileNotFoundError(f"Watney executable not found: {self.executable_path}")
+        except Exception as e:
+            if isinstance(e, (TimeoutError, FileNotFoundError, ValueError, RuntimeError)):
+                raise
+            raise RuntimeError(f"Unexpected error running Watney nearby: {e}")
+
 
 class PlateSolvingService:
     """Service that coordinates multiple plate solvers with fallback support."""
@@ -252,14 +359,29 @@ class PlateSolvingService:
 
         return solver_list
 
-    def solve(self, image_path: str, min_radius: float, max_radius: float) -> Optional[Dict]:
+    def solve(
+        self,
+        image_path: str,
+        min_radius: float,
+        max_radius: float,
+        ra_deg: Optional[float] = None,
+        dec_deg: Optional[float] = None,
+        fov_x: float = -1,
+        fov_y: float = -1,
+    ) -> Optional[Dict]:
         """
         Attempt to solve an image using configured solvers in order.
+        When ra/dec are known, tries nearby (localized) search first (more efficient),
+        then falls back to blind search on failure.
 
         Args:
             image_path: Path to the image file
             min_radius: Minimum field radius in degrees
             max_radius: Maximum field radius in degrees
+            ra_deg: Optional approximate RA in degrees (enables nearby search)
+            dec_deg: Optional approximate Dec in degrees (enables nearby search)
+            fov_x: Field of view width in degrees (for nearby field-radius)
+            fov_y: Field of view height in degrees (for nearby field-radius)
 
         Returns:
             Solution dictionary if successful, None if all solvers failed
@@ -271,19 +393,37 @@ class PlateSolvingService:
         # Check file extension against supported formats
         image_path_obj = Path(image_path)
         file_ext = image_path_obj.suffix.lstrip('.').lower()
+
+        use_nearby = _ra_dec_valid(ra_deg, dec_deg) if (ra_deg is not None and dec_deg is not None) else False
+        field_radius = self._field_radius_from_fov(fov_x, fov_y)
+        search_radius = getattr(settings, 'PLATE_SOLVING_NEARBY_SEARCH_RADIUS', 5.0)
         
         for solver in self.solvers:
             # Check if solver supports this file format
             supported_formats = solver.get_supported_formats()
             if supported_formats and file_ext not in supported_formats:
-                logger.debug(f"Skipping {solver.get_name()} - format '{file_ext}' not supported (supported: {supported_formats})")
+                logger.debug(f"Skipping {solver.get_name()} - format '{file_ext}' not supported")
                 continue
-            
+
+            # Try nearby search first when coordinates are known
+            if use_nearby and hasattr(solver, 'solve_nearby') and callable(getattr(solver, 'solve_nearby')):
+                try:
+                    logger.info(f"Attempting nearby plate solve with {solver.get_name()} for {image_path}")
+                    result = solver.solve_nearby(
+                        image_path, ra_deg, dec_deg, field_radius, search_radius
+                    )
+                    if result and result.get('success'):
+                        logger.info(f"Nearby plate solve successful with {solver.get_name()}")
+                        result['tool'] = solver.get_name()
+                        return result
+                except Exception as e:
+                    logger.warning(f"Nearby plate solve failed with {solver.get_name()}, trying blind: {e}")
+
+            # Blind search (or fallback after nearby failure)
             try:
-                logger.info(f"Attempting plate solve with {solver.get_name()} for {image_path}")
+                logger.info(f"Attempting blind plate solve with {solver.get_name()} for {image_path}")
                 result = solver.solve(image_path, min_radius, max_radius)
                 logger.info(f"Plate solve successful with {solver.get_name()}")
-                # Add tool name to result
                 result['tool'] = solver.get_name()
                 return result
             except Exception as e:
@@ -292,6 +432,15 @@ class PlateSolvingService:
 
         logger.error(f"All plate solvers failed for {image_path}")
         return None
+
+    def _field_radius_from_fov(self, fov_x: float, fov_y: float) -> float:
+        """
+        Calculate field radius in degrees from FOV (for nearby search).
+        Field radius = half of max FOV dimension, clamped to 0.1-16.
+        """
+        if fov_x > 0 and fov_y > 0:
+            return max(0.1, min(16.0, max(fov_x, fov_y) / 2.0))
+        return 0.5  # Default when FOV unknown
 
     def calculate_radius_from_fov(self, fov_x: float, fov_y: float) -> tuple[float, float]:
         """
@@ -385,8 +534,16 @@ def solve_and_update_datafile(datafile, service=None, save=True):
             datafile.fov_y if datafile.fov_y > 0 else -1
         )
         
-        # Attempt plate solving
-        solution = service.solve(str(image_path), min_radius, max_radius)
+        # Attempt plate solving (nearby first when ra/dec known, else blind)
+        solution = service.solve(
+            str(image_path),
+            min_radius,
+            max_radius,
+            ra_deg=datafile.ra,
+            dec_deg=datafile.dec,
+            fov_x=datafile.fov_x if datafile.fov_x > 0 else -1,
+            fov_y=datafile.fov_y if datafile.fov_y > 0 else -1,
+        )
         
         if solution and solution.get('success'):
             # Update DataFile with solution

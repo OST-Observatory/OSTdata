@@ -184,6 +184,8 @@ PLATE_SOLVING_MAX_RADIUS = env.float('PLATE_SOLVING_MAX_RADIUS', default=30.0)  
 PLATE_SOLVING_MIN_RADIUS = env.float('PLATE_SOLVING_MIN_RADIUS', default=0.11)  # degrees
 PLATE_SOLVING_TIMEOUT_SECONDS = env.int('PLATE_SOLVING_TIMEOUT_SECONDS', default=600)  # 10 minutes
 PLATE_SOLVING_BATCH_SIZE = env.int('PLATE_SOLVING_BATCH_SIZE', default=10)  # Files per batch
+# For nearby search: search radius in degrees around center coordinate (used when ra/dec known)
+PLATE_SOLVING_NEARBY_SEARCH_RADIUS = env.float('PLATE_SOLVING_NEARBY_SEARCH_RADIUS', default=5.0)
 
 # Watney-specific settings
 WATNEY_SOLVE_PATH = env('WATNEY_SOLVE_PATH', default='watney-solve')
