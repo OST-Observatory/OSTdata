@@ -152,15 +152,51 @@
 
         <template #item.actions="{ item }">
           <div class="d-flex align-center flex-wrap" style="gap: 2px">
-            <v-btn icon="mdi-eye" size="x-small" variant="text" @click="openPreview(item)" :aria-label="`Preview ${item.file_name}`" />
-            <v-btn icon="mdi-code-tags" size="x-small" variant="text" @click="openHeader(item)" :aria-label="`Header ${item.file_name}`" />
-            <v-btn icon="mdi-star-four-points" size="x-small" variant="text" :loading="triggeringSingle === item.pk" @click="triggerPlateSolveSingle(item)" :aria-label="`Plate solve ${item.file_name}`" />
-            <v-btn icon="mdi-pencil" size="x-small" variant="text" @click="openExposureTypeDialog(item)" :aria-label="`Set type ${item.file_name}`" />
-            <v-btn icon="mdi-telescope" size="x-small" variant="text" @click="openSpectrographDialog(item)" :aria-label="`Spectrograph ${item.file_name}`" />
-            <v-btn v-if="item.plate_solved" icon="mdi-refresh" size="x-small" variant="text" :loading="reEvalSingle === item.pk" @click="reEvaluateSingle(item)" :aria-label="`Re-evaluate ${item.file_name}`" />
-            <v-btn icon="mdi-link" size="x-small" variant="text" :loading="linkObjectSingle === item.pk" @click="openLinkObjectDialog(item)" :aria-label="`Link to object ${item.file_name}`" />
-            <v-btn icon="mdi-flag-off" size="x-small" variant="text" :loading="clearOverrideSingle === item.pk" @click="clearOverrideSingleItem(item)" :aria-label="`Clear overrides ${item.file_name}`" />
-            <v-btn icon="mdi-download" size="x-small" variant="text" :href="api.getDataFileDownloadUrl(item.pk)" target="_blank" rel="noopener" :aria-label="`Download ${item.file_name}`" />
+            <v-tooltip text="Preview thumbnail" location="top">
+              <template #activator="{ props }">
+                <v-btn v-bind="props" icon="mdi-eye" size="x-small" variant="text" @click="openPreview(item)" :aria-label="`Preview ${item.file_name}`" />
+              </template>
+            </v-tooltip>
+            <v-tooltip text="View FITS header" location="top">
+              <template #activator="{ props }">
+                <v-btn v-bind="props" icon="mdi-code-tags" size="x-small" variant="text" @click="openHeader(item)" :aria-label="`Header ${item.file_name}`" />
+              </template>
+            </v-tooltip>
+            <v-tooltip text="Trigger plate solving" location="top">
+              <template #activator="{ props }">
+                <v-btn v-bind="props" icon="mdi-star-four-points" size="x-small" variant="text" :loading="triggeringSingle === item.pk" @click="triggerPlateSolveSingle(item)" :aria-label="`Plate solve ${item.file_name}`" />
+              </template>
+            </v-tooltip>
+            <v-tooltip text="Set exposure type" location="top">
+              <template #activator="{ props }">
+                <v-btn v-bind="props" icon="mdi-pencil" size="x-small" variant="text" @click="openExposureTypeDialog(item)" :aria-label="`Set type ${item.file_name}`" />
+              </template>
+            </v-tooltip>
+            <v-tooltip text="Set spectrograph" location="top">
+              <template #activator="{ props }">
+                <v-btn v-bind="props" icon="mdi-telescope" size="x-small" variant="text" @click="openSpectrographDialog(item)" :aria-label="`Spectrograph ${item.file_name}`" />
+              </template>
+            </v-tooltip>
+            <v-tooltip v-if="item.plate_solved" text="Re-evaluate object association" location="top">
+              <template #activator="{ props }">
+                <v-btn v-bind="props" icon="mdi-refresh" size="x-small" variant="text" :loading="reEvalSingle === item.pk" @click="reEvaluateSingle(item)" :aria-label="`Re-evaluate ${item.file_name}`" />
+              </template>
+            </v-tooltip>
+            <v-tooltip text="Link to object" location="top">
+              <template #activator="{ props }">
+                <v-btn v-bind="props" icon="mdi-link" size="x-small" variant="text" :loading="linkObjectSingle === item.pk" @click="openLinkObjectDialog(item)" :aria-label="`Link to object ${item.file_name}`" />
+              </template>
+            </v-tooltip>
+            <v-tooltip text="Clear override flags" location="top">
+              <template #activator="{ props }">
+                <v-btn v-bind="props" icon="mdi-flag-off" size="x-small" variant="text" :loading="clearOverrideSingle === item.pk" @click="clearOverrideSingleItem(item)" :aria-label="`Clear overrides ${item.file_name}`" />
+              </template>
+            </v-tooltip>
+            <v-tooltip text="Download file" location="top">
+              <template #activator="{ props }">
+                <v-btn v-bind="props" icon="mdi-download" size="x-small" variant="text" :href="api.getDataFileDownloadUrl(item.pk)" target="_blank" rel="noopener" :aria-label="`Download ${item.file_name}`" />
+              </template>
+            </v-tooltip>
           </div>
         </template>
       </v-data-table>
