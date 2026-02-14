@@ -16,7 +16,6 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Dict, Optional, List
 
-from astropy.coordinates import Angle
 from django.conf import settings
 
 logger = logging.getLogger(__name__)
@@ -270,17 +269,17 @@ class WatneySolver(PlateSolver):
         field_radius = max(0.1, min(16.0, field_radius))
         search_radius = max(0.1, min(90.0, search_radius))
 
-        # Convert ra/dec to HMS/DMS format for Watney
-        ra_hms = Angle(ra_deg, unit='degree').to_string(unit='hour', sep=' ')
-        dec_dms = Angle(dec_deg, unit='degree').to_string(unit='degree', sep=' ')
+        # Use decimal degrees for Watney (avoids "Could not parse seconds" with HMS/DMS)
+        ra_str = f"{ra_deg:.6f}"
+        dec_str = f"{dec_deg:.7f}"
 
         cmd = [
             self.executable_path,
             'nearby',
             '--image', str(image_path),
             '--manual',
-            '--ra', ra_hms,
-            '--dec', dec_dms,
+            '--ra', ra_str,
+            '--dec', dec_str,
             '--field-radius', str(field_radius),
             '--search-radius', str(search_radius),
             '--extended',
