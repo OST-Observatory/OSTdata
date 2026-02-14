@@ -107,6 +107,10 @@ class RunViewSet(viewsets.ModelViewSet):
             n_flat=Count('datafile', filter=get_effective_exposure_type_filter('FL', 'datafile__')),
             n_dark=Count('datafile', filter=get_effective_exposure_type_filter('DA', 'datafile__')),
             expo_time=Sum('datafile__exptime', filter=Q(datafile__exptime__gt=0)),
+            light_expo_time=Sum(
+                'datafile__exptime',
+                filter=Q(datafile__exptime__gt=0) & get_effective_exposure_type_filter('LI', 'datafile__')
+            ),
             n_datafiles=Count('datafile'),
         )
         # Anonymous users only see public runs

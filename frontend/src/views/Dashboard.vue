@@ -104,6 +104,9 @@
                     <tr>
                       <th class="text-primary" scope="col">Name</th>
                       <th class="text-primary" scope="col">Type</th>
+                      <th class="text-primary" scope="col">Photometry</th>
+                      <th class="text-primary" scope="col">Spectroscopy</th>
+                      <th class="text-primary" scope="col">Light Exp.</th>
                       <th class="text-primary" scope="col">Last Modified</th>
                     </tr>
                   </thead>
@@ -119,6 +122,13 @@
                         </v-tooltip>
                       </td>
                       <td class="text-secondary">{{ object.object_type_display }}</td>
+                      <td>
+                        <v-icon :color="object.photometry ? 'success' : 'disabled'" size="small">{{ object.photometry ? 'mdi-check-circle' : 'mdi-close-circle' }}</v-icon>
+                      </td>
+                      <td>
+                        <v-icon :color="object.spectroscopy ? 'success' : 'disabled'" size="small">{{ object.spectroscopy ? 'mdi-check-circle' : 'mdi-close-circle' }}</v-icon>
+                      </td>
+                      <td class="text-secondary">{{ formatExposureTime(object.light_expo_time) }}</td>
                       <td class="text-secondary">{{ formatDate(object.last_modified) }}</td>
                     </tr>
                   </tbody>
@@ -145,6 +155,9 @@
                     <tr>
                       <th class="text-primary" scope="col">Name</th>
                       <th class="text-primary" scope="col">Date</th>
+                      <th class="text-primary" scope="col">Photometry</th>
+                      <th class="text-primary" scope="col">Spectroscopy</th>
+                      <th class="text-primary" scope="col">Light Exp.</th>
                       <th class="text-primary" scope="col">Status</th>
                     </tr>
                   </thead>
@@ -167,6 +180,13 @@
                           {{ formatDate(run.start_time || run.date) }}
                         </template>
                       </td>
+                      <td>
+                        <v-icon :color="getRunBool(run, ['photometry', 'has_photometry']) ? 'success' : 'disabled'" size="small">{{ getRunBool(run, ['photometry', 'has_photometry']) ? 'mdi-check-circle' : 'mdi-close-circle' }}</v-icon>
+                      </td>
+                      <td>
+                        <v-icon :color="getRunBool(run, ['spectroscopy', 'has_spectroscopy']) ? 'success' : 'disabled'" size="small">{{ getRunBool(run, ['spectroscopy', 'has_spectroscopy']) ? 'mdi-check-circle' : 'mdi-close-circle' }}</v-icon>
+                      </td>
+                      <td class="text-secondary">{{ formatExposureTime(run.light_expo_time) }}</td>
                       <td>
                         <v-chip
                           :color="getStatusColor(run.status || run.reduction_status)"
@@ -342,6 +362,31 @@ export default {
     ]
 
     const formatDate = (date) => formatDateTime(date, { dateStyle: 'short' })
+
+    const formatExposureTime = (seconds) => {
+      if (!seconds || seconds === 0) return '—'
+      const s = Number(seconds)
+      if (!Number.isFinite(s)) return '—'
+      if (s >= 3600) {
+        const h = Math.floor(s / 3600)
+        const m = Math.floor((s % 3600) / 60)
+        return m > 0 ? `${h}h ${m}m` : `${h}h`
+      }
+      if (s >= 60) {
+        const m = Math.floor(s / 60)
+        const sec = Math.floor(s % 60)
+        return sec > 0 ? `${m}m ${sec}s` : `${m}m`
+      }
+      return `${Math.floor(s)}s`
+    }
+
+    const getRunBool = (item, keys) => {
+      for (const k of keys) {
+        if (item?.[k] === true) return true
+        if (item?.[k] === false) return false
+      }
+      return false
+    }
 
     const fetchStats = async () => {
       try {
@@ -590,6 +635,8 @@ export default {
       recentObjects,
       headers,
       formatDate,
+      formatExposureTime,
+      getRunBool,
       jdToDate,
       objectTypes,
       mapObjectTypeToCode,

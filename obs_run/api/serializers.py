@@ -49,6 +49,7 @@ class RunSerializer(ModelSerializer):
     n_flat = SerializerMethodField()
     n_dark = SerializerMethodField()
     expo_time = SerializerMethodField()
+    light_expo_time = SerializerMethodField()
     start_time = SerializerMethodField()
     end_time = SerializerMethodField()
     objects = SerializerMethodField()
@@ -77,6 +78,7 @@ class RunSerializer(ModelSerializer):
             'n_flat',
             'n_dark',
             'expo_time',
+            'light_expo_time',
             'start_time',
             'end_time',
             'objects',
@@ -206,6 +208,28 @@ class RunSerializer(ModelSerializer):
             if expo_time > 0:
                 total_expo_time += float(expo_time)
         return total_expo_time
+
+    def get_light_expo_time(self, obj):
+        """Total exposure time of Light (LI) frames only."""
+        try:
+            v = getattr(obj, 'light_expo_time', None)
+            if isinstance(v, (int, float)) and v >= 0:
+                return float(v)
+        except Exception:
+            pass
+        try:
+            from utilities import annotate_effective_exposure_type
+            total = 0.0
+            light_files = annotate_effective_exposure_type(obj.datafile_set.all()).filter(
+                effective_exposure_type='LI'
+            )
+            for f in light_files.only('exptime'):
+                ex = getattr(f, 'exptime', 0) or 0
+                if ex > 0:
+                    total += float(ex)
+            return total
+        except Exception:
+            return 0.0
 
     def get_start_time(self, obj):
         # Return ISO-8601 timestamp
