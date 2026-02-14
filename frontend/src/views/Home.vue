@@ -52,7 +52,7 @@
               class="custom-table"
             >
               <template #item.name="{ item }">
-                <router-link :to="`/objects/${item.pk}`" class="text-decoration-none primary--text">
+                <router-link :to="`/objects/${item.pk}`" class="text-decoration-none text-primary table-link cell-truncate">
                   {{ item.name }}
                 </router-link>
               </template>
@@ -108,7 +108,7 @@
               class="custom-table"
             >
               <template #item.name="{ item }">
-                <router-link :to="`/observation-runs/${item.pk || item.id}`" class="text-decoration-none primary--text">
+                <router-link :to="`/observation-runs/${item.pk || item.id}`" class="text-decoration-none text-primary table-link cell-truncate">
                   {{ item.name }}
                 </router-link>
               </template>
@@ -428,5 +428,48 @@ function parseRadius(str) {
 }
 .home-search-field :deep(input) {
   font-size: 1.1rem;
+}
+
+/* Table links – same style as Objects.vue and ObservationRuns.vue */
+.custom-table :deep(.table-link) {
+  color: var(--v-theme-primary);
+  text-decoration: none;
+  font-weight: 600;
+  transition: all var(--v-theme-transition-fast);
+  position: relative;
+  padding: 2px 4px;
+  border-radius: var(--v-theme-radius-sm);
+  background-color: rgba(var(--v-theme-primary-light), 0.3);
+  display: inline-block;
+  margin: -2px -4px;
+}
+.custom-table :deep(.table-link:hover) {
+  color: var(--v-theme-primary-dark);
+  background-color: rgba(var(--v-theme-primary-light), 0.9);
+  transform: translateY(-1px);
+}
+.custom-table :deep(.table-link::after) {
+  content: '';
+  position: absolute;
+  width: 100%;
+  height: 2px;
+  bottom: 0;
+  left: 0;
+  background-color: var(--v-theme-primary);
+  transform: scaleX(0);
+  transition: transform var(--v-theme-transition-fast);
+  border-radius: var(--v-theme-radius-sm);
+}
+.custom-table :deep(.table-link:hover::after) {
+  transform: scaleX(1);
+}
+
+.cell-truncate {
+  display: inline-block;
+  max-width: 320px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
 }
 </style>
