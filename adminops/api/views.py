@@ -1431,34 +1431,15 @@ def admin_list_all_datafiles(request):
     return Response(serializer.data)
 
 
-@extend_schema(
-    summary='Re-evaluate selected DataFiles',
-    request=serializers.Serializer,
-)
-@api_view(['POST'])
-@permission_classes([IsAdminUser])
-def admin_re_evaluate_datafiles(request):
+def _do_re_evaluate_datafiles(queryset):
     """
-    Run evaluate_data_file for selected plate-solved DataFiles.
-    Body: { "ids": [1, 2, 3] }
+    Re-evaluate plate-solved DataFiles (WCS-based). Returns dict with evaluated, skipped, errors, total.
     """
     from astropy.coordinates import SkyCoord
     import astropy.units as u
     from django.conf import settings
 
-    ids = request.data.get('ids', [])
-    if not ids or not isinstance(ids, list):
-        return Response({'detail': 'ids must be a non-empty list'}, status=400)
-
     threshold_arcmin = getattr(settings, 'PLATE_SOLVING_RE_EVAL_COORD_THRESHOLD_ARCMIN', 5.0)
-
-    queryset = DataFile.objects.filter(
-        pk__in=ids,
-        plate_solved=True,
-        wcs_ra__isnull=False,
-        wcs_dec__isnull=False,
-    ).select_related('observation_run')
-
     evaluated = 0
     skipped = 0
     errors = 0
@@ -1493,7 +1474,86 @@ def admin_re_evaluate_datafiles(request):
             logger.warning('Re-evaluation failed for datafile %s: %s', datafile.pk, e)
             DataFile.objects.filter(pk=datafile.pk).update(re_evaluated_after_plate_solve=True)
 
-    return Response({'evaluated': evaluated, 'skipped': skipped, 'errors': errors})
+    total = evaluated + skipped + errors
+    return {'evaluated': evaluated, 'skipped': skipped, 'errors': errors, 'total': total}
+
+
+def _do_re_evaluate_run_all(queryset):
+    """
+    Re-evaluate ALL DataFiles of a run via evaluate_data_file (independent of plate-solving).
+    Uses header-derived ra/dec. For testing object detection / evaluation logic changes.
+    Returns dict with evaluated, skipped, errors, total.
+    """
+    evaluated = 0
+    skipped = 0
+    errors = 0
+
+    for datafile in queryset:
+        try:
+            if not datafile.observation_run:
+                skipped += 1
+                continue
+            evaluate_data_file(datafile, datafile.observation_run, skip_if_object_has_overrides=True)
+            update_observation_run_photometry_spectroscopy(datafile.observation_run)
+            for obj in datafile.object_set.all():
+                update_object_photometry_spectroscopy(obj)
+            evaluated += 1
+        except Exception as e:
+            errors += 1
+            logger.warning('Re-evaluation failed for datafile %s: %s', datafile.pk, e)
+
+    total = evaluated + skipped + errors
+    return {'evaluated': evaluated, 'skipped': skipped, 'errors': errors, 'total': total}
+
+
+@extend_schema(
+    summary='Re-evaluate selected DataFiles',
+    request=serializers.Serializer,
+)
+@api_view(['POST'])
+@permission_classes([IsAdminUser])
+def admin_re_evaluate_datafiles(request):
+    """
+    Run evaluate_data_file for selected plate-solved DataFiles.
+    Body: { "ids": [1, 2, 3] }
+    """
+    ids = request.data.get('ids', [])
+    if not ids or not isinstance(ids, list):
+        return Response({'detail': 'ids must be a non-empty list'}, status=400)
+
+    queryset = DataFile.objects.filter(
+        pk__in=ids,
+        plate_solved=True,
+        wcs_ra__isnull=False,
+        wcs_dec__isnull=False,
+    ).select_related('observation_run')
+
+    return Response(_do_re_evaluate_datafiles(queryset))
+
+
+@extend_schema(
+    summary='Re-evaluate all DataFiles of an Observation Run',
+    tags=['Admin'],
+)
+@api_view(['POST'])
+@permission_classes([IsAdminUser])
+def admin_re_evaluate_run(request, run_id: int):
+    """
+    Re-evaluate ALL DataFiles belonging to the given Observation Run.
+    Independent of plate-solving: uses evaluate_data_file with header-derived ra/dec.
+    Useful for testing object detection / evaluation logic changes.
+    Returns { evaluated, skipped, errors, total }.
+    """
+    try:
+        run = ObservationRun.objects.get(pk=run_id)
+    except ObservationRun.DoesNotExist:
+        return Response({'detail': 'Run not found'}, status=404)
+
+    queryset = DataFile.objects.filter(
+        observation_run=run,
+    ).select_related('observation_run')
+
+    return Response(_do_re_evaluate_run_all(queryset))
 
 
 @extend_schema(

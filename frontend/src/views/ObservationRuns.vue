@@ -245,28 +245,52 @@
           </template>
 
           <template v-slot:item.actions="{ item }">
-            <v-btn
-              v-if="canEditRun"
-              icon
-              variant="text"
-              color="primary"
-              class="action-btn"
-              @click="openRunEdit(item)"
-              :aria-label="`Edit run ${item.name}`"
-            >
-              <v-icon>mdi-pencil</v-icon>
-            </v-btn>
-            <v-btn
-              v-if="canDeleteRun"
-              icon
-              variant="text"
-              color="error"
-              class="action-btn"
-              @click="removeRun(item)"
-              :aria-label="`Delete run ${item.name}`"
-            >
-              <v-icon>mdi-delete</v-icon>
-            </v-btn>
+            <v-tooltip v-if="canAdmin" text="Re-evaluate all DataFiles (object detection)" location="top">
+              <template #activator="{ props }">
+                <v-btn
+                  v-bind="props"
+                  icon
+                  variant="text"
+                  color="secondary"
+                  class="action-btn"
+                  :loading="reEvalRunId === item.pk"
+                  @click="reEvaluateRun(item)"
+                  :aria-label="`Re-evaluate DataFiles for run ${item.name}`"
+                >
+                  <v-icon>mdi-refresh</v-icon>
+                </v-btn>
+              </template>
+            </v-tooltip>
+            <v-tooltip v-if="canEditRun" text="Edit run" location="top">
+              <template #activator="{ props }">
+                <v-btn
+                  v-bind="props"
+                  icon
+                  variant="text"
+                  color="primary"
+                  class="action-btn"
+                  @click="openRunEdit(item)"
+                  :aria-label="`Edit run ${item.name}`"
+                >
+                  <v-icon>mdi-pencil</v-icon>
+                </v-btn>
+              </template>
+            </v-tooltip>
+            <v-tooltip v-if="canDeleteRun" text="Delete run" location="top">
+              <template #activator="{ props }">
+                <v-btn
+                  v-bind="props"
+                  icon
+                  variant="text"
+                  color="error"
+                  class="action-btn"
+                  @click="removeRun(item)"
+                  :aria-label="`Delete run ${item.name}`"
+                >
+                  <v-icon>mdi-delete</v-icon>
+                </v-btn>
+              </template>
+            </v-tooltip>
           </template>
         </v-data-table>
 
@@ -635,6 +659,26 @@ const removeRun = async (item) => {
   } catch (e) {
     console.error(e)
     notify.error('Delete failed')
+  }
+}
+
+const reEvalRunId = ref(null)
+const reEvaluateRun = async (item) => {
+  if (!canAdmin.value || !(item?.pk || item?.id)) return
+  const id = item.pk || item.id
+  reEvalRunId.value = id
+  try {
+    const res = await api.adminReEvaluateRun(id)
+    if (res.total === 0) {
+      notify.warning('No DataFiles found for this run')
+    } else {
+      notify.success(`Re-evaluated: ${res.evaluated} success, ${res.skipped} skipped, ${res.errors} errors (${res.total} total)`)
+    }
+    await fetchRuns()
+  } catch (e) {
+    notify.error('Re-evaluation failed')
+  } finally {
+    reEvalRunId.value = null
   }
 }
 

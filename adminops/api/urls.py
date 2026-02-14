@@ -2,6 +2,7 @@ from django.urls import path
 from .views import (
     admin_list_all_datafiles,
     admin_re_evaluate_datafiles,
+    admin_re_evaluate_run,
     admin_link_datafiles_to_object,
     admin_health,
     admin_trigger_cleanup_downloads,
@@ -48,6 +49,7 @@ urlpatterns = [
     path('maintenance/re-evaluate-plate-solved/', admin_trigger_re_evaluate_plate_solved, name='trigger_re_evaluate_plate_solved'),
     path('runs/<int:run_id>/set-date/', admin_run_set_date, name='run_set_date'),
     path('runs/<int:run_id>/recompute-date/', admin_run_recompute_date, name='run_recompute_date'),
+    path('runs/<int:run_id>/re-evaluate/', admin_re_evaluate_run, name='run_re_evaluate'),
     path('override-flags/<str:model_type>/<int:instance_id>/<str:field_name>/clear/', admin_clear_override_flag, name='clear_override_flag'),
     path('override-flags/<str:model_type>/<int:instance_id>/clear-all/', admin_clear_all_overrides, name='clear_all_overrides'),
     path('override-flags/list/', admin_list_override_flags, name='list_override_flags'),
