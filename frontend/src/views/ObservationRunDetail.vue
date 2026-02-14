@@ -636,7 +636,7 @@
                       <span class="text-secondary">)</span>
                     </template>
                   </template>
-                  <span v-else>{{ item.header_target_name || '—' }}</span>
+                  <span v-else>{{ (item.header_target_name && item.header_target_name !== '-') ? item.header_target_name : (item.main_target && item.main_target !== '-') ? item.main_target : '—' }}</span>
                 </template>
                 <span v-else class="text-secondary">—</span>
               </template>

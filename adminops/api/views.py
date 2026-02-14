@@ -49,6 +49,7 @@ from obs_run.api.serializers import DataFileSerializer
 from obs_run.api.views import DataFilesPagination
 from objects.models import Object, Identifier
 from utilities import _query_object_variants, _query_region_safe, update_observation_run_photometry_spectroscopy, update_object_photometry_spectroscopy, annotate_effective_exposure_type, evaluate_data_file
+from obs_run.utils import should_allow_auto_update
 from obs_run.plate_solving import PlateSolvingService, solve_and_update_datafile
 from django.db.models import Q, F, Count, Case, When, Value
 from django.db.models import CharField
@@ -1493,5 +1494,58 @@ def admin_re_evaluate_datafiles(request):
             DataFile.objects.filter(pk=datafile.pk).update(re_evaluated_after_plate_solve=True)
 
     return Response({'evaluated': evaluated, 'skipped': skipped, 'errors': errors})
+
+
+@extend_schema(
+    summary='Link DataFiles to an Object',
+    request=serializers.Serializer,
+)
+@api_view(['POST'])
+@permission_classes([IsAdminUser])
+def admin_link_datafiles_to_object(request):
+    """
+    Associate selected DataFiles with an existing Object.
+    Body: { "datafile_ids": [1, 2, 3], "object_id": 123 }
+    """
+    datafile_ids = request.data.get('datafile_ids', [])
+    object_id = request.data.get('object_id')
+
+    if not datafile_ids or not isinstance(datafile_ids, list):
+        return Response({'detail': 'datafile_ids must be a non-empty list'}, status=400)
+    if object_id is None:
+        return Response({'detail': 'object_id is required'}, status=400)
+
+    try:
+        obj = Object.objects.get(pk=object_id)
+    except Object.DoesNotExist:
+        return Response({'detail': 'Object not found'}, status=404)
+
+    datafiles = DataFile.objects.filter(pk__in=datafile_ids).select_related('observation_run')
+    linked = 0
+    already_linked = 0
+
+    for datafile in datafiles:
+        if obj.datafiles.filter(pk=datafile.pk).exists():
+            already_linked += 1
+            continue
+        obj.datafiles.add(datafile)
+        if datafile.observation_run and not obj.observation_run.filter(pk=datafile.observation_run.pk).exists():
+            obj.observation_run.add(datafile.observation_run)
+        # Update main_target so it shows in Target column (like evaluate_data_file does)
+        if should_allow_auto_update(datafile, 'main_target'):
+            datafile.main_target = obj.name
+            datafile.save(update_fields=['main_target'])
+        linked += 1
+
+    # Update photometry/spectroscopy flags
+    try:
+        update_object_photometry_spectroscopy(obj)
+        if obj.observation_run.exists():
+            for run in obj.observation_run.all():
+                update_observation_run_photometry_spectroscopy(run)
+    except Exception as e:
+        logger.warning('Photometry/spectroscopy update after link failed: %s', e)
+
+    return Response({'linked': linked, 'already_linked': already_linked})
 
 

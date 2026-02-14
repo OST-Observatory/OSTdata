@@ -76,6 +76,7 @@
           <v-btn color="primary" variant="outlined" prepend-icon="mdi-telescope" @click="openBulkSpectrographDialog">Set Spectrograph</v-btn>
           <v-btn color="primary" variant="outlined" prepend-icon="mdi-refresh" :loading="busy.reEvaluate" @click="bulkReEvaluate">Re-evaluate</v-btn>
           <v-btn color="secondary" variant="outlined" prepend-icon="mdi-flag-off" :loading="busy.clearOverrides" @click="bulkClearOverrides">Clear Overrides</v-btn>
+          <v-btn color="primary" variant="outlined" prepend-icon="mdi-link" :loading="busy.linkObject" @click="openLinkObjectDialog(null)">Link to Object</v-btn>
         </div>
       </v-card-text>
     </v-card>
@@ -157,6 +158,7 @@
             <v-btn icon="mdi-pencil" size="x-small" variant="text" @click="openExposureTypeDialog(item)" :aria-label="`Set type ${item.file_name}`" />
             <v-btn icon="mdi-telescope" size="x-small" variant="text" @click="openSpectrographDialog(item)" :aria-label="`Spectrograph ${item.file_name}`" />
             <v-btn v-if="item.plate_solved" icon="mdi-refresh" size="x-small" variant="text" :loading="reEvalSingle === item.pk" @click="reEvaluateSingle(item)" :aria-label="`Re-evaluate ${item.file_name}`" />
+            <v-btn icon="mdi-link" size="x-small" variant="text" :loading="linkObjectSingle === item.pk" @click="openLinkObjectDialog(item)" :aria-label="`Link to object ${item.file_name}`" />
             <v-btn icon="mdi-flag-off" size="x-small" variant="text" :loading="clearOverrideSingle === item.pk" @click="clearOverrideSingleItem(item)" :aria-label="`Clear overrides ${item.file_name}`" />
             <v-btn icon="mdi-download" size="x-small" variant="text" :href="api.getDataFileDownloadUrl(item.pk)" target="_blank" rel="noopener" :aria-label="`Download ${item.file_name}`" />
           </div>
@@ -220,6 +222,37 @@
           <v-checkbox v-model="exposureTypeForm.exposure_type_user_override" label="Set override flag" />
         </v-card-text>
         <v-card-actions><v-spacer /><v-btn variant="text" @click="exposureTypeDialog = false">Cancel</v-btn><v-btn color="primary" :loading="exposureTypeSaving" @click="saveExposureType">Save</v-btn></v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <!-- Link to Object dialog -->
+    <v-dialog v-model="linkObjectDialog" max-width="520" persistent>
+      <v-card>
+        <v-card-title>{{ linkObjectDialogBulk ? `Link to Object (${linkObjectDatafileIds.length} files)` : 'Link to Object' }}</v-card-title>
+        <v-card-text>
+          <v-autocomplete
+            v-model="linkObjectForm.selectedObject"
+            :items="linkObjectSearchResults"
+            :loading="linkObjectSearchLoading"
+            item-title="name"
+            item-value="pk"
+            label="Object"
+            placeholder="Search by name (e.g. M67, NGC 7000)"
+            variant="outlined"
+            clearable
+            hide-no-data
+            :filter="() => true"
+            :no-data-text="linkObjectSearchLoading ? 'Searching…' : 'Type to search objects (min. 2 characters)'"
+            @update:search="searchObjectsForLink"
+          >
+            <template #item="{ props, item }">
+              <v-list-item v-bind="props" :subtitle="item.raw?.object_type_display">
+                <template #title>{{ item.raw?.name }}</template>
+              </v-list-item>
+            </template>
+          </v-autocomplete>
+        </v-card-text>
+        <v-card-actions><v-spacer /><v-btn variant="text" @click="linkObjectDialog = false">Cancel</v-btn><v-btn color="primary" :loading="linkObjectSaving" :disabled="!linkObjectForm.selectedObject" @click="saveLinkObject">Link</v-btn></v-card-actions>
       </v-card>
     </v-dialog>
 
@@ -304,10 +337,11 @@ const headers = [
   { title: 'Actions', key: 'actions', sortable: false, width: '200px' },
 ]
 
-const busy = ref({ plateSolve: false, reEvaluate: false, clearOverrides: false })
+const busy = ref({ plateSolve: false, reEvaluate: false, clearOverrides: false, linkObject: false })
 const triggeringSingle = ref(null)
 const reEvalSingle = ref(null)
 const clearOverrideSingle = ref(null)
+const linkObjectSingle = ref(null)
 
 const previewDialog = ref(false)
 const previewTitle = ref('')
@@ -330,6 +364,14 @@ const spectrographDialog = ref(false)
 const spectrographDialogBulk = ref(false)
 const spectrographSaving = ref(false)
 const spectrographForm = ref({ pk: null, spectrograph: null, spectrograph_override: true })
+
+const linkObjectDialog = ref(false)
+const linkObjectDialogBulk = ref(false)
+const linkObjectDatafileIds = ref([])
+const linkObjectForm = ref({ selectedObject: null })
+const linkObjectSearchResults = ref([])
+const linkObjectSearchLoading = ref(false)
+const linkObjectSaving = ref(false)
 
 const selectedIds = computed(() => selected.value.map(v => (v && typeof v === 'object') ? v.pk : v).filter(Boolean))
 const selectedCount = computed(() => selectedIds.value.length)
@@ -618,6 +660,61 @@ function openBulkSpectrographDialog() {
   spectrographDialogBulk.value = true
   spectrographForm.value = { pk: null, spectrograph: null, spectrograph_override: true }
   spectrographDialog.value = true
+}
+
+function openLinkObjectDialog(item) {
+  if (item) {
+    linkObjectDialogBulk.value = false
+    linkObjectDatafileIds.value = [item.pk]
+  } else {
+    linkObjectDialogBulk.value = true
+    linkObjectDatafileIds.value = selectedIds.value.length ? [...selectedIds.value] : []
+  }
+  linkObjectForm.value = { selectedObject: null }
+  linkObjectSearchResults.value = []
+  linkObjectSingle.value = item ? item.pk : null
+  linkObjectDialog.value = true
+}
+
+async function searchObjectsForLink(q) {
+  const search = (q || '').trim()
+  if (search.length < 2) {
+    linkObjectSearchResults.value = []
+    return
+  }
+  linkObjectSearchLoading.value = true
+  try {
+    const res = await api.getObjectsVuetify({ page: 1, itemsPerPage: 50, search })
+    const list = res?.items || res?.results || []
+    linkObjectSearchResults.value = list
+  } catch (e) {
+    linkObjectSearchResults.value = []
+  } finally {
+    linkObjectSearchLoading.value = false
+  }
+}
+
+async function saveLinkObject() {
+  const objectId = linkObjectForm.value.selectedObject
+  if (!objectId || linkObjectDatafileIds.value.length === 0) return
+  linkObjectSaving.value = true
+  if (linkObjectDialogBulk.value) busy.value.linkObject = true
+  try {
+    const res = await api.adminLinkDatafilesToObject(linkObjectDatafileIds.value, objectId)
+    const msg = res?.linked > 0
+      ? `Linked ${res.linked} file(s) to object${res.already_linked > 0 ? ` (${res.already_linked} already linked)` : ''}`
+      : res?.already_linked > 0 ? `${res.already_linked} file(s) were already linked` : 'No files linked'
+    notify.success(msg)
+    linkObjectDialog.value = false
+    selected.value = []
+    await fetchFiles()
+  } catch (e) {
+    notify.error('Failed to link to object')
+  } finally {
+    linkObjectSaving.value = false
+    linkObjectSingle.value = null
+    busy.value.linkObject = false
+  }
 }
 
 async function saveSpectrograph() {
