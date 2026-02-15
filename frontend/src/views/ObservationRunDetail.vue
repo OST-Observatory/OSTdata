@@ -697,7 +697,7 @@
               :headers="runDataFileHeaders"
               :items="sortedDataFiles"
               :items-per-page="dataFilesItemsPerPage === -1 ? sortedDataFiles.length : dataFilesItemsPerPage"
-              :page="dataFilesPage"
+              :page="1"
               :sort-by="dfSortBy"
               @update:sort-by="handleDfSort"
               hide-default-footer
