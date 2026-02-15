@@ -19,22 +19,30 @@
           <v-card-title class="d-flex justify-space-between align-center">
             Basic Data
             <div class="d-flex align-center" style="gap: 8px">
-              <v-btn
-                v-if="isAdmin"
-                icon="mdi-pencil-box"
-                size="small"
-                variant="text"
-                aria-label="Edit object (admin)"
-                @click="openObjectEdit"
-              ></v-btn>
-            <v-btn
-              v-if="isAuthenticated"
-              icon="mdi-pencil"
-              size="small"
-              variant="text"
-              aria-label="Edit basic data"
-              @click="openBasicDialog"
-            ></v-btn>
+              <v-tooltip v-if="isAdmin" text="Edit object (admin)" location="bottom">
+                <template #activator="{ props }">
+                  <v-btn
+                    v-bind="props"
+                    icon="mdi-pencil-box"
+                    size="small"
+                    variant="text"
+                    aria-label="Edit object (admin)"
+                    @click="openObjectEdit"
+                  ></v-btn>
+                </template>
+              </v-tooltip>
+              <v-tooltip v-if="isAuthenticated" text="Edit basic data" location="bottom">
+                <template #activator="{ props }">
+                  <v-btn
+                    v-bind="props"
+                    icon="mdi-pencil"
+                    size="small"
+                    variant="text"
+                    aria-label="Edit basic data"
+                    @click="openBasicDialog"
+                  ></v-btn>
+                </template>
+              </v-tooltip>
             </div>
           </v-card-title>
           <v-card-text>
@@ -118,13 +126,17 @@
         <v-card class="uniform-height">
           <v-card-title class="d-flex justify-space-between align-center">
             Notes
-            <v-btn
-              v-if="isAuthenticated"
-              icon="mdi-pencil"
-              size="small"
-              variant="text"
-              @click="openNotesDialog"
-            ></v-btn>
+            <v-tooltip v-if="isAuthenticated" text="Edit notes" location="bottom">
+              <template #activator="{ props }">
+                <v-btn
+                  v-bind="props"
+                  icon="mdi-pencil"
+                  size="small"
+                  variant="text"
+                  @click="openNotesDialog"
+                ></v-btn>
+              </template>
+            </v-tooltip>
           </v-card-title>
           <v-card-text>
             <div v-if="object?.note" v-html="formatNotes(object.note)"></div>
@@ -138,13 +150,17 @@
         <v-card class="uniform-height">
           <v-card-title class="d-flex justify-space-between align-center">
             Tags
-            <v-btn
-              v-if="isAuthenticated"
-              icon="mdi-pencil"
-              size="small"
-              variant="text"
-              @click="openTagDialog"
-            ></v-btn>
+            <v-tooltip v-if="isAuthenticated" text="Edit tags" location="bottom">
+              <template #activator="{ props }">
+                <v-btn
+                  v-bind="props"
+                  icon="mdi-pencil"
+                  size="small"
+                  variant="text"
+                  @click="openTagDialog"
+                ></v-btn>
+              </template>
+            </v-tooltip>
           </v-card-title>
           <v-card-text>
             <div v-if="normalizedObjectTags.length" class="d-flex flex-wrap gap-2">
@@ -184,29 +200,39 @@
           <v-card-title class="d-flex justify-space-between align-center">
             Override Flags
             <div class="d-flex align-center" style="gap: 8px">
-              <v-btn
-                v-if="hasAnyOverride"
-                prepend-icon="mdi-refresh"
-                size="default"
-                variant="outlined"
-                color="warning"
-                aria-label="Clear all override flags"
-                @click.stop="clearAllOverrides"
-                :loading="clearingOverrides"
-                :disabled="!showOverrideFlags"
-                class="override-clear-btn"
-              >
-                Clear all
-              </v-btn>
-              <v-btn
-                :icon="showOverrideFlags ? 'mdi-eye-off' : 'mdi-eye'"
-                size="small"
-                variant="text"
-                @click.stop="toggleOverrideFlags"
-                :aria-label="showOverrideFlags ? 'Collapse section' : 'Expand section'"
-                :aria-expanded="showOverrideFlags ? 'true' : 'false'"
-                aria-controls="override-flags-section"
-              ></v-btn>
+              <v-tooltip text="Clear all override flags" location="bottom">
+                <template #activator="{ props }">
+                  <v-btn
+                    v-bind="props"
+                    v-if="hasAnyOverride"
+                    prepend-icon="mdi-refresh"
+                    size="default"
+                    variant="outlined"
+                    color="warning"
+                    aria-label="Clear all override flags"
+                    @click.stop="clearAllOverrides"
+                    :loading="clearingOverrides"
+                    :disabled="!showOverrideFlags"
+                    class="override-clear-btn"
+                  >
+                    Clear all
+                  </v-btn>
+                </template>
+              </v-tooltip>
+              <v-tooltip :text="showOverrideFlags ? 'Collapse section' : 'Expand section'" location="bottom">
+                <template #activator="{ props }">
+                  <v-btn
+                    v-bind="props"
+                    :icon="showOverrideFlags ? 'mdi-eye-off' : 'mdi-eye'"
+                    size="small"
+                    variant="text"
+                    @click.stop="toggleOverrideFlags"
+                    :aria-label="showOverrideFlags ? 'Collapse section' : 'Expand section'"
+                    :aria-expanded="showOverrideFlags ? 'true' : 'false'"
+                    aria-controls="override-flags-section"
+                  ></v-btn>
+                </template>
+              </v-tooltip>
             </div>
           </v-card-title>
           <v-card-subtitle v-if="!showOverrideFlags" class="text-caption text-secondary px-4 pt-0 pb-2">
@@ -222,15 +248,20 @@
                     </template>
                     <v-list-item-title>Name</v-list-item-title>
                     <template v-slot:append>
-                      <v-btn
-                        icon="mdi-close-circle"
-                        size="x-small"
-                        variant="text"
-                        color="warning"
-                        @click.stop="clearSingleOverride('name')"
-                        :loading="clearingSingleOverride['name']"
-                        aria-label="Clear name override"
-                      ></v-btn>
+                      <v-tooltip text="Clear name override" location="left">
+                        <template #activator="{ props }">
+                          <v-btn
+                            v-bind="props"
+                            icon="mdi-close-circle"
+                            size="x-small"
+                            variant="text"
+                            color="warning"
+                            @click.stop="clearSingleOverride('name')"
+                            :loading="clearingSingleOverride['name']"
+                            aria-label="Clear name override"
+                          ></v-btn>
+                        </template>
+                      </v-tooltip>
                     </template>
                   </v-list-item>
                   <v-list-item v-if="object?.is_public_override">
@@ -239,15 +270,20 @@
                     </template>
                     <v-list-item-title>Public</v-list-item-title>
                     <template v-slot:append>
-                      <v-btn
-                        icon="mdi-close-circle"
-                        size="x-small"
-                        variant="text"
-                        color="warning"
-                        @click.stop="clearSingleOverride('is_public')"
-                        :loading="clearingSingleOverride['is_public']"
-                        aria-label="Clear public override"
-                      ></v-btn>
+                      <v-tooltip text="Clear public override" location="left">
+                        <template #activator="{ props }">
+                          <v-btn
+                            v-bind="props"
+                            icon="mdi-close-circle"
+                            size="x-small"
+                            variant="text"
+                            color="warning"
+                            @click.stop="clearSingleOverride('is_public')"
+                            :loading="clearingSingleOverride['is_public']"
+                            aria-label="Clear public override"
+                          ></v-btn>
+                        </template>
+                      </v-tooltip>
                     </template>
                   </v-list-item>
                   <v-list-item v-if="object?.ra_override">
@@ -256,15 +292,20 @@
                     </template>
                     <v-list-item-title>RA</v-list-item-title>
                     <template v-slot:append>
-                      <v-btn
-                        icon="mdi-close-circle"
-                        size="x-small"
-                        variant="text"
-                        color="warning"
-                        @click.stop="clearSingleOverride('ra')"
-                        :loading="clearingSingleOverride['ra']"
-                        aria-label="Clear RA override"
-                      ></v-btn>
+                      <v-tooltip text="Clear RA override" location="left">
+                        <template #activator="{ props }">
+                          <v-btn
+                            v-bind="props"
+                            icon="mdi-close-circle"
+                            size="x-small"
+                            variant="text"
+                            color="warning"
+                            @click.stop="clearSingleOverride('ra')"
+                            :loading="clearingSingleOverride['ra']"
+                            aria-label="Clear RA override"
+                          ></v-btn>
+                        </template>
+                      </v-tooltip>
                     </template>
                   </v-list-item>
                   <v-list-item v-if="object?.dec_override">
@@ -273,15 +314,20 @@
                     </template>
                     <v-list-item-title>Dec</v-list-item-title>
                     <template v-slot:append>
-                      <v-btn
-                        icon="mdi-close-circle"
-                        size="x-small"
-                        variant="text"
-                        color="warning"
-                        @click.stop="clearSingleOverride('dec')"
-                        :loading="clearingSingleOverride['dec']"
-                        aria-label="Clear Dec override"
-                      ></v-btn>
+                      <v-tooltip text="Clear Dec override" location="left">
+                        <template #activator="{ props }">
+                          <v-btn
+                            v-bind="props"
+                            icon="mdi-close-circle"
+                            size="x-small"
+                            variant="text"
+                            color="warning"
+                            @click.stop="clearSingleOverride('dec')"
+                            :loading="clearingSingleOverride['dec']"
+                            aria-label="Clear Dec override"
+                          ></v-btn>
+                        </template>
+                      </v-tooltip>
                     </template>
                   </v-list-item>
                   <v-list-item v-if="object?.first_hjd_override">
@@ -290,15 +336,20 @@
                     </template>
                     <v-list-item-title>First HJD</v-list-item-title>
                     <template v-slot:append>
-                      <v-btn
-                        icon="mdi-close-circle"
-                        size="x-small"
-                        variant="text"
-                        color="warning"
-                        @click.stop="clearSingleOverride('first_hjd')"
-                        :loading="clearingSingleOverride['first_hjd']"
-                        aria-label="Clear First HJD override"
-                      ></v-btn>
+                      <v-tooltip text="Clear First HJD override" location="left">
+                        <template #activator="{ props }">
+                          <v-btn
+                            v-bind="props"
+                            icon="mdi-close-circle"
+                            size="x-small"
+                            variant="text"
+                            color="warning"
+                            @click.stop="clearSingleOverride('first_hjd')"
+                            :loading="clearingSingleOverride['first_hjd']"
+                            aria-label="Clear First HJD override"
+                          ></v-btn>
+                        </template>
+                      </v-tooltip>
                     </template>
                   </v-list-item>
                   <v-list-item v-if="object?.is_main_override">
@@ -307,15 +358,20 @@
                     </template>
                     <v-list-item-title>Main</v-list-item-title>
                     <template v-slot:append>
-                      <v-btn
-                        icon="mdi-close-circle"
-                        size="x-small"
-                        variant="text"
-                        color="warning"
-                        @click.stop="clearSingleOverride('is_main')"
-                        :loading="clearingSingleOverride['is_main']"
-                        aria-label="Clear Main override"
-                      ></v-btn>
+                      <v-tooltip text="Clear main override" location="left">
+                        <template #activator="{ props }">
+                          <v-btn
+                            v-bind="props"
+                            icon="mdi-close-circle"
+                            size="x-small"
+                            variant="text"
+                            color="warning"
+                            @click.stop="clearSingleOverride('is_main')"
+                            :loading="clearingSingleOverride['is_main']"
+                            aria-label="Clear Main override"
+                          ></v-btn>
+                        </template>
+                      </v-tooltip>
                     </template>
                   </v-list-item>
                   <v-list-item v-if="object?.photometry_override">
@@ -324,15 +380,20 @@
                     </template>
                     <v-list-item-title>Photometry</v-list-item-title>
                     <template v-slot:append>
-                      <v-btn
-                        icon="mdi-close-circle"
-                        size="x-small"
-                        variant="text"
-                        color="warning"
-                        @click.stop="clearSingleOverride('photometry')"
-                        :loading="clearingSingleOverride['photometry']"
-                        aria-label="Clear photometry override"
-                      ></v-btn>
+                      <v-tooltip text="Clear photometry override" location="left">
+                        <template #activator="{ props }">
+                          <v-btn
+                            v-bind="props"
+                            icon="mdi-close-circle"
+                            size="x-small"
+                            variant="text"
+                            color="warning"
+                            @click.stop="clearSingleOverride('photometry')"
+                            :loading="clearingSingleOverride['photometry']"
+                            aria-label="Clear photometry override"
+                          ></v-btn>
+                        </template>
+                      </v-tooltip>
                     </template>
                   </v-list-item>
                   <v-list-item v-if="object?.spectroscopy_override">
@@ -341,15 +402,20 @@
                     </template>
                     <v-list-item-title>Spectroscopy</v-list-item-title>
                     <template v-slot:append>
-                      <v-btn
-                        icon="mdi-close-circle"
-                        size="x-small"
-                        variant="text"
-                        color="warning"
-                        @click.stop="clearSingleOverride('spectroscopy')"
-                        :loading="clearingSingleOverride['spectroscopy']"
-                        aria-label="Clear spectroscopy override"
-                      ></v-btn>
+                      <v-tooltip text="Clear spectroscopy override" location="left">
+                        <template #activator="{ props }">
+                          <v-btn
+                            v-bind="props"
+                            icon="mdi-close-circle"
+                            size="x-small"
+                            variant="text"
+                            color="warning"
+                            @click.stop="clearSingleOverride('spectroscopy')"
+                            :loading="clearingSingleOverride['spectroscopy']"
+                            aria-label="Clear spectroscopy override"
+                          ></v-btn>
+                        </template>
+                      </v-tooltip>
                     </template>
                   </v-list-item>
                   <v-list-item v-if="object?.simbad_resolved_override">
@@ -358,15 +424,20 @@
                     </template>
                     <v-list-item-title>SIMBAD</v-list-item-title>
                     <template v-slot:append>
-                      <v-btn
-                        icon="mdi-close-circle"
-                        size="x-small"
-                        variant="text"
-                        color="warning"
-                        @click.stop="clearSingleOverride('simbad_resolved')"
-                        :loading="clearingSingleOverride['simbad_resolved']"
-                        aria-label="Clear SIMBAD override"
-                      ></v-btn>
+                      <v-tooltip text="Clear SIMBAD override" location="left">
+                        <template #activator="{ props }">
+                          <v-btn
+                            v-bind="props"
+                            icon="mdi-close-circle"
+                            size="x-small"
+                            variant="text"
+                            color="warning"
+                            @click.stop="clearSingleOverride('simbad_resolved')"
+                            :loading="clearingSingleOverride['simbad_resolved']"
+                            aria-label="Clear SIMBAD override"
+                          ></v-btn>
+                        </template>
+                      </v-tooltip>
                     </template>
                   </v-list-item>
                   <v-list-item v-if="object?.object_type_override">
@@ -375,15 +446,20 @@
                     </template>
                     <v-list-item-title>Type</v-list-item-title>
                     <template v-slot:append>
-                      <v-btn
-                        icon="mdi-close-circle"
-                        size="x-small"
-                        variant="text"
-                        color="warning"
-                        @click.stop="clearSingleOverride('object_type')"
-                        :loading="clearingSingleOverride['object_type']"
-                        aria-label="Clear Type override"
-                      ></v-btn>
+                      <v-tooltip text="Clear type override" location="left">
+                        <template #activator="{ props }">
+                          <v-btn
+                            v-bind="props"
+                            icon="mdi-close-circle"
+                            size="x-small"
+                            variant="text"
+                            color="warning"
+                            @click.stop="clearSingleOverride('object_type')"
+                            :loading="clearingSingleOverride['object_type']"
+                            aria-label="Clear Type override"
+                          ></v-btn>
+                        </template>
+                      </v-tooltip>
                     </template>
                   </v-list-item>
                   <v-list-item v-if="object?.note_override">
@@ -392,15 +468,20 @@
                     </template>
                     <v-list-item-title>Note</v-list-item-title>
                     <template v-slot:append>
-                      <v-btn
-                        icon="mdi-close-circle"
-                        size="x-small"
-                        variant="text"
-                        color="warning"
-                        @click.stop="clearSingleOverride('note')"
-                        :loading="clearingSingleOverride['note']"
-                        aria-label="Clear note override"
-                      ></v-btn>
+                      <v-tooltip text="Clear note override" location="left">
+                        <template #activator="{ props }">
+                          <v-btn
+                            v-bind="props"
+                            icon="mdi-close-circle"
+                            size="x-small"
+                            variant="text"
+                            color="warning"
+                            @click.stop="clearSingleOverride('note')"
+                            :loading="clearingSingleOverride['note']"
+                            aria-label="Clear note override"
+                          ></v-btn>
+                        </template>
+                      </v-tooltip>
                     </template>
                   </v-list-item>
                   <v-list-item v-if="!hasAnyOverride" title="No overrides" class="text-secondary" />
@@ -508,14 +589,19 @@
               ></v-checkbox>
             </v-col>
             <v-col cols="12">
-              <v-btn
-                color="primary"
-                variant="outlined"
-                :loading="simbadUpdating"
-                @click="updateIdentifiersFromSimbad"
-              >
-                Update Identifiers
-              </v-btn>
+              <v-tooltip text="Fetch and update identifiers from SIMBAD" location="top">
+                <template #activator="{ props }">
+                  <v-btn
+                    v-bind="props"
+                    color="primary"
+                    variant="outlined"
+                    :loading="simbadUpdating"
+                    @click="updateIdentifiersFromSimbad"
+                  >
+                    Update Identifiers
+                  </v-btn>
+                </template>
+              </v-tooltip>
             </v-col>
             <v-col cols="12" v-if="simbadResult">
               <v-alert
@@ -622,15 +708,20 @@
         <v-card>
           <v-card-title class="d-flex justify-space-between align-center">
             Observation Runs ({{ observationRuns.length }})
-            <v-btn
-              :icon="showObservationRuns ? 'mdi-eye-off' : 'mdi-eye'"
-              size="small"
-              variant="text"
-              @click.stop="toggleObservationRuns"
-              :aria-label="showObservationRuns ? 'Collapse section' : 'Expand section'"
-              :aria-expanded="showObservationRuns ? 'true' : 'false'"
-              aria-controls="object-observation-runs"
-            ></v-btn>
+            <v-tooltip :text="showObservationRuns ? 'Collapse section' : 'Expand section'" location="bottom">
+              <template #activator="{ props }">
+                <v-btn
+                  v-bind="props"
+                  :icon="showObservationRuns ? 'mdi-eye-off' : 'mdi-eye'"
+                  size="small"
+                  variant="text"
+                  @click.stop="toggleObservationRuns"
+                  :aria-label="showObservationRuns ? 'Collapse section' : 'Expand section'"
+                  :aria-expanded="showObservationRuns ? 'true' : 'false'"
+                  aria-controls="object-observation-runs"
+                ></v-btn>
+              </template>
+            </v-tooltip>
           </v-card-title>
           <v-card-subtitle v-if="!showObservationRuns" class="text-caption text-secondary px-4 pt-0 pb-2">
             Click anywhere on this section to expand.
@@ -712,38 +803,58 @@
                   <span class="text-body-2 mr-4">
                     {{ obsRunPaginationInfo }}
                   </span>
-                  <v-btn
-                    icon="mdi-page-first"
-                    variant="text"
-                    :disabled="runPage === 1"
-                    @click="handleRunPageChange(1)"
-                    class="mx-1 pagination-btn"
-                    aria-label="First page"
-                  ></v-btn>
-                  <v-btn
-                    icon="mdi-chevron-left"
-                    variant="text"
-                    :disabled="runPage === 1"
-                    @click="handleRunPageChange(runPage - 1)"
-                    class="mx-1 pagination-btn"
-                    aria-label="Previous page"
-                  ></v-btn>
-                  <v-btn
-                    icon="mdi-chevron-right"
-                    variant="text"
-                    :disabled="runPage >= obsRunTotalPages"
-                    @click="handleRunPageChange(runPage + 1)"
-                    class="mx-1 pagination-btn"
-                    aria-label="Next page"
-                  ></v-btn>
-                  <v-btn
-                    icon="mdi-page-last"
-                    variant="text"
-                    :disabled="runPage >= obsRunTotalPages"
-                    @click="handleRunPageChange(obsRunTotalPages)"
-                    class="mx-1 pagination-btn"
-                    aria-label="Last page"
-                  ></v-btn>
+                  <v-tooltip text="First page" location="top">
+                    <template #activator="{ props }">
+                      <v-btn
+                        v-bind="props"
+                        icon="mdi-page-first"
+                        variant="text"
+                        :disabled="runPage === 1"
+                        @click="handleRunPageChange(1)"
+                        class="mx-1 pagination-btn"
+                        aria-label="First page"
+                      ></v-btn>
+                    </template>
+                  </v-tooltip>
+                  <v-tooltip text="Previous page" location="top">
+                    <template #activator="{ props }">
+                      <v-btn
+                        v-bind="props"
+                        icon="mdi-chevron-left"
+                        variant="text"
+                        :disabled="runPage === 1"
+                        @click="handleRunPageChange(runPage - 1)"
+                        class="mx-1 pagination-btn"
+                        aria-label="Previous page"
+                      ></v-btn>
+                    </template>
+                  </v-tooltip>
+                  <v-tooltip text="Next page" location="top">
+                    <template #activator="{ props }">
+                      <v-btn
+                        v-bind="props"
+                        icon="mdi-chevron-right"
+                        variant="text"
+                        :disabled="runPage >= obsRunTotalPages"
+                        @click="handleRunPageChange(runPage + 1)"
+                        class="mx-1 pagination-btn"
+                        aria-label="Next page"
+                      ></v-btn>
+                    </template>
+                  </v-tooltip>
+                  <v-tooltip text="Last page" location="top">
+                    <template #activator="{ props }">
+                      <v-btn
+                        v-bind="props"
+                        icon="mdi-page-last"
+                        variant="text"
+                        :disabled="runPage >= obsRunTotalPages"
+                        @click="handleRunPageChange(obsRunTotalPages)"
+                        class="mx-1 pagination-btn"
+                        aria-label="Last page"
+                      ></v-btn>
+                    </template>
+                  </v-tooltip>
                 </div>
               </v-card-actions>
               </div>
@@ -762,15 +873,20 @@
             Data Files ({{ filteredDataFiles.length }})
               <v-progress-circular v-if="loadingDataFiles" indeterminate size="16" width="2" class="ml-2" />
             </span>
-            <v-btn
-              :icon="showDataFiles ? 'mdi-eye-off' : 'mdi-eye'"
-              size="small"
-              variant="text"
-              @click.stop="toggleDataFiles"
-              :aria-label="showDataFiles ? 'Collapse section' : 'Expand section'"
-              :aria-expanded="showDataFiles ? 'true' : 'false'"
-              aria-controls="object-data-files"
-            ></v-btn>
+            <v-tooltip :text="showDataFiles ? 'Collapse section' : 'Expand section'" location="bottom">
+              <template #activator="{ props }">
+                <v-btn
+                  v-bind="props"
+                  :icon="showDataFiles ? 'mdi-eye-off' : 'mdi-eye'"
+                  size="small"
+                  variant="text"
+                  @click.stop="toggleDataFiles"
+                  :aria-label="showDataFiles ? 'Collapse section' : 'Expand section'"
+                  :aria-expanded="showDataFiles ? 'true' : 'false'"
+                  aria-controls="object-data-files"
+                ></v-btn>
+              </template>
+            </v-tooltip>
           </v-card-title>
           <v-card-subtitle v-if="!showDataFiles" class="text-caption text-secondary px-4 pt-0 pb-2">
             Click anywhere on this section to expand.
@@ -818,14 +934,30 @@
                 <v-text-field v-model.number="dfFilterExpMax" type="number" label="Exp max [s]" density="comfortable" variant="outlined" style="min-width: 160px" clearable />
               </div>
               <div class="d-flex align-center flex-wrap mb-4" style="gap: 12px">
-                <v-btn variant="text" color="primary" @click="resetDfFilters" aria-label="Reset filters" block>Reset</v-btn>
+                <v-tooltip text="Reset all filters" location="top">
+                <template #activator="{ props }">
+                  <v-btn v-bind="props" variant="text" color="primary" @click="resetDfFilters" aria-label="Reset filters" block>Reset</v-btn>
+                </template>
+              </v-tooltip>
               </div>
 
               <!-- Downloads -->
               <div class="d-flex align-center flex-wrap mb-2 px-4" style="gap: 12px" role="toolbar" aria-label="Data files actions">
-                <v-btn color="primary" variant="flat" @click="handleDownloadAllObjectFiles" :loading="downloadingAll" aria-label="Download all files">Download all</v-btn>
-                <v-btn color="primary" variant="text" :disabled="!filteredDataFiles.length" @click="handleDownloadFilteredObjectFiles" aria-label="Download filtered files">Download filtered</v-btn>
-                <v-btn color="primary" variant="text" :disabled="!selectedIds.length" @click="downloadSelectedObjectFiles" :aria-label="`Download selected (${selectedIds.length})`">Download selected ({{ selectedIds.length }})</v-btn>
+                <v-tooltip text="Download all files of this object" location="top">
+                <template #activator="{ props }">
+                  <v-btn v-bind="props" color="primary" variant="flat" @click="handleDownloadAllObjectFiles" :loading="downloadingAll" aria-label="Download all files">Download all</v-btn>
+                </template>
+              </v-tooltip>
+              <v-tooltip text="Download currently filtered files" location="top">
+                <template #activator="{ props }">
+                  <v-btn v-bind="props" color="primary" variant="text" :disabled="!filteredDataFiles.length" @click="handleDownloadFilteredObjectFiles" aria-label="Download filtered files">Download filtered</v-btn>
+                </template>
+              </v-tooltip>
+              <v-tooltip :text="`Download selected files (${selectedIds.length})`" location="top">
+                <template #activator="{ props }">
+                  <v-btn v-bind="props" color="primary" variant="text" :disabled="!selectedIds.length" @click="downloadSelectedObjectFiles" :aria-label="`Download selected (${selectedIds.length})`">Download selected ({{ selectedIds.length }})</v-btn>
+                </template>
+              </v-tooltip>
               </div>
 
               <v-skeleton-loader v-if="loadingDataFiles" type="table"></v-skeleton-loader>
@@ -915,35 +1047,49 @@
                   </template>
                   <template v-slot:item.tools="{ item }">
                     <div class="d-flex justify-end" style="gap: 4px">
-                      <v-btn
-                        v-if="String(item.file_type || '').toUpperCase() !== 'SER'"
-                        variant="text"
-                        size="small"
-                        icon
-                        aria-label="Preview"
-                        @click="openPreview(item)"
-                      >
-                        <v-icon>mdi-image-search</v-icon>
-                      </v-btn>
-                      <v-btn
-                        variant="text"
-                        size="small"
-                        icon
-                        :disabled="String(item.file_type || '').toUpperCase() !== 'FITS'"
-                        :aria-label="`View FITS header for ${item.file_name}`"
-                        @click="openHeader(item)"
-                      >
-                        <v-icon>mdi-file-document-outline</v-icon>
-                      </v-btn>
-                      <v-btn
-                        variant="text"
-                        size="small"
-                        icon
-                        :href="api.getDataFileDownloadUrl(item.pk || item.id)"
-                        :aria-label="`Download ${item.file_name}`"
-                      >
-                        <v-icon>mdi-download</v-icon>
-                      </v-btn>
+                      <v-tooltip v-if="String(item.file_type || '').toUpperCase() !== 'SER'" text="Preview thumbnail" location="top">
+                        <template #activator="{ props }">
+                          <v-btn
+                            v-bind="props"
+                            variant="text"
+                            size="small"
+                            icon
+                            aria-label="Preview"
+                            @click="openPreview(item)"
+                          >
+                            <v-icon>mdi-image-search</v-icon>
+                          </v-btn>
+                        </template>
+                      </v-tooltip>
+                      <v-tooltip text="View FITS header" location="top">
+                        <template #activator="{ props }">
+                          <v-btn
+                            v-bind="props"
+                            variant="text"
+                            size="small"
+                            icon
+                            :disabled="String(item.file_type || '').toUpperCase() !== 'FITS'"
+                            :aria-label="`View FITS header for ${item.file_name}`"
+                            @click="openHeader(item)"
+                          >
+                            <v-icon>mdi-file-document-outline</v-icon>
+                          </v-btn>
+                        </template>
+                      </v-tooltip>
+                      <v-tooltip :text="`Download ${item.file_name}`" location="top">
+                        <template #activator="{ props }">
+                          <v-btn
+                            v-bind="props"
+                            variant="text"
+                            size="small"
+                            icon
+                            :href="api.getDataFileDownloadUrl(item.pk || item.id)"
+                            :aria-label="`Download ${item.file_name}`"
+                          >
+                            <v-icon>mdi-download</v-icon>
+                          </v-btn>
+                        </template>
+                      </v-tooltip>
                     </div>
                   </template>
                 </v-data-table>
@@ -971,38 +1117,58 @@
                   <span class="text-body-2 mr-4">
                     {{ objDfPaginationInfo }}
                   </span>
-                  <v-btn
-                    icon="mdi-page-first"
-                    variant="text"
-                    :disabled="objDfPage === 1"
-                    @click="handleObjDfPageChange(1)"
-                    class="mx-1 pagination-btn"
-                    aria-label="First page"
-                  ></v-btn>
-                  <v-btn
-                    icon="mdi-chevron-left"
-                    variant="text"
-                    :disabled="objDfPage === 1"
-                    @click="handleObjDfPageChange(objDfPage - 1)"
-                    class="mx-1 pagination-btn"
-                    aria-label="Previous page"
-                  ></v-btn>
-                  <v-btn
-                    icon="mdi-chevron-right"
-                    variant="text"
-                    :disabled="objDfPage >= objDfTotalPages"
-                    @click="handleObjDfPageChange(objDfPage + 1)"
-                    class="mx-1 pagination-btn"
-                    aria-label="Next page"
-                  ></v-btn>
-                  <v-btn
-                    icon="mdi-page-last"
-                    variant="text"
-                    :disabled="objDfPage >= objDfTotalPages"
-                    @click="handleObjDfPageChange(objDfTotalPages)"
-                    class="mx-1 pagination-btn"
-                    aria-label="Last page"
-                  ></v-btn>
+                  <v-tooltip text="First page" location="top">
+                    <template #activator="{ props }">
+                      <v-btn
+                        v-bind="props"
+                        icon="mdi-page-first"
+                        variant="text"
+                        :disabled="objDfPage === 1"
+                        @click="handleObjDfPageChange(1)"
+                        class="mx-1 pagination-btn"
+                        aria-label="First page"
+                      ></v-btn>
+                    </template>
+                  </v-tooltip>
+                  <v-tooltip text="Previous page" location="top">
+                    <template #activator="{ props }">
+                      <v-btn
+                        v-bind="props"
+                        icon="mdi-chevron-left"
+                        variant="text"
+                        :disabled="objDfPage === 1"
+                        @click="handleObjDfPageChange(objDfPage - 1)"
+                        class="mx-1 pagination-btn"
+                        aria-label="Previous page"
+                      ></v-btn>
+                    </template>
+                  </v-tooltip>
+                  <v-tooltip text="Next page" location="top">
+                    <template #activator="{ props }">
+                      <v-btn
+                        v-bind="props"
+                        icon="mdi-chevron-right"
+                        variant="text"
+                        :disabled="objDfPage >= objDfTotalPages"
+                        @click="handleObjDfPageChange(objDfPage + 1)"
+                        class="mx-1 pagination-btn"
+                        aria-label="Next page"
+                      ></v-btn>
+                    </template>
+                  </v-tooltip>
+                  <v-tooltip text="Last page" location="top">
+                    <template #activator="{ props }">
+                      <v-btn
+                        v-bind="props"
+                        icon="mdi-page-last"
+                        variant="text"
+                        :disabled="objDfPage >= objDfTotalPages"
+                        @click="handleObjDfPageChange(objDfTotalPages)"
+                        class="mx-1 pagination-btn"
+                        aria-label="Last page"
+                      ></v-btn>
+                    </template>
+                  </v-tooltip>
                 </div>
               </v-card-actions>
               </div>
