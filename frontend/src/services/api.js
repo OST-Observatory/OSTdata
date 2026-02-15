@@ -147,6 +147,8 @@ export const api = {
     }
     if (params.spectroscopy != null) queryParams.spectroscopy = params.spectroscopy
     if (params.file_name) queryParams.file_name = params.file_name
+    if (params.obs_date_contains) queryParams.obs_date_contains = params.obs_date_contains
+    if (params.plate_solved != null && params.plate_solved !== '') queryParams.plate_solved = params.plate_solved
     if (params.pixel_count_min != null) queryParams.pixel_count_min = params.pixel_count_min
     if (params.pixel_count_max != null) queryParams.pixel_count_max = params.pixel_count_max
     return fetchWithAuth('/runs/datafiles/', { params: queryParams })
@@ -166,7 +168,7 @@ export const api = {
     const params = new URLSearchParams()
     if (ids && ids.length) params.set('ids', ids.join(','))
     // carry over current filters if present (subset used by backend)
-    const carry = ['file_type','instrument','main_target','exptime_min','exptime_max','file_name','pixel_count_min','pixel_count_max','exposure_type','spectroscopy']
+    const carry = ['file_type','instrument','main_target','exptime_min','exptime_max','file_name','pixel_count_min','pixel_count_max','exposure_type','spectroscopy','obs_date_contains','plate_solved']
     if (filters && typeof filters === 'object') {
       carry.forEach(k => {
         const v = filters[k]
@@ -232,7 +234,7 @@ export const api = {
     const base = API_BASE_URL
     const params = new URLSearchParams()
     if (ids && ids.length) params.set('ids', ids.join(','))
-    const carry = ['file_type','instrument','main_target','exptime_min','exptime_max','file_name','pixel_count_min','pixel_count_max','exposure_type','spectroscopy']
+    const carry = ['file_type','instrument','main_target','exptime_min','exptime_max','file_name','pixel_count_min','pixel_count_max','exposure_type','spectroscopy','obs_date_contains','plate_solved']
     if (filters && typeof filters === 'object') {
       carry.forEach(k => {
         const v = filters[k]

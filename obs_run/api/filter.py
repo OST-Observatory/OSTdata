@@ -181,9 +181,20 @@ class DataFileFilter(filters.FilterSet):
         field_name="spectroscopy",
     )
 
+    #   Plate solved flag
+    plate_solved = filters.BooleanFilter(
+        field_name="plate_solved",
+    )
+
     #   File name contains (match on path string)
     file_name = filters.CharFilter(
         field_name="datafile",
+        lookup_expr='icontains',
+    )
+
+    #   Observation date/time contains (partial match on obs_date string)
+    obs_date_contains = filters.CharFilter(
+        field_name="obs_date",
         lookup_expr='icontains',
     )
 

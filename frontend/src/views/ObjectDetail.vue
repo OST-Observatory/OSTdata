@@ -895,51 +895,60 @@
           <v-expand-transition>
             <div v-show="showDataFiles" id="object-data-files">
               <div class="px-4">
-              <!-- Filters -->
-              <div class="d-flex align-center flex-wrap mb-1 px-4" style="gap: 12px">
-                <v-text-field v-model="dfFilterFileName" label="File name contains" density="comfortable" variant="outlined" style="min-width: 240px" clearable />
-                <v-text-field v-model="dfFilterType" label="File type contains" density="comfortable" variant="outlined" style="min-width: 180px" clearable />
-                <v-text-field v-model="dfFilterInstrument" label="Instrument contains" density="comfortable" variant="outlined" style="min-width: 200px" clearable />
-                <v-select
-                  v-model="dfFilterBinning"
-                  :items="binningOptions"
-                  label="Binning"
-                  density="comfortable"
-                  variant="outlined"
-                  style="min-width: 160px"
-                  clearable
-                />
-                <v-select
-                  v-model="dfFilterExposureTypes"
-                  :items="exposureTypeOptions"
-                  label="Exposure type"
-                  multiple
-                  chips
-                  closable-chips
-                  density="comfortable"
-                  variant="outlined"
-                  style="min-width: 220px"
-                  clearable
-                />
-                <v-select
-                  v-model="dfFilterSpectroscopy"
-                  :items="spectroscopyOptions"
-                  label="Spectroscopy"
-                  density="comfortable"
-                  variant="outlined"
-                  style="min-width: 180px"
-                  clearable
-                />
-                <v-text-field v-model.number="dfFilterExpMin" type="number" label="Exp min [s]" density="comfortable" variant="outlined" style="min-width: 160px" clearable />
-                <v-text-field v-model.number="dfFilterExpMax" type="number" label="Exp max [s]" density="comfortable" variant="outlined" style="min-width: 160px" clearable />
-              </div>
-              <div class="d-flex align-center flex-wrap mb-4" style="gap: 12px">
-                <v-tooltip text="Reset all filters" location="top">
-                <template #activator="{ props }">
-                  <v-btn v-bind="props" variant="text" color="primary" @click="resetDfFilters" aria-label="Reset filters" block>Reset</v-btn>
-                </template>
-              </v-tooltip>
-              </div>
+              <!-- Filters (DataFilesView-style layout) -->
+              <v-expansion-panels variant="accordion" class="mb-4">
+                <v-expansion-panel>
+                  <v-expansion-panel-title>Filters</v-expansion-panel-title>
+                  <v-expansion-panel-text>
+                    <v-row>
+                      <v-col cols="12" md="4">
+                        <v-expansion-panels variant="accordion" class="mb-2">
+                          <v-expansion-panel>
+                            <v-expansion-panel-title density="compact">File & Instrument</v-expansion-panel-title>
+                            <v-expansion-panel-text>
+                              <v-text-field v-model="dfFilterFileName" label="File name contains" density="comfortable" variant="outlined" hide-details clearable class="mb-2" />
+                              <v-text-field v-model="dfFilterType" label="File type contains" density="comfortable" variant="outlined" hide-details clearable class="mb-2" />
+                              <v-text-field v-model="dfFilterInstrument" label="Instrument contains" density="comfortable" variant="outlined" hide-details clearable class="mb-2" />
+                              <v-select v-model="dfFilterBinning" :items="binningOptions" label="Binning" density="comfortable" variant="outlined" hide-details clearable />
+                            </v-expansion-panel-text>
+                          </v-expansion-panel>
+                        </v-expansion-panels>
+                      </v-col>
+                      <v-col cols="12" md="4">
+                        <v-expansion-panels variant="accordion" class="mb-2">
+                          <v-expansion-panel>
+                            <v-expansion-panel-title density="compact">Exposure & Binning</v-expansion-panel-title>
+                            <v-expansion-panel-text>
+                              <v-select v-model="dfFilterExposureTypes" :items="exposureTypeOptions" label="Exposure type" multiple chips closable-chips density="comfortable" variant="outlined" hide-details clearable class="mb-2" />
+                              <v-select v-model="dfFilterSpectroscopy" :items="spectroscopyOptions" label="Spectroscopy" density="comfortable" variant="outlined" hide-details clearable class="mb-2" />
+                              <v-text-field v-model.number="dfFilterExpMin" type="number" label="Exp min [s]" density="comfortable" variant="outlined" hide-details clearable class="mb-2" />
+                              <v-text-field v-model.number="dfFilterExpMax" type="number" label="Exp max [s]" density="comfortable" variant="outlined" hide-details clearable />
+                            </v-expansion-panel-text>
+                          </v-expansion-panel>
+                        </v-expansion-panels>
+                      </v-col>
+                      <v-col cols="12" md="4">
+                        <v-expansion-panels variant="accordion" class="mb-2">
+                          <v-expansion-panel>
+                            <v-expansion-panel-title density="compact">Date & Plate</v-expansion-panel-title>
+                            <v-expansion-panel-text>
+                              <v-text-field v-model="dfFilterTime" label="Date contains" density="comfortable" variant="outlined" hide-details clearable placeholder="e.g. 14:30 or 2021-02-24" class="mb-2" />
+                              <v-select v-model="dfFilterPlateSolved" :items="plateSolvedOptions" item-title="title" item-value="value" label="Plate solved" density="comfortable" variant="outlined" hide-details clearable />
+                            </v-expansion-panel-text>
+                          </v-expansion-panel>
+                        </v-expansion-panels>
+                      </v-col>
+                    </v-row>
+                    <div class="d-flex align-center mt-2" style="gap: 8px">
+                      <v-tooltip text="Reset all filters" location="top">
+                        <template #activator="{ props }">
+                          <v-btn v-bind="props" variant="text" color="primary" prepend-icon="mdi-filter-remove" @click="resetDfFilters" aria-label="Reset filters">Reset Filters</v-btn>
+                        </template>
+                      </v-tooltip>
+                    </div>
+                  </v-expansion-panel-text>
+                </v-expansion-panel>
+              </v-expansion-panels>
 
               <!-- Downloads -->
               <div class="d-flex align-center flex-wrap mb-2 px-4" style="gap: 12px" role="toolbar" aria-label="Data files actions">
@@ -1044,6 +1053,11 @@
                   </template>
                   <template v-slot:item.exptime="{ item }">
                     {{ formatExposureTime(item.exptime) }}
+                  </template>
+                  <template v-slot:item.plate_solved="{ item }">
+                    <v-chip size="x-small" :color="item.plate_solved ? 'success' : 'default'" variant="flat">
+                      {{ item.plate_solved ? 'Yes' : 'No' }}
+                    </v-chip>
                   </template>
                   <template v-slot:item.tools="{ item }">
                     <div class="d-flex justify-end" style="gap: 4px">
@@ -1588,7 +1602,7 @@ const dataFileHeaders = [
 const objectDataFileHeaders = [
   { title: '', key: 'select', sortable: false, width: 48 },
   { title: 'File Name', key: 'file_name', sortable: true },
-  { title: 'Time', key: 'obs_date', sortable: true },
+  { title: 'Date', key: 'obs_date', sortable: true },
   { title: 'Target', key: 'main_target', sortable: true },
   { title: 'Coordinates', key: 'coordinates', sortable: false },
   { title: 'File Type', key: 'file_type', sortable: true },
@@ -1596,6 +1610,7 @@ const objectDataFileHeaders = [
   { title: 'Instrument', key: 'instrument', sortable: true },
   { title: 'Exposure Type', key: 'exposure_type_display', sortable: true },
   { title: 'Exp. Time', key: 'exptime', sortable: true },
+  { title: 'Plate', key: 'plate_solved', sortable: true },
   { title: 'Tools', key: 'tools', sortable: false, align: 'end' },
 ]
 
@@ -2032,6 +2047,8 @@ const dfFilterExposureTypes = ref([])
 const dfFilterSpectroscopy = ref(null)
 const dfFilterExpMin = ref(null)
 const dfFilterExpMax = ref(null)
+const dfFilterTime = ref('')
+const dfFilterPlateSolved = ref(null)
 // removed pixel filters
 
 const exposureTypeOptions = [
@@ -2043,6 +2060,10 @@ const exposureTypeOptions = [
   { title: 'Unknown (UK)', value: 'UK' },
 ]
 const spectroscopyOptions = [
+  { title: 'Yes', value: true },
+  { title: 'No', value: false },
+]
+const plateSolvedOptions = [
   { title: 'Yes', value: true },
   { title: 'No', value: false },
 ]
@@ -2072,6 +2093,13 @@ const filteredDataFiles = computed(() => {
   }
   if (dfFilterExpMax.value != null && dfFilterExpMax.value !== '') {
     items = items.filter(f => (f.exptime || 0) <= Number(dfFilterExpMax.value))
+  }
+  const timeStr = (dfFilterTime.value || '').toLowerCase().trim()
+  if (timeStr) {
+    items = items.filter(f => (f.obs_date || '').toLowerCase().includes(timeStr))
+  }
+  if (dfFilterPlateSolved.value !== null && dfFilterPlateSolved.value !== undefined && dfFilterPlateSolved.value !== '') {
+    items = items.filter(f => Boolean(f.plate_solved) === Boolean(dfFilterPlateSolved.value))
   }
   return items
 })
@@ -2108,6 +2136,9 @@ const sortDataFiles = (items, sortBy) => {
     } else if (key === 'exposure_type_display') {
       aVal = a.exposure_type_display || a.exposure_type || ''
       bVal = b.exposure_type_display || b.exposure_type || ''
+    } else if (key === 'plate_solved') {
+      aVal = a.plate_solved ? 1 : 0
+      bVal = b.plate_solved ? 1 : 0
     }
     
     // Handle null/undefined
@@ -2251,6 +2282,8 @@ const resetDfFilters = () => {
   dfFilterSpectroscopy.value = null
   dfFilterExpMin.value = null
   dfFilterExpMax.value = null
+  dfFilterTime.value = ''
+  dfFilterPlateSolved.value = null
 }
 
 // Downloads & Preview

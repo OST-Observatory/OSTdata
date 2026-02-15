@@ -275,6 +275,14 @@ def download_run_datafiles(request, run_pk):
         qs = qs.filter(datafile__icontains=q_params.get('file_name'))
     if q_params.get('instrument'):
         qs = qs.filter(instrument__icontains=q_params.get('instrument'))
+    if q_params.get('obs_date_contains'):
+        qs = qs.filter(obs_date__icontains=q_params.get('obs_date_contains'))
+    if q_params.get('plate_solved') is not None:
+        val = q_params.get('plate_solved')
+        if str(val).lower() in ('true', '1', 'yes'):
+            qs = qs.filter(plate_solved=True)
+        elif str(val).lower() in ('false', '0', 'no'):
+            qs = qs.filter(plate_solved=False)
     # Pixel count filtering
     from django.db.models import F, FloatField, ExpressionWrapper
     if q_params.get('pixel_count_min') is not None or q_params.get('pixel_count_max') is not None:

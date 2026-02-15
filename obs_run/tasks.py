@@ -169,6 +169,10 @@ def build_zip_task(self, job_id: int):
             qs = qs.filter(datafile__icontains=f['file_name'])
         if f.get('instrument'):
             qs = qs.filter(instrument__icontains=f['instrument'])
+        if f.get('obs_date_contains'):
+            qs = qs.filter(obs_date__icontains=f['obs_date_contains'])
+        if f.get('plate_solved') is not None:
+            qs = qs.filter(plate_solved=bool(f['plate_solved']))
 
         files = list(qs)
         if not files:
