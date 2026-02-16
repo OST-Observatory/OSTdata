@@ -49,6 +49,12 @@ class RunConfig(AppConfig):
                 return
             
             try:
+                # Clear exclude_from_orphan_cleanup when first DataFile is linked
+                if action == 'post_add' and getattr(instance, 'exclude_from_orphan_cleanup', False):
+                    if instance.datafiles.exists():
+                        instance.exclude_from_orphan_cleanup = False
+                        instance.save(update_fields=['exclude_from_orphan_cleanup'])
+                
                 # Import here to avoid circular import and django.setup() issues
                 from utilities import update_observation_run_photometry_spectroscopy, update_object_photometry_spectroscopy
                 

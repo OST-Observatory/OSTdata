@@ -75,6 +75,7 @@ class ObjectListSerializer(ModelSerializer):
             'simbad_resolved_override',
             'object_type_override',
             'note_override',
+            'exclude_from_orphan_cleanup',
         ]
         read_only_fields = ('pk',)
     
@@ -86,7 +87,7 @@ class ObjectListSerializer(ModelSerializer):
             for field_name in ['name_override', 'is_public_override', 'ra_override', 'dec_override',
                              'first_hjd_override', 'is_main_override', 'photometry_override',
                              'spectroscopy_override', 'simbad_resolved_override', 'object_type_override',
-                             'note_override']:
+                             'note_override', 'exclude_from_orphan_cleanup']:
                 if field_name in self.fields:
                     self.fields[field_name].read_only = True
 

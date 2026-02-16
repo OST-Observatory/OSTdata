@@ -681,7 +681,25 @@
       <!-- Aliases -->
       <v-col cols="12" md="12">
         <v-card>
-          <v-card-title>Aliases</v-card-title>
+          <v-card-title class="d-flex align-center justify-space-between">
+            Aliases
+            <v-tooltip v-if="isAdmin && aliases?.length" text="Delete all aliases" location="top">
+              <template #activator="{ props }">
+                <v-btn
+                  v-bind="props"
+                  color="error"
+                  variant="outlined"
+                  size="small"
+                  :loading="deletingAliases"
+                  @click="confirmDeleteAllAliases"
+                  aria-label="Delete all aliases"
+                >
+                  <v-icon start size="small">mdi-delete-empty</v-icon>
+                  Delete all aliases
+                </v-btn>
+              </template>
+            </v-tooltip>
+          </v-card-title>
           <v-card-text>
             <div v-if="aliases?.length" class="d-flex flex-wrap gap-2">
               <v-chip
@@ -701,6 +719,23 @@
         </v-card>
       </v-col>
     </v-row>
+
+    <!-- Delete All Aliases confirmation -->
+    <v-dialog v-model="deleteAliasesDialog" max-width="420" persistent aria-labelledby="delete-aliases-title">
+      <v-card>
+        <v-card-title id="delete-aliases-title">Delete all aliases?</v-card-title>
+        <v-card-text>
+          This will remove all {{ aliases?.length || 0 }} alias(es) for this object. This action cannot be undone.
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer></v-spacer>
+          <v-btn variant="text" @click="deleteAliasesDialog = false">Cancel</v-btn>
+          <v-btn color="error" variant="flat" :loading="deletingAliases" @click="deleteAllAliases">
+            Delete all
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
 
     <!-- Observation Runs Section -->
     <v-row @click="expandRunsIfCollapsed" :class="{ 'expand-clickable': !showObservationRuns }">
@@ -1360,6 +1395,10 @@ const objectEditForm = ref({
   decDms: '',
 })
 
+// Delete all aliases
+const deleteAliasesDialog = ref(false)
+const deletingAliases = ref(false)
+
 // SIMBAD identifier update
 const simbadMatchMethod = ref('name')
 const simbadDryRun = ref(true)
@@ -1626,6 +1665,27 @@ const loadObject = async () => {
     initializeAladinLite()
   } catch (error) {
     console.error('Error loading object:', error)
+  }
+}
+
+const confirmDeleteAllAliases = () => {
+  deleteAliasesDialog.value = true
+}
+
+const deleteAllAliases = async () => {
+  const objectId = route.params.id
+  if (!objectId) return
+  try {
+    deletingAliases.value = true
+    await api.adminDeleteObjectAliases(objectId)
+    notify.success('All aliases deleted.')
+    deleteAliasesDialog.value = false
+    await loadObject()
+  } catch (e) {
+    const msg = e?.data?.error || e?.data?.detail || e?.message || 'Failed to delete aliases'
+    notify.error(msg)
+  } finally {
+    deletingAliases.value = false
   }
 }
 

@@ -641,6 +641,34 @@ def admin_trigger_re_evaluate_plate_solved(request):
 
 
 @extend_schema(
+    summary='Delete all aliases (identifiers) for an object',
+    description='Removes all non-header-based identifiers (aliases) for the given object.',
+    responses={200: serializers.Serializer}
+)
+@api_view(['POST'])
+@permission_classes([IsAdminUser])
+def admin_delete_object_aliases(request, object_id):
+    """Delete all identifiers where info_from_header=False for the given object."""
+    try:
+        obj = Object.objects.get(pk=object_id)
+    except Object.DoesNotExist:
+        return Response({'error': 'Object not found'}, status=404)
+    except Exception as e:
+        logger.exception(f'Error fetching object {object_id}: {e}')
+        return Response({'error': f'Error fetching object: {str(e)}'}, status=500)
+    try:
+        deleted_count = obj.identifier_set.filter(info_from_header=False).delete()[0]
+        return Response({
+            'success': True,
+            'deleted_count': deleted_count,
+            'message': f'Deleted {deleted_count} alias(es).',
+        })
+    except Exception as e:
+        logger.exception(f'Error deleting aliases for object {object_id}: {e}')
+        return Response({'error': str(e)}, status=500)
+
+
+@extend_schema(
     summary='Update object identifiers from SIMBAD',
     description='Query SIMBAD and update identifiers for an object. Supports matching by name or coordinates.',
     request=serializers.Serializer,

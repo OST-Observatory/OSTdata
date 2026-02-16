@@ -672,8 +672,10 @@ def cleanup_orphan_objects(self, dry_run: bool = True):
     first_hjd_updated = 0
     observation_run_cleaned = 0
     
-    # Find Objects with zero DataFiles
-    orphans = Object.objects.annotate(df_count=Count('datafiles')).filter(df_count=0)
+    # Find Objects with zero DataFiles (exclude API-created placeholders until DataFiles linked)
+    orphans = Object.objects.annotate(df_count=Count('datafiles')).filter(
+        df_count=0, exclude_from_orphan_cleanup=False
+    )
     orphans_found = orphans.count()
     
     if not dry_run:

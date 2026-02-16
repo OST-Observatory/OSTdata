@@ -92,6 +92,9 @@ class Object(models.Model):
     object_type_override = models.BooleanField(default=False)
     note_override = models.BooleanField(default=False)
 
+    #   Schutz vor Orphan-Cleanup bis erste DataFiles verknüpft sind (API-Creates)
+    exclude_from_orphan_cleanup = models.BooleanField(default=False)
+
     #   Bookkeeping
     history = HistoricalRecords()
     # added_on      = models.DateTimeField(auto_now_add=True)

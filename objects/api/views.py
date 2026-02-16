@@ -166,6 +166,12 @@ class ObjectViewSet(viewsets.ModelViewSet):
             return Response({'detail': 'Forbidden'}, status=status.HTTP_403_FORBIDDEN)
         return super().create(request, *args, **kwargs)
 
+    def perform_create(self, serializer):
+        serializer.save()
+        instance = serializer.instance
+        instance.exclude_from_orphan_cleanup = True
+        instance.save(update_fields=['exclude_from_orphan_cleanup'])
+
     def update(self, request, *args, **kwargs):
         if not self._has(request.user, 'acl_objects_edit'):
             return Response({'detail': 'Forbidden'}, status=status.HTTP_403_FORBIDDEN)

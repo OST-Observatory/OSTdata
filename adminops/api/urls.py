@@ -22,6 +22,7 @@ from .views import (
     admin_set_banner,
     admin_clear_banner,
     banner_info,
+    admin_delete_object_aliases,
     admin_update_object_identifiers,
     admin_get_exposure_type_discrepancies,
     admin_update_exposure_type_user,
@@ -57,6 +58,7 @@ urlpatterns = [
     path('banner/set', admin_set_banner, name='set_banner'),
     path('banner/clear', admin_clear_banner, name='clear_banner'),
     path('banner-info/', banner_info, name='banner_info'),
+    path('objects/<int:object_id>/delete-aliases/', admin_delete_object_aliases, name='delete_object_aliases'),
     path('objects/<int:object_id>/update-identifiers/', admin_update_object_identifiers, name='update_object_identifiers'),
     # DataFiles list (all) and re-evaluate
     path('datafiles/', admin_list_all_datafiles, name='list_all_datafiles'),

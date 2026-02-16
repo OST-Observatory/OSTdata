@@ -390,6 +390,7 @@ export const api = {
   adminClearOverrideFlag: (modelType, instanceId, fieldName) => fetchWithAuth(`/admin/override-flags/${encodeURIComponent(modelType)}/${encodeURIComponent(instanceId)}/${encodeURIComponent(fieldName)}/clear/`, { method: 'POST' }),
   adminClearAllOverrides: (modelType, instanceId) => fetchWithAuth(`/admin/override-flags/${encodeURIComponent(modelType)}/${encodeURIComponent(instanceId)}/clear-all/`, { method: 'POST' }),
   adminListOverrideFlags: () => fetchWithAuth('/admin/override-flags/list/'),
+  adminDeleteObjectAliases: (objectId) => fetchWithAuth(`/admin/objects/${encodeURIComponent(objectId)}/delete-aliases/`, { method: 'POST' }),
   adminUpdateObjectIdentifiers: (objectId, matchMethod, dryRun) => fetchWithAuth(`/admin/objects/${encodeURIComponent(objectId)}/update-identifiers/`, {
     method: 'POST',
     body: JSON.stringify({
