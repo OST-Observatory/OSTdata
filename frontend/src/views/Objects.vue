@@ -5,39 +5,45 @@
         <h1 class="text-h4">Objects</h1>
         <div class="d-flex align-center" style="gap: 8px" v-if="canAdmin">
           <div class="d-inline-block">
-            <v-btn
-              variant="outlined"
-              color="primary"
-              prepend-icon="mdi-eye"
-              :disabled="!selected.length || !canPublish"
-              @click="bulkPublishObjects(true)"
-            >Publish ({{ selected.length }})</v-btn>
-            <v-tooltip v-if="!canPublish || !selected.length" activator="parent" location="top">
-              {{ !selected.length ? 'Select objects first' : 'No permission' }}
+            <v-tooltip :text="(!canPublish || !selected.length) ? (!selected.length ? 'Select objects first' : 'No permission') : 'Publish selected objects'" location="top">
+              <template #activator="{ props }">
+                <v-btn
+                  v-bind="props"
+                  variant="outlined"
+                  color="primary"
+                  prepend-icon="mdi-eye"
+                  :disabled="!selected.length || !canPublish"
+                  @click="bulkPublishObjects(true)"
+                >Publish ({{ selected.length }})</v-btn>
+              </template>
             </v-tooltip>
           </div>
           <div class="d-inline-block">
-            <v-btn
-              variant="outlined"
-              color="secondary"
-              prepend-icon="mdi-eye-off"
-              :disabled="!selected.length || !canPublish"
-              @click="bulkPublishObjects(false)"
-            >Unpublish ({{ selected.length }})</v-btn>
-            <v-tooltip v-if="!canPublish || !selected.length" activator="parent" location="top">
-              {{ !selected.length ? 'Select objects first' : 'No permission' }}
+            <v-tooltip :text="(!canPublish || !selected.length) ? (!selected.length ? 'Select objects first' : 'No permission') : 'Unpublish selected objects'" location="top">
+              <template #activator="{ props }">
+                <v-btn
+                  v-bind="props"
+                  variant="outlined"
+                  color="secondary"
+                  prepend-icon="mdi-eye-off"
+                  :disabled="!selected.length || !canPublish"
+                  @click="bulkPublishObjects(false)"
+                >Unpublish ({{ selected.length }})</v-btn>
+              </template>
             </v-tooltip>
           </div>
           <div class="d-inline-block">
-            <v-btn
-              variant="outlined"
-              color="warning"
-              prepend-icon="mdi-merge"
-              :disabled="selected.length < 2 || !canMerge"
-              @click="openMergeDialog"
-            >Merge ({{ selected.length }})</v-btn>
-            <v-tooltip v-if="selected.length < 2 || !canMerge" activator="parent" location="top">
-              {{ selected.length < 2 ? 'Select at least two objects' : 'No permission' }}
+            <v-tooltip :text="(selected.length < 2 || !canMerge) ? (selected.length < 2 ? 'Select at least two objects' : 'No permission') : 'Merge selected objects into one'" location="top">
+              <template #activator="{ props }">
+                <v-btn
+                  v-bind="props"
+                  variant="outlined"
+                  color="warning"
+                  prepend-icon="mdi-merge"
+                  :disabled="selected.length < 2 || !canMerge"
+                  @click="openMergeDialog"
+                >Merge ({{ selected.length }})</v-btn>
+              </template>
             </v-tooltip>
           </div>
         </div>
@@ -220,26 +226,36 @@
                   </v-row>
                   <v-row class="mt-2">
                     <v-col cols="12">
-                      <v-btn
-                        block
-                        color="primary"
-                        @click="applyCoordinateFilter"
-                        :disabled="!ra || !dec || !radius"
-                        prepend-icon="mdi-filter-check"
-                      >
-                        Apply Coordinates Filter
-                      </v-btn>
+                      <v-tooltip :text="(!ra || !dec || !radius) ? 'Enter RA, Dec and radius first' : 'Apply coordinate filter'" location="top">
+                        <template #activator="{ props }">
+                          <v-btn
+                            v-bind="props"
+                            block
+                            color="primary"
+                            @click="applyCoordinateFilter"
+                            :disabled="!ra || !dec || !radius"
+                            prepend-icon="mdi-filter-check"
+                          >
+                            Apply Coordinates Filter
+                          </v-btn>
+                        </template>
+                      </v-tooltip>
                     </v-col>
                     <v-col cols="12" class="mt-1">
-                      <v-btn
-                        block
-                        variant="text"
-                        color="secondary"
-                        @click="resetFilters"
-                        prepend-icon="mdi-filter-remove"
-                      >
-                        Reset Filters
-                      </v-btn>
+                      <v-tooltip text="Reset all filters" location="top">
+                        <template #activator="{ props }">
+                          <v-btn
+                            v-bind="props"
+                            block
+                            variant="text"
+                            color="secondary"
+                            @click="resetFilters"
+                            prepend-icon="mdi-filter-remove"
+                          >
+                            Reset Filters
+                          </v-btn>
+                        </template>
+                      </v-tooltip>
                     </v-col>
                   </v-row>
                 </v-card-text>
@@ -375,28 +391,36 @@
           </template>
 
           <template v-slot:item.actions="{ item }">
-            <v-btn
-              v-if="canEdit"
-              icon
-              variant="text"
-              color="primary"
-              class="action-btn"
-              @click="openEditDialog(item)"
-              :aria-label="`Edit object ${item.name}`"
-            >
-              <v-icon>mdi-pencil</v-icon>
-            </v-btn>
-            <v-btn
-              v-if="canDelete"
-              icon
-              variant="text"
-              color="error"
-              class="action-btn"
-              @click="removeObject(item)"
-              :aria-label="`Delete object ${item.name}`"
-            >
-              <v-icon>mdi-delete</v-icon>
-            </v-btn>
+            <v-tooltip v-if="canEdit" text="Edit object" location="top">
+              <template #activator="{ props }">
+                <v-btn
+                  v-bind="props"
+                  icon
+                  variant="text"
+                  color="primary"
+                  class="action-btn"
+                  @click="openEditDialog(item)"
+                  :aria-label="`Edit object ${item.name}`"
+                >
+                  <v-icon>mdi-pencil</v-icon>
+                </v-btn>
+              </template>
+            </v-tooltip>
+            <v-tooltip v-if="canDelete" text="Delete object" location="top">
+              <template #activator="{ props }">
+                <v-btn
+                  v-bind="props"
+                  icon
+                  variant="text"
+                  color="error"
+                  class="action-btn"
+                  @click="removeObject(item)"
+                  :aria-label="`Delete object ${item.name}`"
+                >
+                  <v-icon>mdi-delete</v-icon>
+                </v-btn>
+              </template>
+            </v-tooltip>
           </template>
         </v-data-table>
 
@@ -423,48 +447,73 @@
             <span class="text-body-2 mr-4">
               {{ paginationInfo }}
             </span>
-            <v-btn
-              icon="mdi-page-first"
-              variant="text"
-              :disabled="currentPage === 1"
-              @click="handlePageChange(1)"
-              class="mx-1 pagination-btn"
-              aria-label="First page"
-            ></v-btn>
-            <v-btn
-              icon="mdi-chevron-left"
-              variant="text"
-              :disabled="currentPage === 1"
-              @click="handlePageChange(currentPage - 1)"
-              class="mx-1 pagination-btn"
-              aria-label="Previous page"
-            ></v-btn>
-            <v-btn
-              icon="mdi-chevron-right"
-              variant="text"
-              :disabled="currentPage >= totalPages"
-              @click="handlePageChange(currentPage + 1)"
-              class="mx-1 pagination-btn"
-              aria-label="Next page"
-            ></v-btn>
-            <v-btn
-              icon="mdi-page-last"
-              variant="text"
-              :disabled="currentPage >= totalPages"
-              @click="handlePageChange(totalPages)"
-              class="mx-1 pagination-btn"
-              aria-label="Last page"
-            ></v-btn>
-            <v-btn
-              variant="text"
-              color="primary"
-              prepend-icon="mdi-content-copy"
-              class="ml-2"
-              @click="copyShareLink"
-              aria-label="Copy link to current view"
-            >
-              Copy link
-            </v-btn>
+            <v-tooltip text="First page" location="top">
+              <template #activator="{ props }">
+                <v-btn
+                  v-bind="props"
+                  icon="mdi-page-first"
+                  variant="text"
+                  :disabled="currentPage === 1"
+                  @click="handlePageChange(1)"
+                  class="mx-1 pagination-btn"
+                  aria-label="First page"
+                ></v-btn>
+              </template>
+            </v-tooltip>
+            <v-tooltip text="Previous page" location="top">
+              <template #activator="{ props }">
+                <v-btn
+                  v-bind="props"
+                  icon="mdi-chevron-left"
+                  variant="text"
+                  :disabled="currentPage === 1"
+                  @click="handlePageChange(currentPage - 1)"
+                  class="mx-1 pagination-btn"
+                  aria-label="Previous page"
+                ></v-btn>
+              </template>
+            </v-tooltip>
+            <v-tooltip text="Next page" location="top">
+              <template #activator="{ props }">
+                <v-btn
+                  v-bind="props"
+                  icon="mdi-chevron-right"
+                  variant="text"
+                  :disabled="currentPage >= totalPages"
+                  @click="handlePageChange(currentPage + 1)"
+                  class="mx-1 pagination-btn"
+                  aria-label="Next page"
+                ></v-btn>
+              </template>
+            </v-tooltip>
+            <v-tooltip text="Last page" location="top">
+              <template #activator="{ props }">
+                <v-btn
+                  v-bind="props"
+                  icon="mdi-page-last"
+                  variant="text"
+                  :disabled="currentPage >= totalPages"
+                  @click="handlePageChange(totalPages)"
+                  class="mx-1 pagination-btn"
+                  aria-label="Last page"
+                ></v-btn>
+              </template>
+            </v-tooltip>
+            <v-tooltip text="Copy link to current view" location="top">
+              <template #activator="{ props }">
+                <v-btn
+                  v-bind="props"
+                  variant="text"
+                  color="primary"
+                  prepend-icon="mdi-content-copy"
+                  class="ml-2"
+                  @click="copyShareLink"
+                  aria-label="Copy link to current view"
+                >
+                  Copy link
+                </v-btn>
+              </template>
+            </v-tooltip>
           </div>
         </v-card-actions>
       </v-card>
