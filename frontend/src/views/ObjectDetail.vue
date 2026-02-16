@@ -1084,7 +1084,9 @@
                     </template>
                   </template>
                   <template v-slot:item.exposure_type_display="{ item }">
-                    {{ item.exposure_type_display || item.exposure_type }}
+                    <v-chip size="small" :color="getExposureTypeColor(item.effective_exposure_type || item.exposure_type)" variant="flat">
+                      {{ item.exposure_type_display || item.exposure_type || '—' }}
+                    </v-chip>
                   </template>
                   <template v-slot:item.exptime="{ item }">
                     {{ formatExposureTime(item.exptime) }}
@@ -2011,6 +2013,11 @@ const formatNotes = (notes) => {
 const formatDate = (date) => {
   if (!date) return 'N/A'
   return new Date(date).toLocaleDateString()
+}
+
+const getExposureTypeColor = (t) => {
+  const c = { BI: 'blue', DA: 'grey-darken-2', FL: 'green', LI: 'orange', WA: 'purple', UK: 'grey' }
+  return c[(t || '').toUpperCase()] || 'grey'
 }
 
 const formatExposureTime = (time) => {

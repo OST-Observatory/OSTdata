@@ -768,7 +768,9 @@
                 </template>
               </template>
               <template v-slot:item.exposure_type_display="{ item }">
-                {{ item.exposure_type_display || item.exposure_type }}
+                <v-chip size="small" :color="getExposureTypeColor(item.effective_exposure_type || item.exposure_type)" variant="flat">
+                  {{ item.exposure_type_display || item.exposure_type || '—' }}
+                </v-chip>
               </template>
               <template v-slot:item.exptime="{ item }">
                 {{ formatExposureTime(item.exptime) }}
@@ -1353,6 +1355,11 @@ const formatTimeOnly = (date) => {
     : (typeof navigator !== 'undefined' ? [navigator.language] : undefined)
   const fmt = new Intl.DateTimeFormat(locales, { timeStyle: 'medium', timeZone: import.meta.env.VITE_TIME_ZONE || undefined })
   return fmt.format(d)
+}
+
+const getExposureTypeColor = (t) => {
+  const c = { BI: 'blue', DA: 'grey-darken-2', FL: 'green', LI: 'orange', WA: 'purple', UK: 'grey' }
+  return c[(t || '').toUpperCase()] || 'grey'
 }
 
 const formatExposureTime = (seconds) => {
