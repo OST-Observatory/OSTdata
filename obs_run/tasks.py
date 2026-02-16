@@ -752,8 +752,11 @@ def unlink_non_light_datafiles_from_objects(self, dry_run: bool = True):
     runs_updated = set()
     
     if not dry_run:
-        for datafile in non_light.only('pk').iterator():
+        # Iterate over PKs to avoid AttributeError: annotate adds effective_exposure_type
+        # which conflicts with DataFile's read-only property of the same name
+        for df_pk in non_light.values_list('pk', flat=True):
             try:
+                datafile = DataFile.objects.get(pk=df_pk)
                 objects = list(datafile.object_set.only('pk').all())
                 for obj in objects:
                     obj.datafiles.remove(datafile)
@@ -772,7 +775,7 @@ def unlink_non_light_datafiles_from_objects(self, dry_run: bool = True):
                         except Exception:
                             pass
             except Exception as e:
-                logger.warning("Failed to unlink DataFile #%s: %s", datafile.pk, e)
+                logger.warning("Failed to unlink DataFile #%s: %s", df_pk, e)
     
     result = {
         'dry_run': bool(dry_run),
