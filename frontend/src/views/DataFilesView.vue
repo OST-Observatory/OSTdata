@@ -19,7 +19,18 @@
                   <v-expansion-panel>
                     <v-expansion-panel-title density="compact">File & Run</v-expansion-panel-title>
                     <v-expansion-panel-text>
-                      <v-text-field v-model="filters.observation_run" label="Observation Run ID" type="number" density="comfortable" variant="outlined" hide-details clearable class="mb-2" />
+                      <v-autocomplete
+                        v-model="filters.observation_run_name"
+                        :items="observationRuns"
+                        item-title="name"
+                        item-value="name"
+                        label="Observation Run"
+                        density="comfortable"
+                        variant="outlined"
+                        hide-details
+                        clearable
+                        class="mb-2"
+                      />
                       <v-text-field v-model="filters.file_name" label="File Name" density="comfortable" variant="outlined" hide-details clearable class="mb-2" />
                       <v-text-field v-model="filters.file_type" label="File Type" density="comfortable" variant="outlined" hide-details clearable />
                     </v-expansion-panel-text>
@@ -324,8 +335,9 @@ const sortBy = ref('pk')
 const sortOrder = ref('desc')
 const ordering = computed(() => (sortOrder.value === 'desc' ? '-' : '') + sortBy.value)
 
+const observationRuns = ref([])
 const filters = ref({
-  observation_run: null,
+  observation_run_name: null,
   file_name: null,
   file_type: null,
   instrument: null,
@@ -442,7 +454,7 @@ function formatHeaderValue(v) {
 
 function buildParams() {
   const p = { page: currentPage.value, limit: itemsPerPage.value === -1 ? 10000 : itemsPerPage.value, ordering: ordering.value }
-  if (filters.value.observation_run) p.observation_run = filters.value.observation_run
+  if (filters.value.observation_run_name) p.observation_run_name = filters.value.observation_run_name
   if (filters.value.file_name) p.file_name = filters.value.file_name
   if (filters.value.file_type) p.file_type = filters.value.file_type
   if (filters.value.instrument) p.instrument = filters.value.instrument
@@ -462,7 +474,7 @@ function buildParams() {
 
 function resetFilters() {
   filters.value = {
-    observation_run: null,
+    observation_run_name: null,
     file_name: null,
     file_type: null,
     instrument: null,
@@ -776,7 +788,19 @@ async function saveSpectrograph() {
   }
 }
 
-onMounted(() => fetchFiles())
+async function loadObservationRuns() {
+  try {
+    const res = await api.getAllObservationRuns()
+    observationRuns.value = res.results ?? res ?? []
+  } catch {
+    observationRuns.value = []
+  }
+}
+
+onMounted(() => {
+  loadObservationRuns()
+  fetchFiles()
+})
 </script>
 
 <style scoped>

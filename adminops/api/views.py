@@ -925,6 +925,7 @@ def admin_update_object_identifiers(request, object_id):
         OpenApiParameter('header_type', str, OpenApiParameter.QUERY, description='Filter by header exposure type'),
         OpenApiParameter('ml_type', str, OpenApiParameter.QUERY, description='Filter by ML exposure type'),
         OpenApiParameter('observation_run', int, OpenApiParameter.QUERY, description='Filter by observation run ID'),
+        OpenApiParameter('observation_run_name', str, OpenApiParameter.QUERY, description='Filter by observation run name (case-insensitive partial match)'),
         OpenApiParameter('has_user_type', bool, OpenApiParameter.QUERY, description='Filter by presence of user-set type'),
         OpenApiParameter('file_name', str, OpenApiParameter.QUERY, description='Filter by file name (case-insensitive partial match)'),
     ],
@@ -959,13 +960,16 @@ def admin_get_exposure_type_discrepancies(request):
     if ml_type:
         queryset = queryset.filter(exposure_type_ml=ml_type)
 
-    # Filter by observation_run
+    # Filter by observation_run (by ID or name)
     observation_run_id = request.query_params.get('observation_run')
+    observation_run_name = request.query_params.get('observation_run_name')
     if observation_run_id:
         try:
             queryset = queryset.filter(observation_run_id=int(observation_run_id))
         except ValueError:
             pass
+    elif observation_run_name:
+        queryset = queryset.filter(observation_run__name__icontains=observation_run_name)
 
     # Filter by has_user_type
     has_user_type = request.query_params.get('has_user_type')
@@ -1060,6 +1064,7 @@ def admin_update_exposure_type_user(request, pk):
         OpenApiParameter('spectrograph', str, OpenApiParameter.QUERY, description='Filter by spectrograph type'),
         OpenApiParameter('exposure_type', str, OpenApiParameter.QUERY, description='Filter by exposure type'),
         OpenApiParameter('observation_run', int, OpenApiParameter.QUERY, description='Filter by observation run ID'),
+        OpenApiParameter('observation_run_name', str, OpenApiParameter.QUERY, description='Filter by observation run name (case-insensitive partial match)'),
         OpenApiParameter('file_name', str, OpenApiParameter.QUERY, description='Filter by file name (case-insensitive partial match)'),
     ],
 )
@@ -1088,13 +1093,16 @@ def admin_get_spectrograph_files(request):
     if exposure_type:
         queryset = queryset.filter(exposure_type=exposure_type)
 
-    # Filter by observation_run
+    # Filter by observation_run (by ID or name)
     observation_run_id = request.query_params.get('observation_run')
+    observation_run_name = request.query_params.get('observation_run_name')
     if observation_run_id:
         try:
             queryset = queryset.filter(observation_run_id=int(observation_run_id))
         except ValueError:
             pass
+    elif observation_run_name:
+        queryset = queryset.filter(observation_run__name__icontains=observation_run_name)
 
     # Filter by file_name (case-insensitive partial match on datafile path)
     file_name = request.query_params.get('file_name')

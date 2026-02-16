@@ -39,15 +39,16 @@
             />
           </v-col>
           <v-col cols="12" sm="6" md="3">
-            <v-text-field
-              v-model="filters.observation_run"
-              label="Observation Run ID"
+            <v-autocomplete
+              v-model="filters.observation_run_name"
+              :items="observationRuns"
+              item-title="name"
+              item-value="name"
+              label="Observation Run"
               prepend-inner-icon="mdi-telescope"
               hide-details
               density="comfortable"
               variant="outlined"
-              type="number"
-              min="1"
               clearable
             />
           </v-col>
@@ -399,10 +400,11 @@ const currentPage = ref(1)
 const totalItems = ref(0)
 const selected = ref([])
 
+const observationRuns = ref([])
 const filters = ref({
   spectrograph: null,
   exposure_type: null,
-  observation_run: null,
+  observation_run_name: null,
   file_name: null,
 })
 
@@ -537,7 +539,7 @@ const resetFilters = () => {
   filters.value = {
     spectrograph: null,
     exposure_type: null,
-    observation_run: null,
+    observation_run_name: null,
     file_name: null,
   }
   currentPage.value = 1
@@ -550,7 +552,7 @@ const fetchFiles = async () => {
     const params = {}
     if (filters.value.spectrograph) params.spectrograph = filters.value.spectrograph
     if (filters.value.exposure_type) params.exposure_type = filters.value.exposure_type
-    if (filters.value.observation_run) params.observation_run = parseInt(filters.value.observation_run)
+    if (filters.value.observation_run_name) params.observation_run_name = filters.value.observation_run_name
     if (filters.value.file_name) params.file_name = filters.value.file_name
     
     // Add pagination parameters
@@ -700,7 +702,17 @@ watch(filters, () => {
   fetchFiles()
 }, { deep: true })
 
+async function loadObservationRuns() {
+  try {
+    const res = await api.getAllObservationRuns()
+    observationRuns.value = res.results ?? res ?? []
+  } catch (e) {
+    observationRuns.value = []
+  }
+}
+
 onMounted(() => {
+  loadObservationRuns()
   fetchFiles()
 })
 </script>
