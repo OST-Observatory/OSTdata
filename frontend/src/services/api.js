@@ -371,6 +371,12 @@ export const api = {
     }
     return fetchWithAuth('/admin/maintenance/orphan-objects/', { method: 'POST', body: JSON.stringify(body) })
   },
+  adminMaintenanceUnlinkNonLightDatafiles: (opts = {}) => {
+    const body = {
+      dry_run: opts.dry_run !== undefined ? !!opts.dry_run : true,
+    }
+    return fetchWithAuth('/admin/maintenance/unlink-non-light-datafiles/', { method: 'POST', body: JSON.stringify(body) })
+  },
   adminMaintenanceRefreshDashboardStats: () => fetchWithAuth('/admin/maintenance/refresh-dashboard-stats/', { method: 'POST' }),
   adminMaintenanceTriggerPlateSolve: () => fetchWithAuth('/admin/maintenance/plate-solving/', { method: 'POST' }),
   adminMaintenanceReEvaluatePlateSolved: () => fetchWithAuth('/admin/maintenance/re-evaluate-plate-solved/', { method: 'POST' }),

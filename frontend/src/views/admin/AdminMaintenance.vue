@@ -293,6 +293,55 @@
           </v-card-text>
         </v-card>
       </v-col>
+
+      <v-col cols="12" md="6" v-if="canOrphans">
+        <v-card class="mb-4">
+          <v-card-title class="text-h6">
+            <div class="d-flex align-center" style="gap: 8px">
+              <span>Unlink Non-Light DataFiles from Objects</span>
+              <v-chip
+                size="x-small"
+                :color="taskStatusColor(periodic?.unlink_non_light_datafiles)"
+                variant="flat"
+              >
+                {{ taskStatusLabel(periodic?.unlink_non_light_datafiles) }}
+              </v-chip>
+            </div>
+          </v-card-title>
+          <v-card-text>
+            <div class="text-caption text-medium-emphasis mb-2">
+              Removes Object–DataFile associations for all DataFiles that are not Light frames (flats, darks, bias, etc.).
+            </div>
+            <div class="d-flex align-center mb-2" style="gap: 12px; flex-wrap: wrap">
+              <v-switch v-model="unlinkNonLightDryRun" inset hide-details color="primary" :label="`Dry run`" />
+              <v-btn color="primary" prepend-icon="mdi-link-off" :loading="busy.unlinkNonLight" @click="triggerUnlinkNonLight">
+                Run
+              </v-btn>
+            </div>
+            <div class="text-caption text-medium-emphasis">
+              Last run:
+              <span v-if="periodic?.unlink_non_light_datafiles?.last_run">
+                {{ formatRelative(periodic.unlink_non_light_datafiles.last_run, periodic.unlink_non_light_datafiles.age_seconds) }}
+              </span>
+              <span v-else>—</span>
+            </div>
+            <div v-if="periodic?.unlink_non_light_datafiles?.data" class="mt-2">
+              <div class="text-caption text-medium-emphasis">Summary</div>
+              <div class="text-caption">
+                files_found: {{ periodic.unlink_non_light_datafiles.data.files_found ?? 0 }},
+                unlinks_done: {{ periodic.unlink_non_light_datafiles.data.unlinks_done ?? 0 }},
+                objects_updated: {{ periodic.unlink_non_light_datafiles.data.objects_updated ?? 0 }},
+                runs_updated: {{ periodic.unlink_non_light_datafiles.data.runs_updated ?? 0 }},
+                mode: {{ periodic.unlink_non_light_datafiles.data.dry_run ? 'dry' : 'apply' }}
+              </div>
+            </div>
+            <div v-if="periodic?.unlink_non_light_datafiles?.last_error" class="text-error text-caption mt-1">
+              {{ periodic.unlink_non_light_datafiles.last_error }}
+            </div>
+          </v-card-text>
+        </v-card>
+      </v-col>
+
       <v-col cols="12" md="6" v-if="canReconcile">
         <v-card class="mb-4">
           <v-card-title class="text-h6">
@@ -644,7 +693,7 @@ import { useAuthStore } from '@/store/auth'
 const notify = useNotifyStore()
 const auth = useAuthStore()
 const loading = ref(false)
-const busy = ref({ cleanup: false, reconcile: false, scan: false, orphans: false, orphanObj: false, banner: false, dashboardStats: false, plateSolving: false, plateSolvingToggle: false, reEvaluatePlateSolved: false, overrideFlags: false })
+const busy = ref({ cleanup: false, reconcile: false, scan: false, orphans: false, orphanObj: false, unlinkNonLight: false, banner: false, dashboardStats: false, plateSolving: false, plateSolvingToggle: false, reEvaluatePlateSolved: false, overrideFlags: false })
 const health = ref({ periodic: {}, settings: {} })
 const overrideFlagsData = ref(null)
 const loadingOverrideFlags = ref(false)
@@ -660,6 +709,7 @@ const orphLimit = ref('')
 const scanDryRun = ref(true)
 const scanLimit = ref('')
 const orphObjDryRun = ref(true)
+const unlinkNonLightDryRun = ref(true)
 
 const canCleanup = computed(() => auth.isAdmin || auth.hasPerm('users.acl_maintenance_cleanup') || auth.hasPerm('acl_maintenance_cleanup'))
 const canReconcile = computed(() => auth.isAdmin || auth.hasPerm('users.acl_maintenance_reconcile') || auth.hasPerm('acl_maintenance_reconcile'))
@@ -809,6 +859,20 @@ const triggerOrphanObjects = async () => {
     notify.error('Failed to enqueue orphan objects cleanup')
   } finally {
     busy.value.orphanObj = false
+    setTimeout(refreshHealth, 1500)
+  }
+}
+
+const triggerUnlinkNonLight = async () => {
+  busy.value.unlinkNonLight = true
+  try {
+    const opts = { dry_run: !!unlinkNonLightDryRun.value }
+    await api.adminMaintenanceUnlinkNonLightDatafiles(opts)
+    notify.success(`Unlink non-Light DataFiles enqueued (${opts.dry_run ? 'dry' : 'apply'})`)
+  } catch (e) {
+    notify.error('Failed to enqueue unlink task')
+  } finally {
+    busy.value.unlinkNonLight = false
     setTimeout(refreshHealth, 1500)
   }
 }

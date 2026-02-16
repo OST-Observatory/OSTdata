@@ -732,6 +732,61 @@ def cleanup_orphan_objects(self, dry_run: bool = True):
 
 
 @shared_task(bind=True)
+def unlink_non_light_datafiles_from_objects(self, dry_run: bool = True):
+    """Remove Object–DataFile associations for all DataFiles that are not Light frames.
+    
+    Non-Light frames (flats, darks, bias, etc.) are unlinked from their Objects.
+    Affected objects and observation runs get photometry/spectroscopy flags updated.
+    """
+    from objects.models import Object
+    
+    # Through table for Object <-> DataFile M2M
+    through = Object.datafiles.through
+    linked_df_ids = through.objects.values_list('datafile_id', flat=True).distinct()
+    
+    qs = annotate_effective_exposure_type(DataFile.objects.filter(pk__in=linked_df_ids))
+    non_light = qs.exclude(effective_exposure_type='LI')
+    files_found = non_light.count()
+    unlinks_done = 0
+    objects_updated = set()
+    runs_updated = set()
+    
+    if not dry_run:
+        for datafile in non_light.only('pk').iterator():
+            try:
+                objects = list(datafile.object_set.only('pk').all())
+                for obj in objects:
+                    obj.datafiles.remove(datafile)
+                    unlinks_done += 1
+                    objects_updated.add(obj.pk)
+                for obj in objects:
+                    try:
+                        update_object_photometry_spectroscopy(obj)
+                    except Exception as e:
+                        logger.warning("photometry/spectroscopy update failed for Object #%s: %s", obj.pk, e)
+                for obj in objects:
+                    for run in obj.observation_run.only('pk'):
+                        try:
+                            update_observation_run_photometry_spectroscopy(run)
+                            runs_updated.add(run.pk)
+                        except Exception:
+                            pass
+            except Exception as e:
+                logger.warning("Failed to unlink DataFile #%s: %s", datafile.pk, e)
+    
+    result = {
+        'dry_run': bool(dry_run),
+        'files_found': files_found,
+        'unlinks_done': unlinks_done,
+        'objects_updated': len(objects_updated),
+        'runs_updated': len(runs_updated),
+    }
+    _health_set('unlink_non_light_datafiles', result)
+    logger.info("Unlink non-Light DataFiles from Objects complete: %s", result)
+    return result
+
+
+@shared_task(bind=True)
 def cleanup_orphans_and_hashcheck(self, dry_run: bool = True, fix_missing_hashes: bool = True, limit: int | None = None):
     """Scan DataFiles for orphans/missing files and hash drift.
     - Orphans: DataFile with missing observation_run or file path does not exist → delete (when not dry_run).

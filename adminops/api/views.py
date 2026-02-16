@@ -40,6 +40,7 @@ from obs_run.tasks import (
     cleanup_orphans_and_hashcheck,
     scan_missing_filesystem,
     cleanup_orphan_objects,
+    unlink_non_light_datafiles_from_objects,
     plate_solve_pending_files,
     re_evaluate_plate_solved_files,
 )
@@ -525,6 +526,32 @@ def admin_trigger_orphan_objects(request):
     except Exception as e:
         logger.exception("admin_trigger_orphan_objects failed: %s", e)
         return Response({'enqueued': False, 'error': str(e)}, status=400)
+
+
+@api_view(['POST'])
+@permission_classes([IsAdminUser])
+@extend_schema(
+    summary='Unlink non-Light DataFiles from Objects',
+    description='Removes Object–DataFile associations for all DataFiles that are not Light frames (flats, darks, bias, etc.).',
+    request=AdminOrphanObjectsRequestSerializer,
+    responses={'202': {'type': 'object'}},
+    tags=['Admin']
+)
+def admin_trigger_unlink_non_light_datafiles(request):
+    if not (request.user.is_superuser or request.user.has_perm('users.acl_maintenance_orphans')):
+        return Response({'detail': 'Forbidden'}, status=403)
+    payload = request.data if hasattr(request, 'data') else {}
+    try:
+        dry_run = bool(payload.get('dry_run', True))
+    except Exception:
+        dry_run = True
+    try:
+        res = unlink_non_light_datafiles_from_objects.delay(dry_run=dry_run)
+        return Response({'enqueued': True, 'task_id': getattr(res, 'id', None), 'dry_run': dry_run}, status=202)
+    except Exception as e:
+        logger.exception("admin_trigger_unlink_non_light_datafiles failed: %s", e)
+        return Response({'enqueued': False, 'error': str(e)}, status=400)
+
 
 class AdminBannerSetSerializer(serializers.Serializer):
     enabled = serializers.BooleanField(required=False, default=True)
