@@ -1577,7 +1577,7 @@ def _do_re_evaluate_run_all(queryset):
 @permission_classes([IsAdminUser])
 def admin_re_evaluate_datafiles(request):
     """
-    Run evaluate_data_file for selected plate-solved DataFiles.
+    Run evaluate_data_file for selected DataFiles (all files, uses header-derived ra/dec).
     Body: { "ids": [1, 2, 3] }
     """
     ids = request.data.get('ids', [])
@@ -1586,12 +1586,9 @@ def admin_re_evaluate_datafiles(request):
 
     queryset = DataFile.objects.filter(
         pk__in=ids,
-        plate_solved=True,
-        wcs_ra__isnull=False,
-        wcs_dec__isnull=False,
     ).select_related('observation_run')
 
-    return Response(_do_re_evaluate_datafiles(queryset))
+    return Response(_do_re_evaluate_run_all(queryset))
 
 
 @extend_schema(

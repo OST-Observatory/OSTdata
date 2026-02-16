@@ -188,7 +188,7 @@
                 <v-btn v-bind="props" icon="mdi-telescope" size="x-small" variant="text" @click="openSpectrographDialog(item)" :aria-label="`Spectrograph ${item.file_name}`" />
               </template>
             </v-tooltip>
-            <v-tooltip v-if="item.plate_solved" text="Re-evaluate object association" location="top">
+            <v-tooltip text="Re-evaluate object association" location="top">
               <template #activator="{ props }">
                 <v-btn v-bind="props" icon="mdi-refresh" size="x-small" variant="text" :loading="reEvalSingle === item.pk" @click="reEvaluateSingle(item)" :aria-label="`Re-evaluate ${item.file_name}`" />
               </template>
@@ -623,15 +623,11 @@ async function bulkPlateSolve() {
 }
 
 async function bulkReEvaluate() {
-  const plateSolvedIds = items.value.filter(i => selectedIds.value.includes(i.pk) && i.plate_solved).map(i => i.pk)
-  if (plateSolvedIds.length === 0) {
-    notify.warning('No plate-solved files in selection')
-    return
-  }
+  if (selectedIds.value.length === 0) return
   busy.value.reEvaluate = true
   try {
-    const res = await api.adminReEvaluateDataFiles(plateSolvedIds)
-    notify.success(`Re-evaluated: ${res.evaluated} success, ${res.skipped} skipped`)
+    const res = await api.adminReEvaluateDataFiles(selectedIds.value)
+    notify.success(`Re-evaluated: ${res.evaluated} success, ${res.skipped} skipped${res.errors ? `, ${res.errors} errors` : ''}`)
     selected.value = []
     await fetchFiles()
   } catch (e) {
