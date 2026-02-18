@@ -222,12 +222,21 @@ class ObjectViewSet(viewsets.ModelViewSet):
                 if check_and_set_override(instance, field_name, new_value, old_value):
                     override_fields.append(get_override_field_name(field_name))
         
+        # Capture old name before save (for propagating to DataFiles)
+        old_name = instance.name
+        name_changed = 'name' in serializer.validated_data and serializer.validated_data['name'] != old_name
+
         serializer.save()
-        
+
         # Save override flags if any were set
         if override_fields:
             instance.save(update_fields=override_fields)
-        
+
+        # When object name changes, update main_target on all associated DataFiles
+        if name_changed:
+            from utilities import propagate_object_name_to_datafiles
+            propagate_object_name_to_datafiles(instance)
+
         return Response(serializer.data)
 
     def destroy(self, request, *args, **kwargs):

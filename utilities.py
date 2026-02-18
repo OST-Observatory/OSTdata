@@ -879,6 +879,19 @@ def verify_star_classification(obj, data_file=None, enable_extended_search=True)
         return {'updated': False, 'best_match': None, 'candidates': []}
 
 
+def propagate_object_name_to_datafiles(obj):
+    """
+    Update main_target on all DataFiles associated with obj to obj.name.
+    Respects should_allow_auto_update for each DataFile's main_target.
+    """
+    if not obj or not obj.name:
+        return
+    for df in obj.datafiles.all():
+        if should_allow_auto_update(df, 'main_target'):
+            df.main_target = obj.name
+            df.save(update_fields=['main_target'])
+
+
 def update_object_from_simbad_result(obj, simbad_table_row, priority_types=['NE', 'SC', 'GA'], dry_run=False):
     """
     Update object from SIMBAD result, respecting override flags.
@@ -992,7 +1005,9 @@ def update_object_from_simbad_result(obj, simbad_table_row, priority_types=['NE'
     # Save object if there are updates
     if update_fields and not dry_run:
         obj.save(update_fields=update_fields)
-    
+        if 'name' in update_fields:
+            propagate_object_name_to_datafiles(obj)
+
     # Replace identifiers (delete old non-header-based, create new)
     if not dry_run:
         # Delete all existing identifiers except header-based ones
@@ -1243,7 +1258,7 @@ def add_new_data_file(path_to_file, observation_run, print_to_terminal=False):
     return True
 
 
-def evaluate_data_file(data_file, observation_run, print_to_terminal=False, skip_if_object_has_overrides=True, dry_run=False):
+def evaluate_data_file(data_file, observation_run, print_to_terminal=False, skip_if_object_has_overrides=True, dry_run=False, use_wcs_coords_for_lookup=False):
     """
     Evaluate data file and add associated objects
 
@@ -1265,6 +1280,12 @@ def evaluate_data_file(data_file, observation_run, print_to_terminal=False, skip
     
     dry_run                     : `boolean`, optional
         If True, simulate evaluation without making database changes.
+        Default is ``False``.
+    
+    use_wcs_coords_for_lookup   : `boolean`, optional
+        If True and data_file is plate-solved with valid wcs_ra/wcs_dec, use those
+        coordinates for object lookup/SIMBAD queries instead of header ra/dec.
+        Use for re-evaluation of plate-solved files (manual or automatic).
         Default is ``False``.
         
     Returns
@@ -1308,6 +1329,14 @@ def evaluate_data_file(data_file, observation_run, print_to_terminal=False, skip
         except Exception:
             pass
 
+    # Choose coordinates for object lookup: WCS (plate-solved) or header
+    if use_wcs_coords_for_lookup and data_file.plate_solved and data_file.wcs_ra is not None and data_file.wcs_dec is not None:
+        lookup_ra = data_file.wcs_ra
+        lookup_dec = data_file.wcs_dec
+    else:
+        lookup_ra = data_file.ra
+        lookup_dec = data_file.dec
+
     target = (data_file.main_target or '').strip()
     expo_type = data_file.effective_exposure_type  # Use effective exposure type
     target_lower = target.lower()
@@ -1325,12 +1354,12 @@ def evaluate_data_file(data_file, observation_run, print_to_terminal=False, skip
             expo_type == 'LI' and
             'flat' not in target_lower and
             'dark' not in target_lower and
-            data_file.ra != -1 and
-            data_file.ra is not None and
-            data_file.ra != 0. and
-            data_file.dec != -1 and
-            data_file.dec is not None and
-            data_file.dec != 0.
+            lookup_ra != -1 and
+            lookup_ra is not None and
+            lookup_ra != 0. and
+            lookup_dec != -1 and
+            lookup_dec is not None and
+            lookup_dec != 0.
     ):
         try:
             #   Tolerance in degree
@@ -1342,12 +1371,12 @@ def evaluate_data_file(data_file, observation_run, print_to_terminal=False, skip
             else:
                 # First, filter by a bounding box to reduce candidates
                 bbox = Object.objects \
-                    .filter(ra__range=(data_file.ra - t, data_file.ra + t)) \
-                    .filter(dec__range=(data_file.dec - t, data_file.dec + t))
+                    .filter(ra__range=(lookup_ra - t, lookup_ra + t)) \
+                    .filter(dec__range=(lookup_dec - t, lookup_dec + t))
                 # Annotate squared angular distance (no sqrt needed for ordering)
                 dist_sq = ExpressionWrapper(
-                    (F('ra') - data_file.ra) * (F('ra') - data_file.ra) +
-                    (F('dec') - data_file.dec) * (F('dec') - data_file.dec),
+                    (F('ra') - lookup_ra) * (F('ra') - lookup_ra) +
+                    (F('dec') - lookup_dec) * (F('dec') - lookup_dec),
                     output_field=FloatField()
                 )
                 objs = bbox.annotate(distance_sq=dist_sq).order_by('distance_sq')
@@ -1442,8 +1471,8 @@ def evaluate_data_file(data_file, observation_run, print_to_terminal=False, skip
                 #     Make a new object
                 obj = Object(
                     name=target,
-                    ra=data_file.ra,
-                    dec=data_file.dec,
+                    ra=lookup_ra,
+                    dec=lookup_dec,
                     object_type='SO',
                     simbad_resolved=False,
                     first_hjd=data_file.hjd,
@@ -1493,8 +1522,8 @@ def evaluate_data_file(data_file, observation_run, print_to_terminal=False, skip
                 
                 #   Set Defaults (will be overridden if Solar System object was detected)
                 if not solar_system_detected:
-                    object_ra = data_file.ra
-                    object_dec = data_file.dec
+                    object_ra = lookup_ra
+                    object_dec = lookup_dec
                     object_type = 'UK'
                     object_simbad_resolved = False
                     object_name = target
@@ -1517,8 +1546,8 @@ def evaluate_data_file(data_file, observation_run, print_to_terminal=False, skip
                         # tol = 0.5
                         # tol = 1.
 
-                        if (simbad_ra + t > data_file.ra > simbad_ra - t and
-                                simbad_dec + t > data_file.dec > simbad_dec - t):
+                        if (simbad_ra + t > lookup_ra > simbad_ra - t and
+                                simbad_dec + t > lookup_dec > simbad_dec - t):
                             object_ra = simbad_ra
                             object_dec = simbad_dec
                             object_simbad_resolved = True
@@ -1530,7 +1559,7 @@ def evaluate_data_file(data_file, observation_run, print_to_terminal=False, skip
 
                     #   Search Simbad based on coordinates
                     if not object_simbad_resolved:
-                        result_table = _query_region_safe(data_file.ra, data_file.dec, '0d5m0s', row_limit=10)
+                        result_table = _query_region_safe(lookup_ra, lookup_dec, '0d5m0s', row_limit=10)
 
                         if (result_table is not None and
                                 len(result_table) > 0):
@@ -1736,9 +1765,9 @@ def evaluate_data_file(data_file, observation_run, print_to_terminal=False, skip
             reasons.append(f'wrong_exposure_type_{expo_type}')
         if 'flat' in target_lower or 'dark' in target_lower:
             reasons.append('flat_or_dark')
-        if data_file.ra == -1 or data_file.ra is None or data_file.ra == 0.:
+        if lookup_ra == -1 or lookup_ra is None or lookup_ra == 0.:
             reasons.append('invalid_ra')
-        if data_file.dec == -1 or data_file.dec is None or data_file.dec == 0.:
+        if lookup_dec == -1 or lookup_dec is None or lookup_dec == 0.:
             reasons.append('invalid_dec')
         
         logger.debug(f'DataFile {data_file.pk} skipped object association: {", ".join(reasons)}')

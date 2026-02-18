@@ -1198,10 +1198,12 @@ def re_evaluate_plate_solved_files(self):
             if condition1 or condition2:
                 if datafile.observation_run and datafile.wcs_ra is not None and datafile.wcs_dec is not None:
                     # Use WCS coordinates for object lookup (header had none or differed significantly)
-                    datafile.ra = datafile.wcs_ra
-                    datafile.dec = datafile.wcs_dec
-                    datafile.save(update_fields=['ra', 'dec'])
-                    evaluate_data_file(datafile, datafile.observation_run, skip_if_object_has_overrides=True)
+                    evaluate_data_file(
+                        datafile,
+                        datafile.observation_run,
+                        skip_if_object_has_overrides=True,
+                        use_wcs_coords_for_lookup=True,
+                    )
                     update_observation_run_photometry_spectroscopy(datafile.observation_run)
                     for obj in datafile.object_set.all():
                         update_object_photometry_spectroscopy(obj)

@@ -84,7 +84,18 @@ class Command(BaseCommand):
                         # Get existing objects before evaluation
                         existing_object_ids = set(df.object_set.values_list('pk', flat=True))
                         
-                        result = evaluate_data_file(df, df.observation_run, skip_if_object_has_overrides=True, dry_run=dry_run)
+                        use_wcs = (
+                            df.plate_solved
+                            and df.wcs_ra is not None
+                            and df.wcs_dec is not None
+                        )
+                        result = evaluate_data_file(
+                            df,
+                            df.observation_run,
+                            skip_if_object_has_overrides=True,
+                            dry_run=dry_run,
+                            use_wcs_coords_for_lookup=use_wcs,
+                        )
                         
                         # Safety check: ensure result is a dictionary
                         if not result or not isinstance(result, dict):
