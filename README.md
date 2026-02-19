@@ -593,6 +593,13 @@ These maintenance tasks are listed on Admin → Maintenance and can be triggered
   ```
   ENABLE_ORPHANS_HASHCHECK=true
   ```
+- **Unlink non-Light DataFiles from Objects**: Removes Object–DataFile associations for flats, darks, bias, etc. Daily when enabled (default: 05:00).
+  ```
+  ENABLE_UNLINK_NON_LIGHT_OBJECTS_CLEANUP=true
+  # Optional: configure schedule (default: 5:00)
+  UNLINK_NON_LIGHT_OBJECTS_HOUR=5   # 0-23
+  UNLINK_NON_LIGHT_OBJECTS_MINUTE=0  # 0-59
+  ```
 
 You can trigger a manual refresh via:
 

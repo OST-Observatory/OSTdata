@@ -190,7 +190,7 @@
         <v-card>
           <v-card-title class="text-h6">Periodic Tasks</v-card-title>
           <v-card-text>
-            <div v-for="name in ['cleanup_expired_downloads', 'reconcile_filesystem', 'cleanup_orphans_hashcheck', 'scan_missing_filesystem', 'cleanup_orphan_objects', 'plate_solve_pending_files', 're_evaluate_plate_solved_files']" :key="name" class="mb-3">
+            <div v-for="name in ['cleanup_expired_downloads', 'reconcile_filesystem', 'cleanup_orphans_hashcheck', 'scan_missing_filesystem', 'cleanup_orphan_objects', 'unlink_non_light_datafiles', 'plate_solve_pending_files', 're_evaluate_plate_solved_files']" :key="name" class="mb-3">
               <div class="d-flex align-center" style="gap: 8px">
                 <div class="text-subtitle-2">{{ name }}</div>
                 <v-chip
@@ -361,6 +361,15 @@
         { label: 'orphans_deleted', value: d.orphans_deleted ?? 0 },
         { label: 'first_hjd_updated', value: d.first_hjd_updated ?? 0 },
         { label: 'run_links_cleaned', value: d.observation_run_cleaned ?? 0 },
+        { label: 'mode', value: d.dry_run ? 'dry' : 'apply' },
+      ]
+    }
+    if (name === 'unlink_non_light_datafiles') {
+      return [
+        { label: 'files_found', value: d.files_found ?? 0 },
+        { label: 'unlinks_done', value: d.unlinks_done ?? 0 },
+        { label: 'objects_updated', value: d.objects_updated ?? 0 },
+        { label: 'runs_updated', value: d.runs_updated ?? 0 },
         { label: 'mode', value: d.dry_run ? 'dry' : 'apply' },
       ]
     }

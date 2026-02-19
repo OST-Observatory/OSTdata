@@ -231,6 +231,17 @@ if env.bool('ENABLE_ORPHAN_OBJECTS_CLEANUP', default=False):
         'kwargs': {'dry_run': False},
     }
 
+# Unlink non-Light DataFiles from Objects (removes flats, darks, bias etc. from Object associations)
+UNLINK_NON_LIGHT_OBJECTS_ENABLED = env.bool('ENABLE_UNLINK_NON_LIGHT_OBJECTS_CLEANUP', default=False)
+UNLINK_NON_LIGHT_OBJECTS_HOUR = env.int('UNLINK_NON_LIGHT_OBJECTS_HOUR', default=5)  # 0-23, default 5:00
+UNLINK_NON_LIGHT_OBJECTS_MINUTE = env.int('UNLINK_NON_LIGHT_OBJECTS_MINUTE', default=0)  # 0-59
+if UNLINK_NON_LIGHT_OBJECTS_ENABLED:
+    CELERY_BEAT_SCHEDULE['unlink_non_light_datafiles_from_objects'] = {
+        'task': 'obs_run.tasks.unlink_non_light_datafiles_from_objects',
+        'schedule': crontab(minute=UNLINK_NON_LIGHT_OBJECTS_MINUTE, hour=UNLINK_NON_LIGHT_OBJECTS_HOUR),
+        'kwargs': {'dry_run': False},
+    }
+
 # CORS
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
