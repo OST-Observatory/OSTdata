@@ -19,6 +19,20 @@
           <v-card-title class="d-flex justify-space-between align-center">
             Basic Data
             <div class="d-flex align-center" style="gap: 8px">
+              <v-tooltip v-if="isAdmin" text="Re-analyse from SIMBAD (coordinates)" location="bottom">
+                <template #activator="{ props }">
+                  <v-btn
+                    v-bind="props"
+                    icon="mdi-magnify-scan"
+                    size="small"
+                    variant="text"
+                    color="primary"
+                    :loading="reanalyseLoading"
+                    aria-label="Re-analyse from SIMBAD"
+                    @click="reanalyseObjectFromSimbad"
+                  ></v-btn>
+                </template>
+              </v-tooltip>
               <v-tooltip v-if="isAdmin" text="Edit object (admin)" location="bottom">
                 <template #activator="{ props }">
                   <v-btn
@@ -1407,6 +1421,9 @@ const simbadDryRun = ref(true)
 const simbadUpdating = ref(false)
 const simbadResult = ref(null)
 
+// Re-analyse object from SIMBAD (coordinates)
+const reanalyseLoading = ref(false)
+
 // Computed properties
 const isAuthenticated = computed(() => authStore.isAuthenticated)
 const totalExposureTime = computed(() => {
@@ -1624,6 +1641,30 @@ const saveBasicData = async () => {
     console.error('Error saving basic data', e)
   } finally {
     savingBasic.value = false
+  }
+}
+
+const reanalyseObjectFromSimbad = async () => {
+  if (!object.value?.pk || !isAdmin.value) return
+  reanalyseLoading.value = true
+  try {
+    const result = await api.adminReanalyseObject(object.value.pk)
+    if (result?.success) {
+      const parts = []
+      if (result.new_name) parts.push(`name: ${result.new_name}`)
+      if (result.object_type) parts.push(`type: ${result.object_type}`)
+      if (result.identifiers_created) parts.push(`${result.identifiers_created} identifier(s)`)
+      if (result.star_verification_updated) parts.push('star verification updated')
+      notify.success(parts.length ? `Re-analysed: ${parts.join(', ')}` : 'Re-analysed')
+      await loadObject()
+    } else {
+      notify.error(result?.error || 'Re-analysis failed')
+    }
+  } catch (e) {
+    console.error('Reanalyse from SIMBAD failed', e)
+    notify.error(e?.message || 'Re-analysis failed')
+  } finally {
+    reanalyseLoading.value = false
   }
 }
 

@@ -404,6 +404,13 @@ export const api = {
       dry_run: dryRun,
     }),
   }),
+  adminReanalyseObject: (objectId, options = {}) => fetchWithAuth(`/admin/objects/${encodeURIComponent(objectId)}/reanalyse/`, {
+    method: 'POST',
+    body: JSON.stringify({
+      fixed_radius_arcmin: options.fixed_radius_arcmin ?? 10,
+      dry_run: options.dry_run ?? false,
+    }),
+  }),
   // Site-wide Banner
   getBanner: () => fetchWithAuth('/runs/banner/'),
   adminGetBanner: () => fetchWithAuth('/admin/banner/'),

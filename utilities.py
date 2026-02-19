@@ -689,7 +689,7 @@ def check_solar_system_objects_in_fov(data_file, observatory_location):
         return {'found': False, 'objects': [], 'closest': None}
 
 
-def verify_star_classification(obj, data_file=None, enable_extended_search=True):
+def verify_star_classification(obj, data_file=None, enable_extended_search=True, fixed_radius_arcmin=None, bypass_override_flags=False):
     """
     Verify if an object classified as 'ST' (star) should actually be a cluster, nebula, or galaxy.
     Performs an extended SIMBAD region search to find nearby SC/NE/GA objects with NGC/M/ACO identifiers.
@@ -702,6 +702,11 @@ def verify_star_classification(obj, data_file=None, enable_extended_search=True)
         Associated DataFile (used for FOV calculation if available)
     enable_extended_search : bool
         Whether to perform extended search (default: True)
+    fixed_radius_arcmin : float, optional
+        If provided, use this radius in arcminutes for the SIMBAD search instead of
+        computing from FOV. Takes precedence when no data_file FOV is available.
+    bypass_override_flags : bool
+        If True, ignore override flags when updating (for user-initiated actions).
     
     Returns
     -------
@@ -723,12 +728,14 @@ def verify_star_classification(obj, data_file=None, enable_extended_search=True)
     
     try:
         # Calculate FOV radius for search
-        # If data_file is provided and has FOV, use it; otherwise use object's associated DataFiles
+        # If fixed_radius_arcmin provided, use it; else if data_file has FOV use it; else use object's DataFiles
         radius_arcmin = 5.0  # Default fallback
         min_radius = 1.0
         max_radius = 30.0
         
-        if data_file and data_file.fov_x > 0 and data_file.fov_y > 0:
+        if fixed_radius_arcmin is not None:
+            radius_arcmin = max(min_radius, min(max_radius, float(fixed_radius_arcmin)))
+        elif data_file and data_file.fov_x > 0 and data_file.fov_y > 0:
             # Use FOV from the current data file
             fov_x_deg = float(data_file.fov_x)
             fov_y_deg = float(data_file.fov_y)
@@ -864,7 +871,8 @@ def verify_star_classification(obj, data_file=None, enable_extended_search=True)
             obj,
             best_match['row'],
             priority_types=priority_types,
-            dry_run=False  # Always apply updates during initial evaluation
+            dry_run=False,
+            bypass_override_flags=bypass_override_flags,
         )
         
         return {
@@ -877,6 +885,86 @@ def verify_star_classification(obj, data_file=None, enable_extended_search=True)
     except Exception as e:
         logger.warning(f'Error verifying star classification for object {obj.pk}: {e}')
         return {'updated': False, 'best_match': None, 'candidates': []}
+
+
+def reanalyse_object_from_simbad(obj, fixed_radius_arcmin=10.0, dry_run=False, bypass_override_flags=True):
+    """
+    Re-analyse an object using SIMBAD coordinates query. Updates name, object_type,
+    and identifiers. If object_type is ST, verifies star classification with
+    extended search. Propagates name changes to associated DataFiles.
+    
+    Parameters
+    ----------
+    obj : Object
+        Object instance to re-analyse
+    fixed_radius_arcmin : float
+        Search radius in arcminutes for SIMBAD region query (default: 10.0)
+    dry_run : bool
+        If True, don't save changes (default: False)
+    bypass_override_flags : bool
+        If True, ignore override flags and apply all updates (default: True for
+        this user-initiated action).
+    
+    Returns
+    -------
+    dict
+        Result with 'success', 'error', 'updated_fields', 'new_name', 'object_type',
+        'identifiers_created', 'star_verification_updated'
+    """
+    if obj.ra in (-1, None, 0) or obj.dec in (-1, None, 0):
+        return {'success': False, 'error': 'Invalid coordinates for SIMBAD query'}
+    
+    try:
+        radius_str = '0d10m0s'
+        if fixed_radius_arcmin > 0:
+            deg = int(fixed_radius_arcmin // 60)
+            rem = fixed_radius_arcmin - deg * 60
+            am = int(rem)
+            asec = int((rem - am) * 60)
+            radius_str = f"{deg}d{am}m{asec}s"
+        
+        result_table = _query_region_safe(obj.ra, obj.dec, radius_str, row_limit=500)
+        if result_table is None or len(result_table) == 0:
+            return {'success': False, 'error': f'No SIMBAD result found for coordinates'}
+        
+        # Use brightest object if V magnitude available, else first (closest)
+        index = 0
+        if not np.all(result_table['V'].mask):
+            index = int(np.argmin(result_table['V'].data))
+        row = result_table[index]
+        
+        update_result = update_object_from_simbad_result(
+            obj,
+            row,
+            priority_types=['NE', 'SC', 'GA', 'ST'],
+            dry_run=dry_run,
+            allow_all_types=True,
+            bypass_override_flags=bypass_override_flags,
+        )
+        
+        star_verification_updated = False
+        if not dry_run and obj.object_type == 'ST':
+            verification_result = verify_star_classification(
+                obj,
+                data_file=None,
+                enable_extended_search=True,
+                fixed_radius_arcmin=fixed_radius_arcmin,
+                bypass_override_flags=bypass_override_flags,
+            )
+            star_verification_updated = verification_result.get('updated', False)
+        
+        return {
+            'success': True,
+            'updated_fields': update_result.get('updated_fields', []),
+            'new_name': update_result.get('new_name'),
+            'object_type': update_result.get('new_object_type'),
+            'identifiers_created': update_result.get('identifiers_created', 0),
+            'identifiers_deleted': update_result.get('identifiers_deleted', 0),
+            'star_verification_updated': star_verification_updated,
+        }
+    except Exception as e:
+        logger.exception('reanalyse_object_from_simbad failed for object %s: %s', obj.pk, e)
+        return {'success': False, 'error': str(e)}
 
 
 def propagate_object_name_to_datafiles(obj):
@@ -892,9 +980,9 @@ def propagate_object_name_to_datafiles(obj):
             df.save(update_fields=['main_target'])
 
 
-def update_object_from_simbad_result(obj, simbad_table_row, priority_types=['NE', 'SC', 'GA'], dry_run=False):
+def update_object_from_simbad_result(obj, simbad_table_row, priority_types=['NE', 'SC', 'GA'], dry_run=False, allow_all_types=False, bypass_override_flags=False):
     """
-    Update object from SIMBAD result, respecting override flags.
+    Update object from SIMBAD result, respecting override flags unless bypassed.
     
     Parameters
     ----------
@@ -907,6 +995,12 @@ def update_object_from_simbad_result(obj, simbad_table_row, priority_types=['NE'
         If multiple matches found, highest priority in this list wins
     dry_run : bool
         If True, don't save changes (default: False)
+    allow_all_types : bool
+        If True, accept any detected type including 'ST' (star).
+        If False, only types in priority_types are accepted (default: False)
+    bypass_override_flags : bool
+        If True, ignore override flags and apply all updates (for user-initiated
+        actions like explicit re-analyse). Default: False.
     
     Returns
     -------
@@ -933,8 +1027,8 @@ def update_object_from_simbad_result(obj, simbad_table_row, priority_types=['NE'
         else:
             return result  # No valid type detected
     
-    # Check if detected type is in priority list (we're looking for SC, NE, GA, not ST)
-    if detected_type not in priority_types:
+    # Check if detected type is in priority list (or allow all types)
+    if not allow_all_types and detected_type not in priority_types:
         return result  # Not a type we're interested in
     
     # Extract coordinates
@@ -963,11 +1057,14 @@ def update_object_from_simbad_result(obj, simbad_table_row, priority_types=['NE'
     sanitized_name = new_name.replace(" ", "").replace('+', "%2B")
     simbad_href = f"https://simbad.u-strasbg.fr/simbad/sim-id?Ident={sanitized_name}"
     
-    # Check override flags and update fields
+    # Check override flags and update fields (or bypass if user explicitly requested)
+    def can_update(field_name):
+        return bypass_override_flags or should_allow_auto_update(obj, field_name)
+
     update_fields = []
-    
+
     # Update object_type
-    if should_allow_auto_update(obj, 'object_type'):
+    if can_update('object_type'):
         if obj.object_type != detected_type:
             obj.object_type = detected_type
             update_fields.append('object_type')
@@ -975,20 +1072,20 @@ def update_object_from_simbad_result(obj, simbad_table_row, priority_types=['NE'
             result['new_object_type'] = detected_type
     
     # Update coordinates
-    if should_allow_auto_update(obj, 'ra'):
+    if can_update('ra'):
         if abs(obj.ra - simbad_ra) > 0.0001:  # Small tolerance for float comparison
             obj.ra = simbad_ra
             update_fields.append('ra')
             result['updated_fields'].append('ra')
     
-    if should_allow_auto_update(obj, 'dec'):
+    if can_update('dec'):
         if abs(obj.dec - simbad_dec) > 0.0001:
             obj.dec = simbad_dec
             update_fields.append('dec')
             result['updated_fields'].append('dec')
     
     # Update name
-    if should_allow_auto_update(obj, 'name'):
+    if can_update('name'):
         if obj.name != new_name:
             obj.name = new_name
             update_fields.append('name')
@@ -996,7 +1093,7 @@ def update_object_from_simbad_result(obj, simbad_table_row, priority_types=['NE'
             result['new_name'] = new_name
     
     # Update simbad_resolved flag
-    if should_allow_auto_update(obj, 'simbad_resolved'):
+    if can_update('simbad_resolved'):
         if not obj.simbad_resolved:
             obj.simbad_resolved = True
             update_fields.append('simbad_resolved')

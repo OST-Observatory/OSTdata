@@ -49,7 +49,15 @@ from obs_run.models import ObservationRun, DataFile
 from obs_run.api.serializers import DataFileSerializer
 from obs_run.api.views import DataFilesPagination
 from objects.models import Object, Identifier
-from utilities import _query_object_variants, _query_region_safe, update_observation_run_photometry_spectroscopy, update_object_photometry_spectroscopy, annotate_effective_exposure_type, evaluate_data_file
+from utilities import (
+    _query_object_variants, 
+    _query_region_safe, 
+    update_observation_run_photometry_spectroscopy, 
+    update_object_photometry_spectroscopy, 
+    annotate_effective_exposure_type, 
+    evaluate_data_file, 
+    reanalyse_object_from_simbad
+)
 from obs_run.utils import should_allow_auto_update
 from obs_run.plate_solving import PlateSolvingService, solve_and_update_datafile
 from django.db.models import Q, F, Count, Case, When, Value
@@ -917,6 +925,49 @@ def admin_update_object_identifiers(request, object_id):
         return Response({
             'error': f'Unexpected error: {str(e)}',
         }, status=500)
+
+
+@extend_schema(
+    summary='Re-analyse object from SIMBAD (coordinates)',
+    description='Query SIMBAD by object coordinates, update name, object_type, and identifiers. '
+                'If classified as star, verifies with extended search (default 10 arcmin). '
+                'Propagates name changes to associated DataFiles.',
+    request=serializers.Serializer,
+    responses={200: serializers.Serializer}
+)
+@api_view(['POST'])
+@permission_classes([IsAdminUser])
+def admin_reanalyse_object(request, object_id):
+    """
+    Re-analyse object from SIMBAD based on coordinates.
+    Updates: name (main_id), object_type, identifiers.
+    If object_type is ST, runs star verification (extended search, default 10 arcmin FOV).
+    Propagates name changes to associated DataFiles.
+    """
+    try:
+        obj = Object.objects.get(pk=object_id)
+    except Object.DoesNotExist:
+        return Response({'success': False, 'error': 'Object not found'}, status=404)
+    except Exception as e:
+        logger.exception(f'Error fetching object {object_id}: {e}')
+        return Response({'success': False, 'error': str(e)}, status=500)
+
+    try:
+        fixed_radius = request.data.get('fixed_radius_arcmin', 10.0)
+        try:
+            fixed_radius = float(fixed_radius)
+        except (TypeError, ValueError):
+            fixed_radius = 10.0
+        dry_run = request.data.get('dry_run', False)
+        dry_run = str(dry_run).lower() in ('true', '1', 'yes')
+
+        result = reanalyse_object_from_simbad(obj, fixed_radius_arcmin=fixed_radius, dry_run=dry_run)
+        if result.get('success'):
+            return Response(result)
+        return Response(result, status=400)
+    except Exception as e:
+        logger.exception(f'Reanalyse failed for object {object_id}: {e}')
+        return Response({'success': False, 'error': str(e)}, status=500)
 
 
 @extend_schema(

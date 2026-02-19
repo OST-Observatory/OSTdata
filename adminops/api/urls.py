@@ -1,5 +1,6 @@
 from django.urls import path
 from .views import (
+    admin_reanalyse_object,
     admin_list_all_datafiles,
     admin_re_evaluate_datafiles,
     admin_re_evaluate_run,
@@ -62,6 +63,7 @@ urlpatterns = [
     path('banner-info/', banner_info, name='banner_info'),
     path('objects/<int:object_id>/delete-aliases/', admin_delete_object_aliases, name='delete_object_aliases'),
     path('objects/<int:object_id>/update-identifiers/', admin_update_object_identifiers, name='update_object_identifiers'),
+    path('objects/<int:object_id>/reanalyse/', admin_reanalyse_object, name='reanalyse_object'),
     # DataFiles list (all) and re-evaluate
     path('datafiles/', admin_list_all_datafiles, name='list_all_datafiles'),
     path('datafiles/re-evaluate/', admin_re_evaluate_datafiles, name='re_evaluate_datafiles'),
