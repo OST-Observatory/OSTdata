@@ -1467,7 +1467,10 @@ def evaluate_data_file(data_file, observation_run, print_to_terminal=False, skip
                 objs = Object.objects.filter(name__icontains=target)
             else:
                 # First, filter by a bounding box to reduce candidates
+                # Exclude solar system objects (SO) - their coords are ephemeral snapshots;
+                # they must only be matched by name (when target in solar_system list)
                 bbox = Object.objects \
+                    .exclude(object_type='SO') \
                     .filter(ra__range=(lookup_ra - t, lookup_ra + t)) \
                     .filter(dec__range=(lookup_dec - t, lookup_dec + t))
                 # Annotate squared angular distance (no sqrt needed for ordering)
@@ -1566,10 +1569,11 @@ def evaluate_data_file(data_file, observation_run, print_to_terminal=False, skip
                 if print_to_terminal:
                     print('New object (target: {})'.format(target))
                 #     Make a new object
+                # Use ra=-1, dec=-1 for solar system objects (ephemeral coords, avoid interference)
                 obj = Object(
                     name=target,
-                    ra=lookup_ra,
-                    dec=lookup_dec,
+                    ra=-1,
+                    dec=-1,
                     object_type='SO',
                     simbad_resolved=False,
                     first_hjd=data_file.hjd,
@@ -1717,10 +1721,13 @@ def evaluate_data_file(data_file, observation_run, print_to_terminal=False, skip
                 # Ensure object_type is never None (DB NOT NULL constraint)
                 if object_type is None:
                     object_type = 'UK'
+                # Solar system objects: use ra=-1, dec=-1 (ephemeral coords, avoid interference)
+                obj_ra = -1 if object_type == 'SO' else object_ra
+                obj_dec = -1 if object_type == 'SO' else object_dec
                 obj = Object(
                     name=object_name,
-                    ra=object_ra,
-                    dec=object_dec,
+                    ra=obj_ra,
+                    dec=obj_dec,
                     object_type=object_type,
                     simbad_resolved=object_simbad_resolved,
                     first_hjd=data_file.hjd,
