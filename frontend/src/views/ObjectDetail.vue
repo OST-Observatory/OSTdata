@@ -45,6 +45,18 @@
                   ></v-btn>
                 </template>
               </v-tooltip>
+              <v-tooltip v-if="isAdmin" text="Update identifiers from SIMBAD" location="bottom">
+                <template #activator="{ props }">
+                  <v-btn
+                    v-bind="props"
+                    icon="mdi-database-search"
+                    size="small"
+                    variant="text"
+                    aria-label="Update identifiers from SIMBAD"
+                    @click="openSimbadIdentifiersDialog"
+                  ></v-btn>
+                </template>
+              </v-tooltip>
               <v-tooltip v-if="isAuthenticated" text="Edit basic data" location="bottom">
                 <template #activator="{ props }">
                   <v-btn
@@ -581,13 +593,21 @@
               />
             </v-col>
           </v-row>
-          
-          <!-- SIMBAD Identifier Update Section -->
-          <v-divider class="my-4"></v-divider>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" @click="objectEditDialog = false">Cancel</v-btn>
+          <v-btn color="primary" variant="flat" :loading="objectEditSaving" @click="saveObjectEdit">Save</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <!-- Update Identifiers from SIMBAD Dialog -->
+    <v-dialog v-model="simbadIdentifiersDialog" max-width="540" aria-labelledby="simbad-identifiers-title">
+      <v-card>
+        <v-card-title id="simbad-identifiers-title">Update Identifiers from SIMBAD</v-card-title>
+        <v-card-text>
           <v-row dense>
-            <v-col cols="12">
-              <div class="text-h6 mb-2">Update Identifiers from SIMBAD</div>
-            </v-col>
             <v-col cols="12">
               <v-radio-group v-model="simbadMatchMethod" inline hide-details>
                 <v-radio label="Match by Name" value="name" color="primary"></v-radio>
@@ -653,8 +673,7 @@
         </v-card-text>
         <v-card-actions>
           <v-spacer />
-          <v-btn variant="text" @click="objectEditDialog = false">Cancel</v-btn>
-          <v-btn color="primary" variant="flat" :loading="objectEditSaving" @click="saveObjectEdit">Save</v-btn>
+          <v-btn variant="text" @click="simbadIdentifiersDialog = false">Close</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -1415,7 +1434,8 @@ const objectEditForm = ref({
 const deleteAliasesDialog = ref(false)
 const deletingAliases = ref(false)
 
-// SIMBAD identifier update
+// SIMBAD identifier update (separate dialog)
+const simbadIdentifiersDialog = ref(false)
 const simbadMatchMethod = ref('name')
 const simbadDryRun = ref(true)
 const simbadUpdating = ref(false)
@@ -1551,11 +1571,15 @@ const openObjectEdit = () => {
     raHms: degToHms(ra),
     decDms: degToDms(dec),
   }
-  // Reset SIMBAD update state
+  objectEditDialog.value = true
+}
+
+const openSimbadIdentifiersDialog = () => {
+  if (!object.value?.pk || !isAdmin.value) return
   simbadMatchMethod.value = 'name'
   simbadDryRun.value = true
   simbadResult.value = null
-  objectEditDialog.value = true
+  simbadIdentifiersDialog.value = true
 }
 
 const updateIdentifiersFromSimbad = async () => {
