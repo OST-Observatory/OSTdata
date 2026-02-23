@@ -127,6 +127,26 @@
           <span class="cell-truncate">{{ item.file_name }}</span>
         </template>
 
+        <template #item.main_target="{ item }">
+          <template v-if="isLight(item)">
+            <template v-if="item.header_target_name && item.header_target_name.trim() && item.header_target_name !== '-'">
+              {{ item.header_target_name }}
+              <template v-if="item.main_target && item.main_target.trim() && item.main_target !== '-'">
+                <span class="text-secondary"> (</span>
+                <router-link
+                  v-if="getObjectIdByTargetName(item.main_target)"
+                  :to="`/objects/${getObjectIdByTargetName(item.main_target)}`"
+                  class="text-decoration-none text-primary"
+                >{{ item.main_target }}</router-link>
+                <span v-else>{{ item.main_target }}</span>
+                <span class="text-secondary">)</span>
+              </template>
+            </template>
+            <span v-else>{{ (item.header_target_name && item.header_target_name !== '-') ? item.header_target_name : (item.main_target && item.main_target !== '-') ? item.main_target : '—' }}</span>
+          </template>
+          <span v-else class="text-secondary">—</span>
+        </template>
+
         <template #item.observation_run_name="{ item }">
           <router-link :to="`/observation-runs/${item.observation_run}`" class="text-primary text-decoration-none">
             {{ item.observation_run_name }}
@@ -350,6 +370,7 @@ const sortOrder = ref('desc')
 const ordering = computed(() => (sortOrder.value === 'desc' ? '-' : '') + sortBy.value)
 
 const observationRuns = ref([])
+const objectNamesForTargets = ref([])
 const filters = ref({
   observation_run_name: null,
   file_name: null,
@@ -445,6 +466,29 @@ const linkObjectForm = ref({ selectedObject: null })
 const linkObjectSearchResults = ref([])
 const linkObjectSearchLoading = ref(false)
 const linkObjectSaving = ref(false)
+
+const targetNameToObjectId = computed(() => {
+  const map = new Map()
+  for (const o of objectNamesForTargets.value || []) {
+    if (o?.name) {
+      const normalized = String(o.name).toLowerCase().replace(/\s+/g, '')
+      map.set(normalized, o.pk || o.id)
+      map.set(String(o.name).toLowerCase(), o.pk || o.id)
+    }
+  }
+  return map
+})
+
+function getObjectIdByTargetName(name) {
+  if (!name) return null
+  const normalized = String(name).toLowerCase().replace(/\s+/g, '')
+  return targetNameToObjectId.value.get(normalized) || targetNameToObjectId.value.get(String(name).toLowerCase()) || null
+}
+
+function isLight(df) {
+  const code = (df?.effective_exposure_type || df?.exposure_type || '').toUpperCase()
+  return code === 'LI' || df?.exposure_type_display === 'Light'
+}
 
 function isActionLoading(item) {
   const pk = item?.pk
@@ -906,8 +950,18 @@ async function loadObservationRuns() {
   }
 }
 
+async function loadObjectNamesForTargets() {
+  try {
+    const res = await api.getObjectsVuetify({ page: 1, itemsPerPage: 5000 })
+    objectNamesForTargets.value = res?.items ?? res?.results ?? []
+  } catch {
+    objectNamesForTargets.value = []
+  }
+}
+
 onMounted(() => {
   loadObservationRuns()
+  loadObjectNamesForTargets()
   fetchFiles()
 })
 </script>
