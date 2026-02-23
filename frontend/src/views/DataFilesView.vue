@@ -165,63 +165,28 @@
         </template>
 
         <template #item.actions="{ item }">
-          <div class="d-flex align-center flex-wrap" style="gap: 2px">
-            <v-tooltip text="Preview thumbnail" location="top">
-              <template #activator="{ props }">
-                <v-btn v-bind="props" icon="mdi-eye" size="x-small" variant="text" @click="openPreview(item)" :aria-label="`Preview ${item.file_name}`" />
-              </template>
-            </v-tooltip>
-            <v-tooltip text="View FITS header" location="top">
-              <template #activator="{ props }">
-                <v-btn v-bind="props" icon="mdi-code-tags" size="x-small" variant="text" @click="openHeader(item)" :aria-label="`Header ${item.file_name}`" />
-              </template>
-            </v-tooltip>
-            <v-tooltip text="View WCS information" location="top">
-              <template #activator="{ props }">
-                <v-btn v-bind="props" icon="mdi-crosshairs-gps" size="x-small" variant="text" @click="openWcs(item)" :aria-label="`WCS ${item.file_name}`" />
-              </template>
-            </v-tooltip>
-            <v-tooltip text="Trigger plate solving" location="top">
-              <template #activator="{ props }">
-                <v-btn v-bind="props" icon="mdi-star-four-points" size="x-small" variant="text" :loading="triggeringSingle === item.pk" @click="triggerPlateSolveSingle(item)" :aria-label="`Plate solve ${item.file_name}`" />
-              </template>
-            </v-tooltip>
-            <v-tooltip text="Set exposure type" location="top">
-              <template #activator="{ props }">
-                <v-btn v-bind="props" icon="mdi-pencil" size="x-small" variant="text" @click="openExposureTypeDialog(item)" :aria-label="`Set type ${item.file_name}`" />
-              </template>
-            </v-tooltip>
-            <v-tooltip text="Set spectrograph" location="top">
-              <template #activator="{ props }">
-                <v-btn v-bind="props" icon="mdi-telescope" size="x-small" variant="text" @click="openSpectrographDialog(item)" :aria-label="`Spectrograph ${item.file_name}`" />
-              </template>
-            </v-tooltip>
-            <v-tooltip text="Re-evaluate object association" location="top">
-              <template #activator="{ props }">
-                <v-btn v-bind="props" icon="mdi-refresh" size="x-small" variant="text" :loading="reEvalSingle === item.pk" @click="reEvaluateSingle(item)" :aria-label="`Re-evaluate ${item.file_name}`" />
-              </template>
-            </v-tooltip>
-            <v-tooltip text="Link to object" location="top">
-              <template #activator="{ props }">
-                <v-btn v-bind="props" icon="mdi-link" size="x-small" variant="text" :loading="linkObjectSingle === item.pk" @click="openLinkObjectDialog(item)" :aria-label="`Link to object ${item.file_name}`" />
-              </template>
-            </v-tooltip>
-            <v-tooltip text="Unlink from objects" location="top">
-              <template #activator="{ props }">
-                <v-btn v-bind="props" icon="mdi-link-off" size="x-small" variant="text" :loading="unlinkObjectSingle === item.pk" @click="openUnlinkConfirm(item)" :aria-label="`Unlink ${item.file_name}`" />
-              </template>
-            </v-tooltip>
-            <v-tooltip text="Clear override flags" location="top">
-              <template #activator="{ props }">
-                <v-btn v-bind="props" icon="mdi-flag-off" size="x-small" variant="text" :loading="clearOverrideSingle === item.pk" @click="clearOverrideSingleItem(item)" :aria-label="`Clear overrides ${item.file_name}`" />
-              </template>
-            </v-tooltip>
-            <v-tooltip text="Download file" location="top">
-              <template #activator="{ props }">
-                <v-btn v-bind="props" icon="mdi-download" size="x-small" variant="text" :href="api.getDataFileDownloadUrl(item.pk)" target="_blank" rel="noopener" :aria-label="`Download ${item.file_name}`" />
-              </template>
-            </v-tooltip>
-          </div>
+          <v-menu>
+            <template #activator="{ props }">
+              <v-btn v-bind="props" icon="mdi-dots-vertical" size="x-small" variant="text" :loading="isActionLoading(item)" :aria-label="`Actions for ${item.file_name}`" />
+            </template>
+            <v-list density="compact" min-width="200">
+              <v-list-item prepend-icon="mdi-eye" title="Preview thumbnail" @click="openPreview(item)" />
+              <v-list-item prepend-icon="mdi-code-tags" title="FITS header" @click="openHeader(item)" />
+              <v-list-item prepend-icon="mdi-crosshairs-gps" title="WCS information" @click="openWcs(item)" />
+              <v-divider />
+              <v-list-item prepend-icon="mdi-pencil" title="Set exposure type" @click="openExposureTypeDialog(item)" />
+              <v-list-item prepend-icon="mdi-telescope" title="Set spectrograph" @click="openSpectrographDialog(item)" />
+              <v-divider />
+              <v-list-item prepend-icon="mdi-link" title="Link to object" @click="openLinkObjectDialog(item)" />
+              <v-list-item prepend-icon="mdi-link-off" title="Unlink from objects" @click="openUnlinkConfirm(item)" />
+              <v-list-item prepend-icon="mdi-refresh" title="Re-evaluate object" @click="reEvaluateSingle(item)" />
+              <v-divider />
+              <v-list-item prepend-icon="mdi-star-four-points" title="Trigger plate solve" @click="triggerPlateSolveSingle(item)" />
+              <v-list-item prepend-icon="mdi-flag-off" title="Clear override flags" @click="clearOverrideSingleItem(item)" />
+              <v-divider />
+              <v-list-item prepend-icon="mdi-download" title="Download" :href="api.getDataFileDownloadUrl(item.pk)" target="_blank" rel="noopener" />
+            </v-list>
+          </v-menu>
         </template>
       </v-data-table>
 
@@ -433,7 +398,7 @@ const headers = [
   { title: 'Exp. Time', key: 'exptime', sortable: true },
   { title: 'Plate', key: 'plate_solved', sortable: true },
   { title: 'Spectr.', key: 'spectrograph', sortable: true },
-  { title: 'Actions', key: 'actions', sortable: false, width: '200px' },
+  { title: 'Actions', key: 'actions', sortable: false, width: '60px' },
 ]
 
 const busy = ref({ plateSolve: false, reEvaluate: false, clearOverrides: false, linkObject: false, unlinkObject: false })
@@ -480,6 +445,11 @@ const linkObjectForm = ref({ selectedObject: null })
 const linkObjectSearchResults = ref([])
 const linkObjectSearchLoading = ref(false)
 const linkObjectSaving = ref(false)
+
+function isActionLoading(item) {
+  const pk = item?.pk
+  return triggeringSingle.value === pk || reEvalSingle.value === pk || linkObjectSingle.value === pk || unlinkObjectSingle.value === pk || clearOverrideSingle.value === pk
+}
 
 const selectedIds = computed(() => selected.value.map(v => (v && typeof v === 'object') ? v.pk : v).filter(Boolean))
 const selectedCount = computed(() => selectedIds.value.length)
