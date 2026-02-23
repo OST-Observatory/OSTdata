@@ -5,6 +5,7 @@ from .views import (
     admin_re_evaluate_datafiles,
     admin_re_evaluate_run,
     admin_link_datafiles_to_object,
+    admin_unlink_datafiles_from_objects,
     admin_health,
     admin_trigger_cleanup_downloads,
     admin_trigger_reconcile,
@@ -68,6 +69,7 @@ urlpatterns = [
     path('datafiles/', admin_list_all_datafiles, name='list_all_datafiles'),
     path('datafiles/re-evaluate/', admin_re_evaluate_datafiles, name='re_evaluate_datafiles'),
     path('datafiles/link-objects/', admin_link_datafiles_to_object, name='link_datafiles_to_object'),
+    path('datafiles/unlink-objects/', admin_unlink_datafiles_from_objects, name='unlink_datafiles_from_objects'),
     # Exposure type classification endpoints
     path('datafiles/discrepancies/', admin_get_exposure_type_discrepancies, name='exposure_type_discrepancies'),
     path('datafiles/<int:pk>/exposure-type-user/', admin_update_exposure_type_user, name='update_exposure_type_user'),

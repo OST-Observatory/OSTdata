@@ -389,6 +389,10 @@ export const api = {
     method: 'POST',
     body: JSON.stringify({ datafile_ids: datafileIds, object_id: objectId }),
   }),
+  adminUnlinkDatafilesFromObjects: (datafileIds) => fetchWithAuth('/admin/datafiles/unlink-objects/', {
+    method: 'POST',
+    body: JSON.stringify({ datafile_ids: datafileIds }),
+  }),
   // Admin - Runs date tools
   adminSetRunDate: (runId, payload = {}) => fetchWithAuth(`/admin/runs/${encodeURIComponent(runId)}/set-date/`, { method: 'POST', body: JSON.stringify(payload) }),
   adminRecomputeRunDate: (runId) => fetchWithAuth(`/admin/runs/${encodeURIComponent(runId)}/recompute-date/`, { method: 'POST' }),

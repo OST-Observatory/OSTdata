@@ -90,6 +90,7 @@
           <v-btn color="primary" variant="outlined" prepend-icon="mdi-refresh" :loading="busy.reEvaluate" @click="bulkReEvaluate">Re-evaluate</v-btn>
           <v-btn color="secondary" variant="outlined" prepend-icon="mdi-flag-off" :loading="busy.clearOverrides" @click="bulkClearOverrides">Clear Overrides</v-btn>
           <v-btn color="primary" variant="outlined" prepend-icon="mdi-link" :loading="busy.linkObject" @click="openLinkObjectDialog(null)">Link to Object</v-btn>
+          <v-btn color="secondary" variant="outlined" prepend-icon="mdi-link-off" :loading="busy.unlinkObject" @click="openUnlinkConfirm(null)">Unlink from Objects</v-btn>
         </div>
       </v-card-text>
     </v-card>
@@ -203,6 +204,11 @@
             <v-tooltip text="Link to object" location="top">
               <template #activator="{ props }">
                 <v-btn v-bind="props" icon="mdi-link" size="x-small" variant="text" :loading="linkObjectSingle === item.pk" @click="openLinkObjectDialog(item)" :aria-label="`Link to object ${item.file_name}`" />
+              </template>
+            </v-tooltip>
+            <v-tooltip text="Unlink from objects" location="top">
+              <template #activator="{ props }">
+                <v-btn v-bind="props" icon="mdi-link-off" size="x-small" variant="text" :loading="unlinkObjectSingle === item.pk" @click="openUnlinkConfirm(item)" :aria-label="`Unlink ${item.file_name}`" />
               </template>
             </v-tooltip>
             <v-tooltip text="Clear override flags" location="top">
@@ -329,6 +335,23 @@
       </v-card>
     </v-dialog>
 
+    <!-- Unlink from Objects confirmation dialog -->
+    <v-dialog v-model="unlinkConfirmDialog" max-width="480" persistent>
+      <v-card>
+        <v-card-title>Unlink from Objects</v-card-title>
+        <v-card-text>
+          {{ unlinkConfirmBulk
+            ? `Remove object association for ${unlinkConfirmIds.length} selected file(s)?`
+            : 'Remove object association for this file?' }}
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" @click="unlinkConfirmDialog = false">Cancel</v-btn>
+          <v-btn color="error" variant="flat" :loading="unlinkConfirmSaving" @click="confirmUnlinkFromObjects">Unlink</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
     <!-- Spectrograph dialog -->
     <v-dialog v-model="spectrographDialog" max-width="500">
       <v-card>
@@ -413,11 +436,16 @@ const headers = [
   { title: 'Actions', key: 'actions', sortable: false, width: '200px' },
 ]
 
-const busy = ref({ plateSolve: false, reEvaluate: false, clearOverrides: false, linkObject: false })
+const busy = ref({ plateSolve: false, reEvaluate: false, clearOverrides: false, linkObject: false, unlinkObject: false })
 const triggeringSingle = ref(null)
 const reEvalSingle = ref(null)
 const clearOverrideSingle = ref(null)
 const linkObjectSingle = ref(null)
+const unlinkObjectSingle = ref(null)
+const unlinkConfirmDialog = ref(false)
+const unlinkConfirmIds = ref([])
+const unlinkConfirmBulk = ref(false)
+const unlinkConfirmSaving = ref(false)
 
 const previewDialog = ref(false)
 const previewTitle = ref('')
@@ -836,6 +864,43 @@ async function saveLinkObject() {
     linkObjectSaving.value = false
     linkObjectSingle.value = null
     busy.value.linkObject = false
+  }
+}
+
+function openUnlinkConfirm(item) {
+  if (item) {
+    unlinkConfirmIds.value = [item.pk]
+    unlinkConfirmBulk.value = false
+  } else {
+    unlinkConfirmIds.value = [...selectedIds.value]
+    unlinkConfirmBulk.value = true
+    if (!unlinkConfirmIds.value.length) return
+  }
+  unlinkConfirmDialog.value = true
+}
+
+async function confirmUnlinkFromObjects() {
+  const ids = unlinkConfirmIds.value
+  if (!ids.length) {
+    unlinkConfirmDialog.value = false
+    return
+  }
+  unlinkConfirmSaving.value = true
+  if (unlinkConfirmBulk.value) busy.value.unlinkObject = true
+  else if (ids.length) unlinkObjectSingle.value = ids[0]
+  try {
+    const res = await api.adminUnlinkDatafilesFromObjects(ids)
+    const msg = res?.unlinked > 0 ? `Unlinked ${res.unlinked} association(s) from ${res.objects_updated ?? 0} object(s)` : 'No object associations to remove'
+    notify.success(msg)
+    unlinkConfirmDialog.value = false
+    if (unlinkConfirmBulk.value) selected.value = []
+    await fetchFiles()
+  } catch (e) {
+    notify.error('Failed to unlink from objects')
+  } finally {
+    unlinkConfirmSaving.value = false
+    unlinkObjectSingle.value = null
+    busy.value.unlinkObject = false
   }
 }
 

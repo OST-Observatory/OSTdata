@@ -1743,3 +1743,50 @@ def admin_link_datafiles_to_object(request):
     return Response({'linked': linked, 'already_linked': already_linked})
 
 
+@extend_schema(
+    summary='Unlink DataFiles from Objects',
+    request=serializers.Serializer,
+)
+@api_view(['POST'])
+@permission_classes([IsAdminUser])
+def admin_unlink_datafiles_from_objects(request):
+    """
+    Remove Object–DataFile associations for the given DataFiles.
+    Body: { "datafile_ids": [1, 2, 3] }
+    """
+    datafile_ids = request.data.get('datafile_ids', [])
+
+    if not datafile_ids or not isinstance(datafile_ids, list):
+        return Response({'detail': 'datafile_ids must be a non-empty list'}, status=400)
+
+    datafiles = DataFile.objects.filter(pk__in=datafile_ids).select_related('observation_run')
+    unlinked = 0
+    objects_updated = set()
+    runs_updated = set()
+
+    for datafile in datafiles:
+        objects = list(datafile.object_set.only('pk').all())
+        for obj in objects:
+            obj.datafiles.remove(datafile)
+            unlinked += 1
+            objects_updated.add(obj.pk)
+        for obj in objects:
+            try:
+                update_object_photometry_spectroscopy(obj)
+            except Exception as e:
+                logger.warning('Photometry/spectroscopy update after unlink failed for Object #%s: %s', obj.pk, e)
+        for obj in objects:
+            for run in obj.observation_run.only('pk'):
+                try:
+                    update_observation_run_photometry_spectroscopy(run)
+                    runs_updated.add(run.pk)
+                except Exception:
+                    pass
+
+    return Response({
+        'unlinked': unlinked,
+        'objects_updated': len(objects_updated),
+        'runs_updated': len(runs_updated),
+    })
+
+
