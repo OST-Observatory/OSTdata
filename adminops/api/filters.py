@@ -7,6 +7,7 @@ from django.db.models import Q
 
 from obs_run.models import DataFile
 from tags.models import Tag
+from utilities import annotate_effective_exposure_type
 
 
 class AdminDataFileFilter(filters.FilterSet):
@@ -31,6 +32,15 @@ class AdminDataFileFilter(filters.FilterSet):
     )
     exposure_type_user = filters.MultipleChoiceFilter(
         field_name='exposure_type_user',
+        choices=DataFile.EXPOSURE_TYPE_POSSIBILITIES,
+    )
+    has_user_type = filters.BooleanFilter(
+        method='filter_has_user_type',
+        label='Has user-set exposure type',
+    )
+    effective_exposure_type = filters.MultipleChoiceFilter(
+        method='filter_effective_exposure_type',
+        label='Effective exposure type',
         choices=DataFile.EXPOSURE_TYPE_POSSIBILITIES,
     )
     spectroscopy = filters.BooleanFilter(field_name='spectroscopy')
@@ -64,3 +74,20 @@ class AdminDataFileFilter(filters.FilterSet):
         if value is False:
             return queryset.filter(Q(plate_solve_error__isnull=True) | Q(plate_solve_error=''))
         return queryset
+
+    def filter_has_user_type(self, queryset, name, value):
+        if value is True:
+            return queryset.exclude(Q(exposure_type_user__isnull=True) | Q(exposure_type_user=''))
+        if value is False:
+            return queryset.filter(Q(exposure_type_user__isnull=True) | Q(exposure_type_user=''))
+        return queryset
+
+    def filter_effective_exposure_type(self, queryset, name, value):
+        if not value:
+            return queryset
+        values = [value] if isinstance(value, str) else list(value)
+        values = [v for v in values if v]
+        if not values:
+            return queryset
+        queryset = annotate_effective_exposure_type(queryset)
+        return queryset.filter(annotated_effective_exposure_type__in=values)

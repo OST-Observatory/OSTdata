@@ -158,7 +158,7 @@ def build_zip_task(self, job_id: int):
         if f.get('exposure_type'):
             # Use effective exposure type for filtering
             qs = annotate_effective_exposure_type(qs)
-            qs = qs.filter(effective_exposure_type__in=f['exposure_type'])
+            qs = qs.filter(annotated_effective_exposure_type__in=f['exposure_type'])
         if f.get('spectroscopy') is not None:
             qs = qs.filter(spectroscopy=bool(f['spectroscopy']))
         if f.get('exptime_min') is not None:
@@ -745,14 +745,14 @@ def unlink_non_light_datafiles_from_objects(self, dry_run: bool = True):
     linked_df_ids = through.objects.values_list('datafile_id', flat=True).distinct()
     
     qs = annotate_effective_exposure_type(DataFile.objects.filter(pk__in=linked_df_ids))
-    non_light = qs.exclude(effective_exposure_type='LI')
+    non_light = qs.exclude(annotated_effective_exposure_type='LI')
     files_found = non_light.count()
     unlinks_done = 0
     objects_updated = set()
     runs_updated = set()
     
     if not dry_run:
-        # Iterate over PKs to avoid AttributeError: annotate adds effective_exposure_type
+        # Iterate over PKs to avoid AttributeError: annotate adds annotated_effective_exposure_type
         # which conflicts with DataFile's read-only property of the same name
         for df_pk in non_light.values_list('pk', flat=True):
             try:
@@ -926,7 +926,7 @@ def refresh_dashboard_stats(self):
             lights=Count('pk', filter=get_effective_exposure_type_filter('LI', '')),
             waves=Count('pk', filter=get_effective_exposure_type_filter('WA', '')),
             # Spectra: Light frames with spectrograph != 'N' (NONE)
-            spectra=Count('pk', filter=Q(effective_exposure_type='LI') & ~Q(spectrograph='N')),
+            spectra=Count('pk', filter=Q(annotated_effective_exposure_type='LI') & ~Q(spectrograph='N')),
             fits=Count('pk', filter=Q(file_type='FITS')),
             jpeg=Count('pk', filter=Q(file_type='JPG')),
             cr2=Count('pk', filter=Q(file_type='CR2')),

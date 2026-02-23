@@ -267,4 +267,4 @@ class DataFileFilter(filters.FilterSet):
         # Annotate queryset with effective_exposure_type
         queryset = annotate_effective_exposure_type(queryset)
         # Filter by effective_exposure_type
-        return queryset.filter(effective_exposure_type__in=value)
+        return queryset.filter(annotated_effective_exposure_type__in=value)

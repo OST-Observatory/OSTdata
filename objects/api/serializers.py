@@ -101,7 +101,7 @@ class ObjectListSerializer(ModelSerializer):
             # Use effective exposure type for filtering
             from utilities import annotate_effective_exposure_type
             df_qs = annotate_effective_exposure_type(df_qs)
-            df_science = df_qs.filter(effective_exposure_type='LI')
+            df_science = df_qs.filter(annotated_effective_exposure_type='LI')
             try:
                 n_total = df_qs.count()
             except Exception:
@@ -125,8 +125,8 @@ class ObjectListSerializer(ModelSerializer):
                     + df_qs.filter(file_type__exact='TIFF').count()
                 )
                 n_ser = df_qs.filter(file_type__exact='SER').count()
-                n_flat = df_qs.filter(effective_exposure_type='FL').count()
-                n_dark = df_qs.filter(effective_exposure_type='DA').count()
+                n_flat = df_qs.filter(annotated_effective_exposure_type='FL').count()
+                n_dark = df_qs.filter(annotated_effective_exposure_type='DA').count()
             except Exception:
                 n_fits = n_img = n_ser = n_flat = n_dark = 0
 
@@ -254,7 +254,7 @@ class ObjectListSerializer(ModelSerializer):
     def get_n_light(self, obj):
         try:
             from utilities import annotate_effective_exposure_type
-            return annotate_effective_exposure_type(obj.datafiles.all()).filter(effective_exposure_type='LI').count()
+            return annotate_effective_exposure_type(obj.datafiles.all()).filter(annotated_effective_exposure_type='LI').count()
         except Exception:
             return 0
 
@@ -262,7 +262,7 @@ class ObjectListSerializer(ModelSerializer):
         try:
             from utilities import annotate_effective_exposure_type
             total = 0
-            light_files = annotate_effective_exposure_type(obj.datafiles.all()).filter(effective_exposure_type='LI')
+            light_files = annotate_effective_exposure_type(obj.datafiles.all()).filter(annotated_effective_exposure_type='LI')
             for f in light_files.only('exptime'):
                 try:
                     if getattr(f, 'exptime', 0) and f.exptime > 0:

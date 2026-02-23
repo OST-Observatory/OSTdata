@@ -42,9 +42,11 @@
                   <v-expansion-panel>
                     <v-expansion-panel-title density="compact">Exposure & Type</v-expansion-panel-title>
                     <v-expansion-panel-text>
+                      <v-select v-model="filters.effective_exposure_type" :items="exposureTypeItems" item-title="label" item-value="value" label="Effective Type" density="comfortable" variant="outlined" hide-details clearable multiple chips class="mb-2" />
                       <v-select v-model="filters.exposure_type" :items="exposureTypeItems" item-title="label" item-value="value" label="Exposure Type" density="comfortable" variant="outlined" hide-details clearable multiple chips class="mb-2" />
                       <v-select v-model="filters.exposure_type_ml" :items="exposureTypeItems" item-title="label" item-value="value" label="ML Type" density="comfortable" variant="outlined" hide-details clearable multiple chips class="mb-2" />
                       <v-select v-model="filters.exposure_type_user" :items="exposureTypeItems" item-title="label" item-value="value" label="User Type" density="comfortable" variant="outlined" hide-details clearable multiple chips class="mb-2" />
+                      <v-select v-model="filters.has_user_type" :items="[{ title: 'Yes', value: true }, { title: 'No', value: false }]" item-title="title" item-value="value" label="Has User Exposure Type" density="comfortable" variant="outlined" hide-details clearable class="mb-2" />
                       <v-text-field v-model.number="filters.exptime_min" label="Exp. Time Min" type="number" density="comfortable" variant="outlined" hide-details clearable class="mb-2" />
                       <v-text-field v-model.number="filters.exptime_max" label="Exp. Time Max" type="number" density="comfortable" variant="outlined" hide-details clearable />
                     </v-expansion-panel-text>
@@ -173,6 +175,11 @@
                 <v-btn v-bind="props" icon="mdi-code-tags" size="x-small" variant="text" @click="openHeader(item)" :aria-label="`Header ${item.file_name}`" />
               </template>
             </v-tooltip>
+            <v-tooltip text="View WCS information" location="top">
+              <template #activator="{ props }">
+                <v-btn v-bind="props" icon="mdi-crosshairs-gps" size="x-small" variant="text" @click="openWcs(item)" :aria-label="`WCS ${item.file_name}`" />
+              </template>
+            </v-tooltip>
             <v-tooltip text="Trigger plate solving" location="top">
               <template #activator="{ props }">
                 <v-btn v-bind="props" icon="mdi-star-four-points" size="x-small" variant="text" :loading="triggeringSingle === item.pk" @click="triggerPlateSolveSingle(item)" :aria-label="`Plate solve ${item.file_name}`" />
@@ -260,6 +267,25 @@
       </v-card>
     </v-dialog>
 
+    <!-- WCS dialog -->
+    <v-dialog v-model="wcsDialog" max-width="800">
+      <v-card>
+        <v-card-title>{{ wcsTitle }}</v-card-title>
+        <v-card-text>
+          <v-alert v-if="!wcsData?.plate_solved" type="info" variant="tonal">No WCS information (file not plate-solved).</v-alert>
+          <template v-else>
+            <v-table density="compact">
+              <thead><tr><th class="text-primary" style="width:35%">Parameter</th><th class="text-primary">Value</th></tr></thead>
+              <tbody>
+                <tr v-for="([k, v], idx) in wcsEntries" :key="k || idx"><td class="font-mono">{{ k }}</td><td class="font-mono">{{ formatHeaderValue(v) }}</td></tr>
+              </tbody>
+            </v-table>
+          </template>
+        </v-card-text>
+        <v-card-actions><v-spacer /><v-btn variant="text" color="primary" @click="wcsDialog = false">Close</v-btn></v-card-actions>
+      </v-card>
+    </v-dialog>
+
     <!-- Exposure Type dialog -->
     <v-dialog v-model="exposureTypeDialog" max-width="500">
       <v-card>
@@ -343,9 +369,11 @@ const filters = ref({
   instrument: null,
   telescope: null,
   main_target: null,
+  effective_exposure_type: [],
   exposure_type: [],
   exposure_type_ml: [],
   exposure_type_user: [],
+  has_user_type: null,
   exptime_min: null,
   exptime_max: null,
   spectroscopy: null,
@@ -403,6 +431,10 @@ const headerData = ref(null)
 const headerLoading = ref(false)
 const headerError = ref(null)
 
+const wcsDialog = ref(false)
+const wcsTitle = ref('')
+const wcsData = ref(null)
+
 const exposureTypeDialog = ref(false)
 const exposureTypeDialogBulk = ref(false)
 const exposureTypeSaving = ref(false)
@@ -437,6 +469,42 @@ const headerEntries = computed(() => {
   return Object.entries(h)
 })
 
+const WCS_LABELS = {
+  wcs_ra: 'RA (deg)',
+  wcs_dec: 'Dec (deg)',
+  wcs_ra_hms: 'RA (hms)',
+  wcs_dec_dms: 'Dec (dms)',
+  wcs_field_radius: 'Field radius (°)',
+  wcs_orientation: 'Orientation (°)',
+  wcs_pix_scale: 'Pixel scale ("/px)',
+  wcs_parity: 'Parity',
+  wcs_field_width: 'Field width (°)',
+  wcs_field_height: 'Field height (°)',
+  wcs_cd1_1: 'CD1_1',
+  wcs_cd1_2: 'CD1_2',
+  wcs_cd2_1: 'CD2_1',
+  wcs_cd2_2: 'CD2_2',
+  wcs_cdelt1: 'CDELT1',
+  wcs_cdelt2: 'CDELT2',
+  wcs_crota1: 'CROTA1',
+  wcs_crota2: 'CROTA2',
+  wcs_crpix1: 'CRPIX1',
+  wcs_crpix2: 'CRPIX2',
+  wcs_crval1: 'CRVAL1',
+  wcs_crval2: 'CRVAL2',
+  plate_solve_tool: 'Plate solve tool',
+}
+const wcsEntries = computed(() => {
+  if (!wcsData.value) return []
+  const d = wcsData.value
+  const out = []
+  for (const [key, label] of Object.entries(WCS_LABELS)) {
+    const v = d[key]
+    if (v !== null && v !== undefined && v !== '') out.push([label, v])
+  }
+  return out
+})
+
 function onUpdateSelected(val) { selected.value = Array.isArray(val) ? val : [] }
 
 function getExposureTypeColor(t) {
@@ -460,9 +528,11 @@ function buildParams() {
   if (filters.value.instrument) p.instrument = filters.value.instrument
   if (filters.value.telescope) p.telescope = filters.value.telescope
   if (filters.value.main_target) p.main_target = filters.value.main_target
+  if (filters.value.effective_exposure_type?.length) p.effective_exposure_type = filters.value.effective_exposure_type
   if (filters.value.exposure_type?.length) p.exposure_type = filters.value.exposure_type
   if (filters.value.exposure_type_ml?.length) p.exposure_type_ml = filters.value.exposure_type_ml
   if (filters.value.exposure_type_user?.length) p.exposure_type_user = filters.value.exposure_type_user
+  if (filters.value.has_user_type !== null && filters.value.has_user_type !== undefined) p.has_user_type = filters.value.has_user_type
   if (filters.value.exptime_min != null) p.exptime_min = filters.value.exptime_min
   if (filters.value.exptime_max != null) p.exptime_max = filters.value.exptime_max
   if (filters.value.spectroscopy !== null && filters.value.spectroscopy !== undefined) p.spectroscopy = filters.value.spectroscopy
@@ -480,9 +550,11 @@ function resetFilters() {
     instrument: null,
     telescope: null,
     main_target: null,
+    effective_exposure_type: [],
     exposure_type: [],
     exposure_type_ml: [],
     exposure_type_user: [],
+    has_user_type: null,
     exptime_min: null,
     exptime_max: null,
     spectroscopy: null,
@@ -563,6 +635,12 @@ async function openHeader(item) {
   } finally {
     headerLoading.value = false
   }
+}
+
+function openWcs(item) {
+  wcsDialog.value = true
+  wcsTitle.value = `WCS: ${item.file_name}`
+  wcsData.value = item
 }
 
 async function triggerPlateSolveSingle(item) {

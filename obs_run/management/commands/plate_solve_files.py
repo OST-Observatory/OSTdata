@@ -78,7 +78,7 @@ class Command(BaseCommand):
         
         # Annotate with effective_exposure_type and filter for Light frames
         queryset = annotate_effective_exposure_type(queryset)
-        queryset = queryset.filter(effective_exposure_type='LI')
+        queryset = queryset.filter(annotated_effective_exposure_type='LI')
         
         if limit:
             queryset = queryset[:limit]

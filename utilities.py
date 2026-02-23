@@ -181,7 +181,7 @@ def detect_object_type_from_simbad_types(types_str: str):
 
 def annotate_effective_exposure_type(queryset):
     """
-    Annotate a DataFile queryset with effective_exposure_type field.
+    Annotate a DataFile queryset with annotated_effective_exposure_type field.
     
     This implements the priority logic:
     1. exposure_type_user (if set, not None, not empty string)
@@ -197,10 +197,10 @@ def annotate_effective_exposure_type(queryset):
     Returns
     -------
     QuerySet
-        Annotated queryset with effective_exposure_type field
+        Annotated queryset with annotated_effective_exposure_type field
     """
     return queryset.annotate(
-        effective_exposure_type=Case(
+        annotated_effective_exposure_type=Case(
             # Priority 1: User-set type
             When(
                 Q(exposure_type_user__isnull=False) & ~Q(exposure_type_user=''),
@@ -316,7 +316,7 @@ def get_object_fov_radius(obj, fallback_arcmin=10.0, min_arcmin=1.0, max_arcmin=
     
     # Prefer Light frames (using effective exposure type)
     datafiles = annotate_effective_exposure_type(datafiles)
-    light_frames = datafiles.filter(effective_exposure_type='LI')
+    light_frames = datafiles.filter(annotated_effective_exposure_type='LI')
     
     if light_frames.exists():
         datafiles = light_frames
@@ -417,7 +417,7 @@ def update_object_photometry_spectroscopy(obj):
     # Use effective exposure type for filtering
     light_files = annotate_effective_exposure_type(
         obj.datafiles.all()
-    ).filter(effective_exposure_type='LI')
+    ).filter(annotated_effective_exposure_type='LI')
     
     # Check for spectroscopy: Light files with spectrograph != 'N' (NONE)
     has_spectroscopy = light_files.exclude(spectrograph='N').exists()

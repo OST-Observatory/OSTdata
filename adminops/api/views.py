@@ -1467,7 +1467,7 @@ def admin_plate_solve_stats(request):
             spectroscopy=False  # Exclude files marked as spectroscopy
         )
         queryset = annotate_effective_exposure_type(queryset)
-        queryset = queryset.filter(effective_exposure_type='LI')
+        queryset = queryset.filter(annotated_effective_exposure_type='LI')
         
         stats = queryset.aggregate(
             total_light=Count('pk'),

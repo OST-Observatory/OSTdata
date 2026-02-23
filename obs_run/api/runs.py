@@ -457,7 +457,7 @@ def getDashboardStats(request):
         lights=Count('pk', filter=get_effective_exposure_type_filter('LI', '')),
         waves=Count('pk', filter=get_effective_exposure_type_filter('WA', '')),
         # Spectra: Light frames with spectrograph != 'N' (NONE)
-        spectra=Count('pk', filter=Q(effective_exposure_type='LI') & ~Q(spectrograph='N')),
+        spectra=Count('pk', filter=Q(annotated_effective_exposure_type='LI') & ~Q(spectrograph='N')),
         # File types
         fits=Count('pk', filter=Q(file_type='FITS')),
         jpeg=Count('pk', filter=Q(file_type='JPG')),
@@ -624,7 +624,7 @@ def dark_finder_search(request):
         # Build query for dark frames (using effective exposure type)
         queryset = annotate_effective_exposure_type(
             DataFile.objects.filter(observation_run__is_public=True)
-        ).filter(effective_exposure_type='DA')
+        ).filter(annotated_effective_exposure_type='DA')
         
         # Find all possible instrument variants
         possible_instruments = [normalized_instrument]

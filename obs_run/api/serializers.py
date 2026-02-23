@@ -221,7 +221,7 @@ class RunSerializer(ModelSerializer):
             from utilities import annotate_effective_exposure_type
             total = 0.0
             light_files = annotate_effective_exposure_type(obj.datafile_set.all()).filter(
-                effective_exposure_type='LI'
+                annotated_effective_exposure_type='LI'
             )
             for f in light_files.only('exptime'):
                 ex = getattr(f, 'exptime', 0) or 0

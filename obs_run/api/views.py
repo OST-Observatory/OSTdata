@@ -260,7 +260,7 @@ def download_run_datafiles(request, run_pk):
     if q_params.getlist('exposure_type'):
         # Use effective exposure type for filtering
         qs = annotate_effective_exposure_type(qs)
-        qs = qs.filter(effective_exposure_type__in=q_params.getlist('exposure_type'))
+        qs = qs.filter(annotated_effective_exposure_type__in=q_params.getlist('exposure_type'))
     if q_params.get('spectroscopy') is not None:
         val = q_params.get('spectroscopy')
         if val.lower() in ('true', '1', 'yes'):
@@ -356,7 +356,7 @@ def download_datafiles_bulk(request):
     if q_params.getlist('exposure_type'):
         # Use effective exposure type for filtering
         qs = annotate_effective_exposure_type(qs)
-        qs = qs.filter(effective_exposure_type__in=q_params.getlist('exposure_type'))
+        qs = qs.filter(annotated_effective_exposure_type__in=q_params.getlist('exposure_type'))
     if q_params.get('spectroscopy') is not None:
         val = q_params.get('spectroscopy')
         if isinstance(val, str):
