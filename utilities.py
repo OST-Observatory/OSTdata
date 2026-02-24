@@ -1445,9 +1445,9 @@ def evaluate_data_file(data_file, observation_run, print_to_terminal=False, skip
     ]
 
     #   Look for associated objects
+    #   Allow coordinate-only matching when target is empty/unknown (e.g. BACHES with
+    #   OBJCTRA/OBJCTDEC but empty OBJECT); still require valid coords and exclude flat/dark
     if (
-            target_lower != '' and
-            target_lower != 'unknown' and
             expo_type == 'LI' and
             'flat' not in target_lower and
             'dark' not in target_lower and
@@ -1547,15 +1547,16 @@ def evaluate_data_file(data_file, observation_run, print_to_terminal=False, skip
                         data_file.main_target = obj.name
                         data_file.save()
 
-                    #   Add header name as an alias
-                    identifiers = obj.identifier_set.filter(
-                        name__exact=target
-                    )
-                    if len(identifiers) == 0:
-                        obj.identifier_set.create(
-                            name=target,
-                            info_from_header=True,
+                    #   Add header name as an alias (skip when target is empty)
+                    if target and target.strip():
+                        identifiers = obj.identifier_set.filter(
+                            name__exact=target
                         )
+                        if len(identifiers) == 0:
+                            obj.identifier_set.create(
+                                name=target,
+                                info_from_header=True,
+                            )
                     
                     #   Automatically update photometry/spectroscopy flags for object and observation run
                     if not dry_run:
@@ -1627,10 +1628,11 @@ def evaluate_data_file(data_file, observation_run, print_to_terminal=False, skip
                     object_dec = lookup_dec
                     object_type = 'UK'
                     object_simbad_resolved = False
-                    object_name = target
+                    object_name = target if (target and target.strip()) else ''
 
                     #   Query Simbad for object name (safe, with variants and rate-limit)
-                    simbad_tbl = _query_object_variants(target)
+                    #   Skip name-based query when target is empty (coordinate-only path)
+                    simbad_tbl = _query_object_variants(target) if (target and target.strip()) else None
 
                     #   Get Simbad coordinates
                     if simbad_tbl is not None and len(simbad_tbl) > 0:
@@ -1721,6 +1723,9 @@ def evaluate_data_file(data_file, observation_run, print_to_terminal=False, skip
                 # Ensure object_type is never None (DB NOT NULL constraint)
                 if object_type is None:
                     object_type = 'UK'
+                # Fallback name when target empty and SIMBAD found nothing (coordinate-only path)
+                if not object_name or not str(object_name).strip():
+                    object_name = f"Field_{lookup_ra:.4f}_{lookup_dec:+.4f}"
                 # Solar system objects: use ra=-1, dec=-1 (ephemeral coords, avoid interference)
                 obj_ra = -1 if object_type == 'SO' else object_ra
                 obj_dec = -1 if object_type == 'SO' else object_dec
