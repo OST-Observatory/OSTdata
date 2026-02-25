@@ -90,6 +90,15 @@ def _query_object_variants(name: str):
     _add_neg_cache(name)
     return None
 
+def _radius_str_from_arcmin(radius_arcmin: float) -> str:
+    """Convert radius in arcminutes to SIMBAD format (e.g. '0d10m0s')."""
+    degrees = int(radius_arcmin // 60)
+    remaining_arcmin = radius_arcmin - (degrees * 60)
+    arcmin = int(remaining_arcmin)
+    arcsec = int(round((remaining_arcmin - arcmin) * 60))
+    return f"{degrees}d{arcmin}m{arcsec}s"
+
+
 def _query_region_safe(ra_deg: float, dec_deg: float, radius_str: str = '0d5m0s', row_limit: int = 10):
     """
     Query SIMBAD region search safely with rate limiting.
@@ -1662,7 +1671,20 @@ def evaluate_data_file(data_file, observation_run, print_to_terminal=False, skip
 
                     #   Search Simbad based on coordinates
                     if not object_simbad_resolved:
-                        result_table = _query_region_safe(lookup_ra, lookup_dec, '0d5m0s', row_limit=10)
+                        # Use FOV-based radius when available, else default by observation type
+                        if data_file.fov_x > 0 and data_file.fov_y > 0:
+                            fov_radius_deg = np.sqrt(
+                                float(data_file.fov_x)**2 + float(data_file.fov_y)**2
+                            ) / 2.0
+                            simbad_radius_str = _radius_str_from_arcmin(fov_radius_deg * 60)
+                        else:
+                            # Default: 10 arcmin for photometry, 5 arcmin for spectroscopy
+                            is_spectroscopy = (data_file.spectrograph or 'N') != 'N'
+                            default_arcmin = 5 if is_spectroscopy else 10
+                            simbad_radius_str = _radius_str_from_arcmin(default_arcmin)
+                        result_table = _query_region_safe(
+                            lookup_ra, lookup_dec, simbad_radius_str, row_limit=1000
+                        )
 
                         if (result_table is not None and
                                 len(result_table) > 0):
