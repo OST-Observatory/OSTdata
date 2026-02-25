@@ -1364,7 +1364,7 @@ def add_new_data_file(path_to_file, observation_run, print_to_terminal=False):
     return True
 
 
-def evaluate_data_file(data_file, observation_run, print_to_terminal=False, skip_if_object_has_overrides=True, dry_run=False, use_wcs_coords_for_lookup=False):
+def evaluate_data_file(data_file, observation_run, print_to_terminal=False, skip_if_object_has_overrides=True, dry_run=False):
     """
     Evaluate data file and add associated objects
 
@@ -1387,13 +1387,10 @@ def evaluate_data_file(data_file, observation_run, print_to_terminal=False, skip
     dry_run                     : `boolean`, optional
         If True, simulate evaluation without making database changes.
         Default is ``False``.
-    
-    use_wcs_coords_for_lookup   : `boolean`, optional
-        If True and data_file is plate-solved with valid wcs_ra/wcs_dec, use those
-        coordinates for object lookup/SIMBAD queries instead of header ra/dec.
-        Use for re-evaluation of plate-solved files (manual or automatic).
-        Default is ``False``.
-        
+
+    WCS coordinates (wcs_ra, wcs_dec) are used automatically for object lookup and
+    SIMBAD queries when the data file is plate-solved; otherwise header ra/dec are used.
+
     Returns
     -------
     dict
@@ -1435,8 +1432,8 @@ def evaluate_data_file(data_file, observation_run, print_to_terminal=False, skip
         except Exception:
             pass
 
-    # Choose coordinates for object lookup: WCS (plate-solved) or header
-    if use_wcs_coords_for_lookup and data_file.plate_solved and data_file.wcs_ra is not None and data_file.wcs_dec is not None:
+    # Choose coordinates for object lookup: prefer WCS when available, else header
+    if data_file.plate_solved and data_file.wcs_ra is not None and data_file.wcs_dec is not None:
         lookup_ra = data_file.wcs_ra
         lookup_dec = data_file.wcs_dec
     else:

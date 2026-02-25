@@ -1097,16 +1097,10 @@ def admin_update_exposure_type_user(request, pk):
     # resolution can run for files that were previously misclassified
     if exposure_type_user == 'LI' and datafile.observation_run:
         try:
-            use_wcs = (
-                datafile.plate_solved
-                and datafile.wcs_ra is not None
-                and datafile.wcs_dec is not None
-            )
             evaluate_data_file(
                 datafile,
                 datafile.observation_run,
                 skip_if_object_has_overrides=True,
-                use_wcs_coords_for_lookup=use_wcs,
             )
             update_observation_run_photometry_spectroscopy(datafile.observation_run)
             for obj in datafile.object_set.all():
@@ -1584,7 +1578,6 @@ def _do_re_evaluate_datafiles(queryset):
                         datafile,
                         datafile.observation_run,
                         skip_if_object_has_overrides=True,
-                        use_wcs_coords_for_lookup=True,
                     )
                     update_observation_run_photometry_spectroscopy(datafile.observation_run)
                     for obj in datafile.object_set.all():
@@ -1620,16 +1613,10 @@ def _do_re_evaluate_run_all(queryset):
             if not datafile.observation_run:
                 skipped += 1
                 continue
-            use_wcs = (
-                datafile.plate_solved
-                and datafile.wcs_ra is not None
-                and datafile.wcs_dec is not None
-            )
             evaluate_data_file(
                 datafile,
                 datafile.observation_run,
                 skip_if_object_has_overrides=True,
-                use_wcs_coords_for_lookup=use_wcs,
             )
             update_observation_run_photometry_spectroscopy(datafile.observation_run)
             for obj in datafile.object_set.all():
