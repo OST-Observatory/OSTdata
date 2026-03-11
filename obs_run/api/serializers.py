@@ -318,6 +318,7 @@ class DataFileSerializer(ModelSerializer):
     observation_run_name = SerializerMethodField()
     object_ids = SerializerMethodField()
     main_object_id = SerializerMethodField()
+    main_object_name = SerializerMethodField()
 
     class Meta:
         model = DataFile
@@ -358,6 +359,7 @@ class DataFileSerializer(ModelSerializer):
             'header_target_name',
             'object_ids',
             'main_object_id',
+            'main_object_name',
             'ra',
             'dec',
             'ra_hms',
@@ -501,6 +503,20 @@ class DataFileSerializer(ModelSerializer):
         if len(objs) == 1:
             return objs[0].pk
         return objs[0].pk if objs else None
+
+    def get_main_object_name(self, obj):
+        """Name of the object we link to (main_object_id)."""
+        objs = list(obj.object_set.all().only('pk', 'name'))
+        if not objs:
+            return None
+        main_target = (obj.main_target or '').strip()
+        if main_target:
+            for o in objs:
+                if o.name and str(o.name).strip().lower() == main_target.lower():
+                    return o.name
+        if len(objs) == 1:
+            return objs[0].name
+        return objs[0].name if objs else None
 
     def update(self, instance, validated_data):
         """Override update to set override flags for user changes."""

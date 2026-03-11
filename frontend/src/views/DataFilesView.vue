@@ -138,7 +138,7 @@
                   v-if="getMainObjectIdForLink(item)"
                   :to="`/objects/${getMainObjectIdForLink(item)}`"
                   class="text-decoration-none text-primary"
-                >{{ item.main_target }}</router-link>
+                >{{ getMainObjectDisplayName(item) || item.main_target }}</router-link>
                 <span v-else>{{ item.main_target }}</span>
                 <span class="text-secondary">)</span>
               </template>
@@ -149,7 +149,7 @@
                   v-if="getMainObjectIdForLink(item)"
                   :to="`/objects/${getMainObjectIdForLink(item)}`"
                   class="text-decoration-none text-primary"
-                >{{ item.main_target }}</router-link>
+                >{{ getMainObjectDisplayName(item) || item.main_target }}</router-link>
                 <span v-else>{{ item.main_target }}</span>
               </template>
               <span v-else>—</span>
@@ -501,6 +501,12 @@ function getMainObjectIdForLink(item) {
   if (item?.main_object_id != null) return item.main_object_id
   if (item?.main_target) return getObjectIdByTargetName(item.main_target)
   return null
+}
+
+/** Display name for link: prefer API main_object_name (object's DB name), else main_target. */
+function getMainObjectDisplayName(item) {
+  if (item?.main_object_name?.trim()) return item.main_object_name.trim()
+  return item?.main_target?.trim() || ''
 }
 
 function isLight(df) {
