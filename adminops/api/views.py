@@ -1526,7 +1526,7 @@ def admin_list_all_datafiles(request):
     """
     from adminops.api.filters import AdminDataFileFilter
 
-    queryset = DataFile.objects.select_related('observation_run').all()
+    queryset = DataFile.objects.select_related('observation_run').prefetch_related('object_set').all()
     filterset = AdminDataFileFilter(request.query_params, queryset=queryset, request=request)
     queryset = filterset.qs
 

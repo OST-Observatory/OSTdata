@@ -374,7 +374,7 @@ class getObjectDatafileViewSet(viewsets.ModelViewSet):
         obj = Object.objects.get(pk=object_pk)
         if request.user.is_anonymous and not obj.is_public:
             return Response({"detail": "Not found"}, status=404)
-        queryset = obj.datafiles.all()
+        queryset = obj.datafiles.prefetch_related('object_set').all()
         # Optional server-side binning filter from FITS headers
         binning = request.query_params.get('binning')
         if binning:

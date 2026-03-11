@@ -91,6 +91,7 @@
           <v-btn color="secondary" variant="outlined" prepend-icon="mdi-flag-off" :loading="busy.clearOverrides" @click="bulkClearOverrides">Clear Overrides</v-btn>
           <v-btn color="primary" variant="outlined" prepend-icon="mdi-link" :loading="busy.linkObject" @click="openLinkObjectDialog(null)">Link to Object</v-btn>
           <v-btn color="secondary" variant="outlined" prepend-icon="mdi-link-off" :loading="busy.unlinkObject" @click="openUnlinkConfirm(null)">Unlink from Objects</v-btn>
+          <v-btn color="primary" variant="outlined" prepend-icon="mdi-download" :loading="busy.download" @click="bulkDownloadSelected">Download selected</v-btn>
         </div>
       </v-card-text>
     </v-card>
@@ -134,15 +135,25 @@
               <template v-if="item.main_target && item.main_target.trim() && item.main_target !== '-'">
                 <span class="text-secondary"> (</span>
                 <router-link
-                  v-if="getObjectIdByTargetName(item.main_target)"
-                  :to="`/objects/${getObjectIdByTargetName(item.main_target)}`"
+                  v-if="getMainObjectIdForLink(item)"
+                  :to="`/objects/${getMainObjectIdForLink(item)}`"
                   class="text-decoration-none text-primary"
                 >{{ item.main_target }}</router-link>
                 <span v-else>{{ item.main_target }}</span>
                 <span class="text-secondary">)</span>
               </template>
             </template>
-            <span v-else>{{ (item.header_target_name && item.header_target_name !== '-') ? item.header_target_name : (item.main_target && item.main_target !== '-') ? item.main_target : '—' }}</span>
+            <template v-else>
+              <template v-if="item.main_target && item.main_target.trim() && item.main_target !== '-'">
+                <router-link
+                  v-if="getMainObjectIdForLink(item)"
+                  :to="`/objects/${getMainObjectIdForLink(item)}`"
+                  class="text-decoration-none text-primary"
+                >{{ item.main_target }}</router-link>
+                <span v-else>{{ item.main_target }}</span>
+              </template>
+              <span v-else>—</span>
+            </template>
           </template>
           <span v-else class="text-secondary">—</span>
         </template>
@@ -422,7 +433,7 @@ const headers = [
   { title: 'Actions', key: 'actions', sortable: false, width: '60px' },
 ]
 
-const busy = ref({ plateSolve: false, reEvaluate: false, clearOverrides: false, linkObject: false, unlinkObject: false })
+const busy = ref({ plateSolve: false, reEvaluate: false, clearOverrides: false, linkObject: false, unlinkObject: false, download: false })
 const triggeringSingle = ref(null)
 const reEvalSingle = ref(null)
 const clearOverrideSingle = ref(null)
@@ -483,6 +494,13 @@ function getObjectIdByTargetName(name) {
   if (!name) return null
   const normalized = String(name).toLowerCase().replace(/\s+/g, '')
   return targetNameToObjectId.value.get(normalized) || targetNameToObjectId.value.get(String(name).toLowerCase()) || null
+}
+
+/** Object ID for target link: prefer API main_object_id, else lookup by name. */
+function getMainObjectIdForLink(item) {
+  if (item?.main_object_id != null) return item.main_object_id
+  if (item?.main_target) return getObjectIdByTargetName(item.main_target)
+  return null
 }
 
 function isLight(df) {
@@ -771,6 +789,38 @@ async function bulkClearOverrides() {
     notify.error('Failed to clear overrides')
   } finally {
     busy.value.clearOverrides = false
+  }
+}
+
+async function bulkDownloadSelected() {
+  const ids = selectedIds.value
+  if (!ids.length) return
+  busy.value.download = true
+  try {
+    const res = await api.createBulkDownloadJob(ids, {})
+    const jobId = res?.job_id
+    if (!jobId) {
+      notify.error('Failed to create download job')
+      return
+    }
+    notify.success('Preparing download...')
+    const pollJobUntilReady = async (jid, { timeoutMs = 120000, intervalMs = 1500 } = {}) => {
+      const start = Date.now()
+      while (Date.now() - start < timeoutMs) {
+        const status = await api.getDownloadJobStatus(jid)
+        if (status?.status === 'done' && status?.url) return status
+        if (status?.status === 'failed' || status?.status === 'cancelled') throw new Error(status?.error || 'Job failed')
+        await new Promise(r => setTimeout(r, intervalMs))
+      }
+      throw new Error('Timed out waiting for download job')
+    }
+    await pollJobUntilReady(jobId)
+    await api.downloadJobFile(jobId)
+    notify.success('Download started')
+  } catch (e) {
+    notify.error(e?.message || 'Download failed')
+  } finally {
+    busy.value.download = false
   }
 }
 
