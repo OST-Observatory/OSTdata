@@ -1043,6 +1043,8 @@ import { useRoute } from 'vue-router'
 import { api } from '@/services/api'
 import { useNotifyStore } from '@/store/notify'
 import { useAuthStore } from '@/store/auth'
+import { buildDownloadPrepMessage } from '@/config/downloadJobs'
+import { pollDownloadJobUntilReady } from '@/utils/downloadJobPoll'
 import { formatDateTime } from '@/utils/datetime'
 import { getStatusColor } from '@/utils/status'
 
@@ -2068,31 +2070,27 @@ const downloadFiltered = () => {
 }
 
 // Async job helpers
-const pollJobUntilReady = async (jobId, { timeoutMs = 120000, intervalMs = 1500 } = {}) => {
-  const start = Date.now()
-  while (Date.now() - start < timeoutMs) {
-    const status = await api.getDownloadJobStatus(jobId)
-    if (status?.status === 'done' && status?.url) {
-      return status
-    }
-    if (status?.status === 'failed' || status?.status === 'cancelled') {
-      throw new Error(status?.error || 'Job failed')
-    }
-    await new Promise(r => setTimeout(r, intervalMs))
-  }
-  throw new Error('Timed out waiting for download job')
-}
-
 const triggerAsyncDownload = async (ids = [], filters = {}) => {
   try {
     downloadingAll.value = true
+    const fileCount = ids.length > 0 ? ids.length : (dataFilesTotal.value || 0)
+    const allLoaded =
+      dataFilesItemsPerPage.value === -1 ||
+      ((dataFiles.value || []).length > 0 && (dataFiles.value || []).length >= (dataFilesTotal.value || 0))
+    const sizeIsPartial = !allLoaded && (dataFilesTotal.value || 0) > 0
+    try {
+      notify.info(
+        await buildDownloadPrepMessage({ fileCount, items: dataFiles.value || [], sizeIsPartial }),
+        18000
+      )
+    } catch {}
     const res = await api.createRunDownloadJob(runId, ids, filters)
     const jobId = res?.job_id
     if (!jobId) throw new Error('Job not created')
-    try { notify.success('Preparing download...') } catch {}
     try {
-      const status = await pollJobUntilReady(jobId)
+      await pollDownloadJobUntilReady(jobId)
       await api.downloadJobFile(jobId)
+      try { notify.success('Download started') } catch {}
     } catch (e) {
       // Show a clearer message to the user (e.g., cancelled by admin) rather than a generic uncaught error
       try { notify.error(e?.message || 'Download job failed') } catch {}

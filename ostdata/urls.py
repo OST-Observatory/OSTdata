@@ -20,6 +20,8 @@ from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView, Sp
 
 from rest_framework import routers
 
+from ostdata.api.ui_config_views import ui_public_config
+
 # Legacy server-rendered views have been removed
 
 router = routers.DefaultRouter()
@@ -37,6 +39,7 @@ urlpatterns = [
     # Removed legacy Django-rendered frontend routes under /w/*
 
     path('api/', include(router.urls), name='api'),
+    path('api/ui-config/', ui_public_config, name='ui-public-config'),
     path('api/runs/', include("obs_run.api.urls", namespace='runs-api')),
     path('api/admin/', include("adminops.api.urls", namespace='adminops-api')),
     path('api/tags/', include("tags.api.urls", namespace='tags-api')),

@@ -691,6 +691,7 @@ def dark_finder_search(request):
                 'offset': df.offset,
                 'binning_x': df.binning_x,
                 'binning_y': df.binning_y,
+                'file_size': df.file_size,
             })
         
         return Response({'results': results, 'count': len(results)})

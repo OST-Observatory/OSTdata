@@ -350,6 +350,7 @@ class DataFileSerializer(ModelSerializer):
             'tag_ids',
             # 'added_by',
             'content_hash',
+            'file_size',
             'hjd',
             'obs_date',
             'exptime',

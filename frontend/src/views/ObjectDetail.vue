@@ -1372,6 +1372,8 @@ import { useRoute } from 'vue-router'
 import { api } from '@/services/api'
 import { useAuthStore } from '@/store/auth'
 import { useNotifyStore } from '@/store/notify'
+import { buildDownloadPrepMessage } from '@/config/downloadJobs'
+import { pollDownloadJobUntilReady } from '@/utils/downloadJobPoll'
 
 const route = useRoute()
 const authStore = useAuthStore()
@@ -2445,26 +2447,19 @@ const downloadFilteredObjectFiles = () => {
 }
 
 // Async job helpers (bulk, across runs)
-const pollJobUntilReady = async (jobId, { timeoutMs = 120000, intervalMs = 1500 } = {}) => {
-  const start = Date.now()
-  while (Date.now() - start < timeoutMs) {
-    const status = await api.getDownloadJobStatus(jobId)
-    if (status?.status === 'done' && status?.url) return status
-    if (status?.status === 'failed' || status?.status === 'cancelled') throw new Error(status?.error || 'Job failed')
-    await new Promise(r => setTimeout(r, intervalMs))
-  }
-  throw new Error('Timed out waiting for download job')
-}
-
-const triggerAsyncBulkDownload = async (ids = [], filters = {}) => {
+const triggerAsyncBulkDownload = async (ids = [], filters = {}, { items = [] } = {}) => {
   try {
     downloadingAll.value = true
+    try {
+      notify.info(await buildDownloadPrepMessage({ fileCount: ids.length, items }), 18000)
+    } catch {}
     const res = await api.createBulkDownloadJob(ids, filters)
     const jobId = res?.job_id
     if (!jobId) throw new Error('Job not created')
     try {
-      const status = await pollJobUntilReady(jobId)
+      await pollDownloadJobUntilReady(jobId)
       await api.downloadJobFile(jobId)
+      try { notify.success('Download started') } catch {}
     } catch (e) {
       try { notify.error(e?.message || 'Download job failed') } catch {}
       return
@@ -2478,7 +2473,7 @@ const handleDownloadAllObjectFiles = async () => {
   const count = Array.isArray(dataFiles.value) ? dataFiles.value.length : 0
   if (count > 5) {
     const ids = (Array.isArray(dataFiles.value) ? dataFiles.value : []).map(f => f.pk || f.id)
-    await triggerAsyncBulkDownload(ids, {})
+    await triggerAsyncBulkDownload(ids, {}, { items: dataFiles.value })
   } else {
     await downloadAllObjectFiles()
   }
@@ -2488,7 +2483,7 @@ const handleDownloadFilteredObjectFiles = async () => {
   const count = filteredDataFiles.value.length
   if (count > 5) {
     const ids = filteredDataFiles.value.map(f => f.pk || f.id)
-    await triggerAsyncBulkDownload(ids, {})
+    await triggerAsyncBulkDownload(ids, {}, { items: filteredDataFiles.value })
   } else {
     downloadFilteredObjectFiles()
   }

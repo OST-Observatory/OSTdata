@@ -366,6 +366,8 @@
 import { ref, computed, onMounted } from 'vue'
 import { api } from '@/services/api'
 import { useNotifyStore } from '@/store/notify'
+import { buildDownloadPrepMessage } from '@/config/downloadJobs'
+import { pollDownloadJobUntilReady } from '@/utils/downloadJobPoll'
 import EmptyState from '@/components/ui/EmptyState.vue'
 import LoadingState from '@/components/ui/LoadingState.vue'
 
@@ -803,24 +805,19 @@ async function bulkDownloadSelected() {
   if (!ids.length) return
   busy.value.download = true
   try {
+    const selectedRows = (selected.value || []).filter(
+      (row) => row && typeof row === 'object' && ids.includes(row.pk || row.id)
+    )
+    try {
+      notify.info(await buildDownloadPrepMessage({ fileCount: ids.length, items: selectedRows }), 18000)
+    } catch {}
     const res = await api.createBulkDownloadJob(ids, {})
     const jobId = res?.job_id
     if (!jobId) {
       notify.error('Failed to create download job')
       return
     }
-    notify.success('Preparing download...')
-    const pollJobUntilReady = async (jid, { timeoutMs = 120000, intervalMs = 1500 } = {}) => {
-      const start = Date.now()
-      while (Date.now() - start < timeoutMs) {
-        const status = await api.getDownloadJobStatus(jid)
-        if (status?.status === 'done' && status?.url) return status
-        if (status?.status === 'failed' || status?.status === 'cancelled') throw new Error(status?.error || 'Job failed')
-        await new Promise(r => setTimeout(r, intervalMs))
-      }
-      throw new Error('Timed out waiting for download job')
-    }
-    await pollJobUntilReady(jobId)
+    await pollDownloadJobUntilReady(jobId)
     await api.downloadJobFile(jobId)
     notify.success('Download started')
   } catch (e) {

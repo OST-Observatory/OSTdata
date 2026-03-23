@@ -113,6 +113,11 @@ SPECTACULAR_SETTINGS = {
     'COMPONENT_SPLIT_REQUEST': True,
 }
 
+# Public SPA configuration (exposed via GET /api/ui-config/)
+# Override in .env, e.g. DOWNLOAD_JOB_MAX_WAIT_MS=2700000 (45 min default)
+DOWNLOAD_JOB_POLL_INTERVAL_MS = env.int('DOWNLOAD_JOB_POLL_INTERVAL_MS', default=2000)
+DOWNLOAD_JOB_MAX_WAIT_MS = env.int('DOWNLOAD_JOB_MAX_WAIT_MS', default=45 * 60 * 1000)
+
 LOGIN_URL = '/login'
 LOGIN_REDIRECT_URL = '/'
 LOGOUT_REDIRECT_URL = '/'

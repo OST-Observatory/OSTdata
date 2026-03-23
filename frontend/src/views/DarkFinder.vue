@@ -430,6 +430,8 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { api } from '@/services/api'
 import { useNotifyStore } from '@/store/notify'
+import { buildDownloadPrepMessage } from '@/config/downloadJobs'
+import { pollDownloadJobUntilReady } from '@/utils/downloadJobPoll'
 
 const notify = useNotifyStore()
 
@@ -737,46 +739,18 @@ const downloadAll = async () => {
 const downloadFiles = async (ids) => {
   downloading.value = true
   try {
+    const rows = (results.value || []).filter((r) => ids.includes(r.id))
+    try {
+      notify.info(await buildDownloadPrepMessage({ fileCount: ids.length, items: rows }), 18000)
+    } catch {}
     const job = await api.createBulkDownloadJob(ids, {})
-    notify.success(`Download job created (ID: ${job.job_id})`)
-    
-    // Poll for job completion
-    let attempts = 0
-    const maxAttempts = 60
-    const pollInterval = 2000 // 2 seconds
-    
-    const pollJob = async () => {
-      try {
-        const status = await api.getDownloadJobStatus(job.job_id)
-        
-        if (status.status === 'done') {
-          // Download the file
-          await api.downloadJobFile(job.job_id)
-          notify.success('Download started')
-          downloading.value = false
-          return
-        } else if (status.status === 'failed' || status.status === 'cancelled') {
-          notify.error(`Download job ${status.status}`)
-          downloading.value = false
-          return
-        }
-        
-        attempts++
-        if (attempts < maxAttempts) {
-          setTimeout(pollJob, pollInterval)
-        } else {
-          notify.error('Download job timeout')
-          downloading.value = false
-        }
-      } catch (e) {
-        notify.error('Failed to check download status')
-        downloading.value = false
-      }
-    }
-    
-    setTimeout(pollJob, pollInterval)
+    if (!job?.job_id) throw new Error('Job not created')
+    await pollDownloadJobUntilReady(job.job_id)
+    await api.downloadJobFile(job.job_id)
+    notify.success('Download started')
   } catch (e) {
-    notify.error('Failed to create download job')
+    notify.error(e?.message || 'Download failed')
+  } finally {
     downloading.value = false
   }
 }
