@@ -1,3 +1,4 @@
+from django.apps import apps
 from django.db import models
 
 from django.contrib.auth.models import AbstractUser
@@ -35,11 +36,22 @@ class User(AbstractUser):
    #       return self.readonly_users.all().union(self.readwrite_users.all())
 
    def get_read_model(self, model):
+      """
+      Queryset of ``model`` instances the user may access via run membership.
+
+      ObservationRun M2M fields use related_name ``readonly_run`` / ``readwrite_run``
+      on User (not ``readonly_users``, which is the field name on ObservationRun).
+      """
       if self.is_superuser:
          return model.objects.all()
-         # return object_models.Objects.objects.all()
-      else:
-         return self.readonly_users.all().union(self.readwrite_users.all())
+      ObservationRun = apps.get_model('obs_run', 'ObservationRun')
+      Object = apps.get_model('objects', 'Object')
+      readable_runs = self.readonly_run.all().union(self.readwrite_run.all())
+      if model is ObservationRun:
+         return readable_runs
+      if model is Object:
+         return Object.objects.filter(observation_run__in=readable_runs).distinct()
+      return model.objects.none()
 
 
    def can_read(self, run):
@@ -51,8 +63,8 @@ class User(AbstractUser):
       if run.is_public or self.is_superuser:
          #  Public observation runs can be read by everyone
          return True
-      elif run in self.readonly_users.all() or \
-           run in self.readwrite_users.all():
+      elif run in self.readonly_run.all() or \
+           run in self.readwrite_run.all():
          #  Specific observation run might require read access
          return True
       else:
@@ -65,7 +77,7 @@ class User(AbstractUser):
 
       if self.is_superuser:
          return True
-      elif run in self.readwrite_users.all():
+      elif run in self.readwrite_run.all():
          return True
       else:
          return False
@@ -74,9 +86,10 @@ class User(AbstractUser):
       """
       Returns True if this user can edit this specific observation run
       """
+      run = getattr(obj, 'observation_run', None) or getattr(obj, 'run', None)
       if self.is_superuser:
          return True
-      elif obj.run in self.readwrite_users.all():
+      elif run is not None and run in self.readwrite_run.all():
          return True
       else:
          return False
@@ -85,12 +98,13 @@ class User(AbstractUser):
       """
       Returns True if this user can delete this specific observation run
       """
+      run = getattr(obj, 'observation_run', None) or getattr(obj, 'run', None)
       if self.is_superuser:
          return True
-      elif obj.run in self.readwrite_users.all() and \
-           obj.added_by == self:
+      elif run is not None and run in self.readwrite_run.all() and \
+           getattr(obj, 'added_by', None) == self:
          return True
-      elif obj.run in self.managed_projects.all():
+      elif run is not None and run in self.managed_run.all():
          return True
       else:
          return False
