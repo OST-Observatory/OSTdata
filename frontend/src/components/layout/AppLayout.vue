@@ -281,7 +281,9 @@ const isMobile = computed(() => display.mdAndDown.value)
 // Site-wide banner (public)
 type Banner = { enabled: boolean; message: string; level: 'info' | 'success' | 'warning' | 'error' }
 const banner = ref<Banner>({ enabled: false, message: '', level: 'warning' })
-let bannerInterval: any = null
+const BANNER_POLL_MS = 60000
+let bannerInterval: ReturnType<typeof setInterval> | null = null
+
 const fetchBanner = async () => {
   try {
     const b = await api.getBanner()
@@ -291,6 +293,31 @@ const fetchBanner = async () => {
       level: (['info','success','warning','error'].includes(b?.level) ? b.level : 'warning') as Banner['level'],
     }
   } catch {}
+}
+
+const clearBannerPoll = () => {
+  if (bannerInterval !== null) {
+    clearInterval(bannerInterval)
+    bannerInterval = null
+  }
+}
+
+/** Poll only while tab is visible (saves server/log noise from background tabs). */
+const startBannerPollIfVisible = () => {
+  clearBannerPoll()
+  if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+    bannerInterval = setInterval(fetchBanner, BANNER_POLL_MS)
+  }
+}
+
+const onBannerVisibilityChange = () => {
+  if (typeof document === 'undefined') return
+  if (document.visibilityState === 'visible') {
+    fetchBanner()
+    startBannerPollIfVisible()
+  } else {
+    clearBannerPoll()
+  }
 }
 
 // Dynamic titles for detail routes
@@ -423,17 +450,18 @@ onMounted(async () => {
   
   // Check authentication status on mount
   await authStore.checkAuth()
-  // Fetch banner and schedule refresh
-  fetchBanner()
-  bannerInterval = setInterval(fetchBanner, 60000)
+  // Banner: initial fetch; poll every 60s only while tab is visible
+  if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+    fetchBanner()
+    startBannerPollIfVisible()
+  }
+  document.addEventListener('visibilitychange', onBannerVisibilityChange)
 })
 
 onUnmounted(() => {
   window.removeEventListener('scroll', checkScroll)
-  if (bannerInterval) {
-    clearInterval(bannerInterval)
-    bannerInterval = null
-  }
+  document.removeEventListener('visibilitychange', onBannerVisibilityChange)
+  clearBannerPoll()
 })
 
 const logout = async () => {
