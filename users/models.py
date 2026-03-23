@@ -1,5 +1,6 @@
 from django.apps import apps
 from django.db import models
+from django.db.models import Q
 
 from django.contrib.auth.models import AbstractUser
 
@@ -46,11 +47,16 @@ class User(AbstractUser):
          return model.objects.all()
       ObservationRun = apps.get_model('obs_run', 'ObservationRun')
       Object = apps.get_model('objects', 'Object')
-      readable_runs = self.readonly_run.all().union(self.readwrite_run.all())
       if model is ObservationRun:
-         return readable_runs
+         # Union of two run querysets (same model); safe for ORM list/detail use.
+         return self.readonly_run.all().union(self.readwrite_run.all())
       if model is Object:
-         return Object.objects.filter(observation_run__in=readable_runs).distinct()
+         # Do not use observation_run__in=union_qs: PostgreSQL needs a single-column
+         # subquery; UNION of full ObservationRun rows produces "too many columns".
+         return Object.objects.filter(
+            Q(observation_run__in=self.readonly_run.all())
+            | Q(observation_run__in=self.readwrite_run.all()),
+         ).distinct()
       return model.objects.none()
 
 
