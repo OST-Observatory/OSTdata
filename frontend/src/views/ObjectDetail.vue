@@ -972,8 +972,24 @@
                       <v-col cols="12" md="4">
                         <v-expansion-panels variant="accordion" class="mb-2">
                           <v-expansion-panel>
-                            <v-expansion-panel-title density="compact">File & Instrument</v-expansion-panel-title>
+                            <v-expansion-panel-title density="compact">File, Instrument & Run</v-expansion-panel-title>
                             <v-expansion-panel-text>
+                              <v-select
+                                v-model="dfFilterRunIds"
+                                :items="dfObservationRunFilterItems"
+                                item-title="title"
+                                item-value="value"
+                                label="Observation run"
+                                multiple
+                                chips
+                                closable-chips
+                                density="comfortable"
+                                variant="outlined"
+                                hide-details
+                                clearable
+                                class="mb-2"
+                                :disabled="!dfObservationRunFilterItems.length"
+                              />
                               <v-text-field v-model="dfFilterFileName" label="File name contains" density="comfortable" variant="outlined" hide-details clearable class="mb-2" />
                               <v-text-field v-model="dfFilterType" label="File type contains" density="comfortable" variant="outlined" hide-details clearable class="mb-2" />
                               <v-text-field v-model="dfFilterInstrument" label="Instrument contains" density="comfortable" variant="outlined" hide-details clearable class="mb-2" />
@@ -2184,6 +2200,7 @@ onMounted(() => {
 })
 
 // Filters state and helpers
+const dfFilterRunIds = ref([])
 const dfFilterFileName = ref('')
 const dfFilterType = ref('')
 const dfFilterInstrument = ref('')
@@ -2215,8 +2232,33 @@ const plateSolvedOptions = [
 
 // no pixel count parsing needed anymore
 
+const dfObservationRunFilterItems = computed(() => {
+  const runs = Array.isArray(observationRuns.value) ? observationRuns.value : []
+  return runs
+    .map((r) => ({
+      title: formatRunName(r) || r.name || `Run ${r.pk || r.id}`,
+      value: r.pk || r.id,
+    }))
+    .filter((x) => x.value != null)
+})
+
+const getDatafileRunId = (file) => {
+  const run = file?.observation_run
+  if (run == null || run === '') return null
+  if (typeof run === 'object') return run.pk ?? run.id ?? null
+  const n = Number(run)
+  return Number.isNaN(n) ? null : n
+}
+
 const filteredDataFiles = computed(() => {
   let items = Array.isArray(dataFiles.value) ? dataFiles.value.slice() : []
+  if (Array.isArray(dfFilterRunIds.value) && dfFilterRunIds.value.length) {
+    const runSet = new Set(dfFilterRunIds.value.map((id) => Number(id)))
+    items = items.filter((f) => {
+      const rid = getDatafileRunId(f)
+      return rid != null && runSet.has(rid)
+    })
+  }
   const name = (dfFilterFileName.value || '').toLowerCase()
   if (name) items = items.filter(f => (f.file_name || '').toLowerCase().includes(name))
   const ftype = (dfFilterType.value || '').toLowerCase()
@@ -2419,6 +2461,7 @@ const handleRunItemsPerPageChange = () => {
 }
 
 const resetDfFilters = () => {
+  dfFilterRunIds.value = []
   dfFilterFileName.value = ''
   dfFilterType.value = ''
   dfFilterInstrument.value = ''
