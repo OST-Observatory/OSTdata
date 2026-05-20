@@ -824,7 +824,7 @@
                     <td>{{ getCount(item, ['n_flat', 'flats']) }}</td>
                     <td>{{ getCount(item, ['n_dark', 'darks']) }}</td>
                     <td>{{ getOtherCount(item) }}</td>
-                    <td>{{ formatExposureTime(item.expo_time) }}</td>
+                    <td>{{ formatExposureTime(item.expo_time, 1) }}</td>
                     <td>
                       <div class="d-flex flex-wrap gap-1">
                         <v-chip
@@ -2095,10 +2095,13 @@ const getExposureTypeColor = (t) => {
   return c[(t || '').toUpperCase()] || 'grey'
 }
 
-const formatExposureTime = (time) => {
-  if (!time || time === 0) return '-'
-  if (time >= 1) return time.toString()
-  return time.toFixed(2)
+const formatExposureTime = (time, decimals = null) => {
+  if (time == null || time === '' || Number(time) === 0) return '-'
+  const n = Number(time)
+  if (Number.isNaN(n)) return '-'
+  if (decimals != null) return n.toFixed(decimals)
+  if (n >= 1) return n.toString()
+  return n.toFixed(2)
 }
 
 // Count helpers (robust to numeric strings)
