@@ -47,55 +47,71 @@ const routes = [
     path: '/datafiles',
     name: 'datafiles',
     component: () => import('@/views/DataFilesView.vue'),
-    meta: { requiresAuth: true, requiresAdmin: true, title: 'Data Files', description: 'Browse and filter all data files.' }
+    meta: { requiresAuth: false, title: 'Data Files', description: 'Browse and filter all data files.' }
   },
   {
     path: '/admin',
     name: 'admin',
     component: () => import('@/views/Admin.vue'),
-    meta: { requiresAuth: true, requiresAdmin: true, title: 'Admin', description: 'Administration panel.' }
+    meta: {
+      requiresAuth: true,
+      requiresAnyPerms: [
+        'users.acl_users_view', 'acl_users_view',
+        'users.acl_system_health_view', 'acl_system_health_view',
+        'users.acl_maintenance_cleanup', 'acl_maintenance_cleanup',
+        'users.acl_maintenance_reconcile', 'acl_maintenance_reconcile',
+        'users.acl_maintenance_orphans', 'acl_maintenance_orphans',
+        'users.acl_banner_manage', 'acl_banner_manage',
+        'users.acl_jobs_view_all', 'acl_jobs_view_all',
+        'users.acl_datafiles_plate_solve', 'acl_datafiles_plate_solve',
+        'users.acl_datafiles_exposure_type_user', 'acl_datafiles_exposure_type_user',
+        'users.acl_datafiles_spectrograph', 'acl_datafiles_spectrograph',
+      ],
+      title: 'Admin',
+      description: 'Administration panel.',
+    }
   },
   {
     path: '/admin/users',
     name: 'admin-users',
     component: () => import('@/views/admin/AdminUsers.vue'),
-    meta: { requiresAuth: true, requiresAdmin: true, requiresAnyPerms: ['users.acl_users_view','acl_users_view'], title: 'Admin – Users', description: 'Manage users and roles.' }
+    meta: { requiresAuth: true, requiresAnyPerms: ['users.acl_users_view','acl_users_view'], title: 'Admin – Users', description: 'Manage users and roles.' }
   },
   {
     path: '/admin/jobs',
     name: 'admin-jobs',
     component: () => import('@/views/admin/AdminJobs.vue'),
-    meta: { requiresAuth: true, requiresAdmin: true, title: 'Admin – Download Jobs', description: 'Monitor and control download jobs.' }
+    meta: { requiresAuth: true, requiresAnyPerms: ['users.acl_jobs_view_all','acl_jobs_view_all'], title: 'Admin – Download Jobs', description: 'Monitor and control download jobs.' }
   },
   {
     path: '/admin/health',
     name: 'admin-health',
     component: () => import('@/views/admin/AdminHealth.vue'),
-    meta: { requiresAuth: true, requiresAdmin: true, requiresPerm: 'users.acl_system_health_view', title: 'Admin – Health', description: 'System health and diagnostics.' }
+    meta: { requiresAuth: true, requiresPerm: 'users.acl_system_health_view', title: 'Admin – Health', description: 'System health and diagnostics.' }
   },
   {
     path: '/admin/maintenance',
     name: 'admin-maintenance',
     component: () => import('@/views/admin/AdminMaintenance.vue'),
-    meta: { requiresAuth: true, requiresAdmin: true, requiresAnyPerms: ['users.acl_maintenance_cleanup','users.acl_maintenance_reconcile','users.acl_maintenance_orphans','users.acl_banner_manage','acl_maintenance_cleanup','acl_maintenance_reconcile','acl_maintenance_orphans','acl_banner_manage'], title: 'Admin – Maintenance', description: 'Data maintenance tools.' }
+    meta: { requiresAuth: true, requiresAnyPerms: ['users.acl_maintenance_cleanup','users.acl_maintenance_reconcile','users.acl_maintenance_orphans','users.acl_banner_manage','acl_maintenance_cleanup','acl_maintenance_reconcile','acl_maintenance_orphans','acl_banner_manage'], title: 'Admin – Maintenance', description: 'Data maintenance tools.' }
   },
   {
     path: '/admin/exposure-type-discrepancies',
     name: 'admin-exposure-type-discrepancies',
     component: () => import('@/views/admin/AdminExposureTypeDiscrepancies.vue'),
-    meta: { requiresAuth: true, requiresAdmin: true, title: 'Admin – Exposure Type Discrepancies', description: 'Review and resolve exposure type classification discrepancies.' }
+    meta: { requiresAuth: true, requiresAnyPerms: ['users.acl_datafiles_exposure_type_user','acl_datafiles_exposure_type_user'], title: 'Admin – Exposure Type Discrepancies', description: 'Review and resolve exposure type classification discrepancies.' }
   },
   {
     path: '/admin/spectrograph-files',
     name: 'admin-spectrograph-files',
     component: () => import('@/views/admin/AdminSpectrographFiles.vue'),
-    meta: { requiresAuth: true, requiresAdmin: true, title: 'Admin – Spectrograph Management', description: 'Manage spectrograph property for data files.' }
+    meta: { requiresAuth: true, requiresAnyPerms: ['users.acl_datafiles_spectrograph','acl_datafiles_spectrograph'], title: 'Admin – Spectrograph Management', description: 'Manage spectrograph property for data files.' }
   },
   {
     path: '/admin/plate-solving',
     name: 'admin-plate-solving',
     component: () => import('@/views/admin/AdminPlateSolving.vue'),
-    meta: { requiresAuth: true, requiresAdmin: true, title: 'Admin – Plate Solving', description: 'Manage plate solving for data files.' }
+    meta: { requiresAuth: true, requiresAnyPerms: ['users.acl_datafiles_plate_solve','acl_datafiles_plate_solve'], title: 'Admin – Plate Solving', description: 'Manage plate solving for data files.' }
   },
   {
     path: '/login',
@@ -131,8 +147,10 @@ const router = createRouter({
 // Global auth guard
 router.beforeEach(async (to) => {
   const auth = useAuthStore()
-  // Ensure we know current auth/admin state (force-check for admin routes)
-  if (!auth.isAuthenticated || (to.meta?.requiresAdmin === true)) {
+  const needsAuthCheck = to.meta?.requiresAuth
+    || to.meta?.requiresPerm
+    || (Array.isArray(to.meta?.requiresAnyPerms) && to.meta.requiresAnyPerms.length)
+  if (!auth.isAuthenticated || needsAuthCheck) {
     await auth.checkAuth()
   }
 
@@ -140,18 +158,13 @@ router.beforeEach(async (to) => {
     return { path: '/login', query: { next: to.fullPath } }
   }
 
-  if (to.meta?.requiresAdmin && !(auth.isAdmin)) {
-    return { path: '/' }
-  }
-
-  // Optional ACL route gating: requiresPerm or requiresAnyPerms
-  const requiresPerm = to.meta?.requiresPerm
-  const requiresAny = to.meta?.requiresAnyPerms
   const has = (code) => {
     try {
       return auth.hasPerm(code)
     } catch { return false }
   }
+  const requiresPerm = to.meta?.requiresPerm
+  const requiresAny = to.meta?.requiresAnyPerms
   if (requiresPerm && !has(requiresPerm)) {
     return { path: '/' }
   }
@@ -161,4 +174,4 @@ router.beforeEach(async (to) => {
   }
 })
 
-export default router 
+export default router

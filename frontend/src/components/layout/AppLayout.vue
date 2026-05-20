@@ -60,7 +60,7 @@
         <v-tooltip activator="parent" location="bottom">Tags</v-tooltip>
       </v-btn>
 
-      <v-btn v-if="isAdmin" icon to="/datafiles" aria-label="Open Data Files" class="on-secondary nav-btn nav-gap" :class="{ 'nav-active': isActive('/datafiles') }" :aria-current="isActive('/datafiles') ? 'page' : undefined" @mouseenter="prefetchRoute('/datafiles')">
+      <v-btn icon to="/datafiles" aria-label="Open Data Files" class="on-secondary nav-btn nav-gap" :class="{ 'nav-active': isActive('/datafiles') }" :aria-current="isActive('/datafiles') ? 'page' : undefined" @mouseenter="prefetchRoute('/datafiles')">
         <v-icon>mdi-file-document-multiple</v-icon>
         <v-tooltip activator="parent" location="bottom">Data Files</v-tooltip>
       </v-btn>
@@ -70,7 +70,7 @@
         <v-tooltip activator="parent" location="bottom">Dark Frame Finder</v-tooltip>
       </v-btn>
 
-      <v-btn v-if="isAdmin" icon to="/admin" aria-label="Open Admin" class="on-secondary nav-btn nav-gap" :class="{ 'nav-active': isActive('/admin') }" :aria-current="isActive('/admin') ? 'page' : undefined">
+      <v-btn v-if="canAccessAdmin" icon to="/admin" aria-label="Open Admin" class="on-secondary nav-btn nav-gap" :class="{ 'nav-active': isActive('/admin') }" :aria-current="isActive('/admin') ? 'page' : undefined">
         <v-icon>mdi-shield-account</v-icon>
         <v-tooltip activator="parent" location="bottom">Admin</v-tooltip>
       </v-btn>
@@ -132,11 +132,9 @@
           <v-list-item to="/observation-runs" :aria-current="isActive('/observation-runs') ? 'page' : undefined"><v-list-item-title>Observation runs</v-list-item-title></v-list-item>
           <v-list-item to="/objects" :aria-current="isActive('/objects') ? 'page' : undefined"><v-list-item-title>Objects</v-list-item-title></v-list-item>
           <v-list-item to="/tags" :aria-current="isActive('/tags') ? 'page' : undefined"><v-list-item-title>Tags</v-list-item-title></v-list-item>
-          <template v-if="isAdmin">
-            <v-list-item to="/datafiles" :aria-current="isActive('/datafiles') ? 'page' : undefined"><v-list-item-title>Data Files</v-list-item-title></v-list-item>
-          </template>
+          <v-list-item to="/datafiles" :aria-current="isActive('/datafiles') ? 'page' : undefined"><v-list-item-title>Data Files</v-list-item-title></v-list-item>
           <v-list-item to="/dark-finder" :aria-current="isActive('/dark-finder') ? 'page' : undefined"><v-list-item-title>Dark Frame Finder</v-list-item-title></v-list-item>
-          <template v-if="isAdmin">
+          <template v-if="canAccessAdmin">
             <v-list-item to="/admin" :aria-current="isActive('/admin') ? 'page' : undefined"><v-list-item-title>Admin</v-list-item-title></v-list-item>
           </template>
           <v-divider></v-divider>
@@ -241,7 +239,7 @@ import { api } from '@/services/api'
 const authStore = useAuthStore()
 const isAuthenticated = computed(() => authStore.isAuthenticated)
 const username = computed(() => authStore.username)
-const isAdmin = computed(() => authStore.isAdmin)
+const canAccessAdmin = computed(() => authStore.canAccessAdmin)
 type UiMessage = { id: string | number; type: 'info' | 'success' | 'warning' | 'error'; text: string }
 const messages = ref<UiMessage[]>([])
 const isFooterVisible = ref(false)

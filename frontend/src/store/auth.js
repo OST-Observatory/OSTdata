@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import router from '@/router'
+import { ADMIN_NAV_PERMS } from '@/constants/acl'
 
 export const useAuthStore = defineStore('auth', () => {
   const user = ref(null)
@@ -9,10 +10,9 @@ export const useAuthStore = defineStore('auth', () => {
 
   const isAuthenticated = computed(() => !!token.value)
   const username = computed(() => user.value?.username)
-  const isAdmin = computed(() => {
-    const u = user.value
-    return !!(u && (u.is_staff || u.is_superuser))
-  })
+  const isSuperuser = computed(() => !!user.value?.is_superuser)
+  /** @deprecated Use hasPerm / canAccessAdmin; staff no longer implies extra rights. */
+  const isAdmin = computed(() => isSuperuser.value)
   const perms = computed(() => Array.isArray(user.value?.perms) ? user.value.perms : [])
   const hasPerm = (code) => {
     try {
@@ -22,6 +22,14 @@ export const useAuthStore = defineStore('auth', () => {
       return p.includes(code) || p.includes(code.startsWith('users.') ? code : `users.${code}`)
     } catch { return false }
   }
+  const hasAnyPerm = (codes) => {
+    try {
+      if (user.value?.is_superuser) return true
+      const list = Array.isArray(codes) ? codes : []
+      return list.some((code) => hasPerm(code))
+    } catch { return false }
+  }
+  const canAccessAdmin = computed(() => hasAnyPerm(ADMIN_NAV_PERMS))
 
   async function login(credentials) {
     try {
@@ -103,8 +111,11 @@ export const useAuthStore = defineStore('auth', () => {
     isAuthenticated,
     username,
     isAdmin,
+    isSuperuser,
     perms,
     hasPerm,
+    hasAnyPerm,
+    canAccessAdmin,
     login,
     logout,
     checkAuth,

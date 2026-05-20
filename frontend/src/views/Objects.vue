@@ -662,10 +662,10 @@ const radius = ref('')
 const radiusUnit = ref('arcsec')
 const notify = useNotifyStore()
 const authStore = useAuthStore()
-const canAdmin = computed(() => authStore.isAdmin)
-const canEdit = computed(() => authStore.isAdmin || authStore.hasPerm('users.acl_objects_edit') || authStore.hasPerm('acl_objects_edit'))
-const canMerge = computed(() => authStore.isAdmin || authStore.hasPerm('users.acl_objects_merge') || authStore.hasPerm('acl_objects_merge'))
-const canDelete = computed(() => authStore.isAdmin || authStore.hasPerm('users.acl_objects_delete') || authStore.hasPerm('acl_objects_delete'))
+const canAdmin = computed(() => canEdit.value || canMerge.value || canDelete.value)
+const canEdit = computed(() => authStore.hasPerm('users.acl_objects_edit') || authStore.hasPerm('acl_objects_edit'))
+const canMerge = computed(() => authStore.hasPerm('users.acl_objects_merge') || authStore.hasPerm('acl_objects_merge'))
+const canDelete = computed(() => authStore.hasPerm('users.acl_objects_delete') || authStore.hasPerm('acl_objects_delete'))
 const canPublish = canEdit
 const boolFilterItems = [
   { title: 'Not selected', value: null },

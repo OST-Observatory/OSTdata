@@ -224,8 +224,8 @@ const totalItems = ref(0)
 const sortKey = ref('name')
 
 const authStore = useAuthStore()
-const canEdit = computed(() => authStore.isAdmin || authStore.hasPerm('users.acl_tags_manage') || authStore.hasPerm('acl_tags_manage'))
-const canAdmin = computed(() => authStore.isAdmin)
+const canEdit = computed(() => authStore.hasPerm('users.acl_tags_manage') || authStore.hasPerm('acl_tags_manage'))
+const canAdmin = computed(() => canEdit.value)
 
 const headers = [
   { title: 'Name', key: 'name', sortable: true },

@@ -8,13 +8,47 @@ from django.db import connection, transaction
 from django.utils import timezone
 from django.utils.http import http_date
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import AllowAny
-from ostdata.permissions import IsAdminOrSuperuser as IsAdminUser
+from rest_framework.permissions import AllowAny, IsAuthenticated
+from ostdata.permissions import IsAdminOrSuperuser as IsAdminUser, HasPerm, user_has_acl
 from rest_framework.response import Response
 from drf_spectacular.utils import extend_schema, extend_schema_view, OpenApiParameter
 from rest_framework import serializers
 import logging
 logger = logging.getLogger(__name__)
+
+
+def _acl_for_override_model(model_type: str) -> str:
+    mt = (model_type or '').lower()
+    if mt == 'datafile':
+        return 'acl_datafiles_clear_overrides'
+    if mt == 'run':
+        return 'acl_run_detail_clear_overrides'
+    if mt == 'object':
+        return 'acl_object_admin_edit'
+    return ''
+
+
+def _check_override_acl(request, model_type: str):
+    codename = _acl_for_override_model(model_type)
+    if not codename or not user_has_acl(request.user, codename):
+        return Response({'detail': 'Forbidden'}, status=403)
+    return None
+
+
+_DATAFILE_ADMIN_ACLS = (
+    'acl_datafiles_plate_solve', 'acl_datafiles_reevaluate', 'acl_datafiles_clear_overrides',
+    'acl_datafiles_exposure_type_user', 'acl_datafiles_spectrograph',
+    'acl_datafiles_link_object', 'acl_datafiles_unlink_object',
+)
+
+
+def _has_any_datafile_admin_acl(user) -> bool:
+    if getattr(user, 'is_superuser', False):
+        return True
+    for code in _DATAFILE_ADMIN_ACLS:
+        if user_has_acl(user, code):
+            return True
+    return False
 
 try:
     import redis as _redis
@@ -131,19 +165,15 @@ from adminops.redis_helpers import (
 
 @extend_schema(summary='Admin system health (admin only)', tags=['Admin'])
 @api_view(['GET'])
-@permission_classes([IsAdminUser])
+@permission_classes([IsAuthenticated, HasPerm('acl_system_health_view')])
 def admin_health(request):
-    if not (request.user and (request.user.is_superuser or request.user.has_perm('users.acl_system_health_view'))):
-        return Response({'detail': 'Forbidden'}, status=403)
     data = gather_admin_health()
     return Response(data, status=200)
 
 @extend_schema(summary='Set observation date (mid JD) for a run', tags=['Admin'])
 @api_view(['POST'])
-@permission_classes([IsAdminUser])
+@permission_classes([IsAuthenticated, HasPerm('acl_runs_edit')])
 def admin_run_set_date(request, run_id: int):
-    if not (request.user.is_superuser or request.user.has_perm('users.acl_runs_edit')):
-        return Response({'detail': 'Forbidden'}, status=403)
     payload = request.data if hasattr(request, 'data') else {}
     jd = payload.get('jd', None)
     iso = payload.get('iso') or payload.get('datetime') or payload.get('date')
@@ -188,10 +218,8 @@ def admin_run_set_date(request, run_id: int):
 
 @extend_schema(summary='Recompute observation date (mid JD) from files', tags=['Admin'])
 @api_view(['POST'])
-@permission_classes([IsAdminUser])
+@permission_classes([IsAuthenticated, HasPerm('acl_runs_edit')])
 def admin_run_recompute_date(request, run_id: int):
-    if not (request.user.is_superuser or request.user.has_perm('users.acl_runs_edit')):
-        return Response({'detail': 'Forbidden'}, status=403)
     try:
         run = ObservationRun.objects.get(pk=run_id)
     except ObservationRun.DoesNotExist:
@@ -214,7 +242,7 @@ def admin_run_recompute_date(request, run_id: int):
 
 @extend_schema(summary='Clear override flag for a specific field', tags=['Admin'])
 @api_view(['POST'])
-@permission_classes([IsAdminUser])
+@permission_classes([IsAuthenticated])
 def admin_clear_override_flag(request, model_type: str, instance_id: int, field_name: str):
     """
     Clear a single override flag for a specific field.
@@ -222,8 +250,9 @@ def admin_clear_override_flag(request, model_type: str, instance_id: int, field_
     instance_id: ID of the instance
     field_name: Name of the field (e.g., 'mid_observation_jd')
     """
-    if not (request.user.is_superuser or request.user.has_perm('users.acl_runs_edit')):
-        return Response({'detail': 'Forbidden'}, status=403)
+    denied = _check_override_acl(request, model_type)
+    if denied:
+        return denied
     
     from obs_run.utils import get_override_field_name
     
@@ -264,15 +293,16 @@ def admin_clear_override_flag(request, model_type: str, instance_id: int, field_
 
 @extend_schema(summary='Clear all override flags for an instance', tags=['Admin'])
 @api_view(['POST'])
-@permission_classes([IsAdminUser])
+@permission_classes([IsAuthenticated])
 def admin_clear_all_overrides(request, model_type: str, instance_id: int):
     """
     Clear all override flags for a specific instance.
     model_type: 'run', 'datafile', or 'object'
     instance_id: ID of the instance
     """
-    if not (request.user.is_superuser or request.user.has_perm('users.acl_runs_edit')):
-        return Response({'detail': 'Forbidden'}, status=403)
+    denied = _check_override_acl(request, model_type)
+    if denied:
+        return denied
     
     from obs_run.utils import get_override_field_name
     
@@ -333,7 +363,7 @@ def admin_clear_all_overrides(request, model_type: str, instance_id: int):
 
 @extend_schema(summary='List all instances with override flags', tags=['Admin'])
 @api_view(['GET'])
-@permission_classes([IsAdminUser])
+@permission_classes([IsAuthenticated])
 def admin_list_override_flags(request):
     """
     List all instances (runs, datafiles, objects) that have any override flags set.
@@ -413,7 +443,7 @@ class AdminReconcileRequestSerializer(serializers.Serializer):
 
 
 @api_view(['POST'])
-@permission_classes([IsAdminUser])
+@permission_classes([IsAuthenticated])
 @extend_schema(summary='Trigger cleanup of expired downloads', request=None, responses={'202': {'type': 'object'}}, tags=['Admin'])
 def admin_trigger_cleanup_downloads(request):
     if not (request.user.is_superuser or request.user.has_perm('users.acl_maintenance_cleanup')):
@@ -427,7 +457,7 @@ def admin_trigger_cleanup_downloads(request):
 
 
 @api_view(['POST'])
-@permission_classes([IsAdminUser])
+@permission_classes([IsAuthenticated])
 @extend_schema(summary='Trigger filesystem reconcile', request=AdminReconcileRequestSerializer, responses={'202': {'type': 'object'}}, tags=['Admin'])
 def admin_trigger_reconcile(request):
     if not (request.user.is_superuser or request.user.has_perm('users.acl_maintenance_reconcile')):
@@ -456,7 +486,7 @@ class AdminScanMissingRequestSerializer(serializers.Serializer):
 
 
 @api_view(['POST'])
-@permission_classes([IsAdminUser])
+@permission_classes([IsAuthenticated])
 @extend_schema(summary='Trigger orphans cleanup/hashcheck', request=AdminOrphansRequestSerializer, responses={'202': {'type': 'object'}}, tags=['Admin'])
 def admin_trigger_orphans_hashcheck(request):
     if not (request.user.is_superuser or request.user.has_perm('users.acl_maintenance_orphans')):
@@ -484,7 +514,7 @@ def admin_trigger_orphans_hashcheck(request):
 
 
 @api_view(['POST'])
-@permission_classes([IsAdminUser])
+@permission_classes([IsAuthenticated])
 @extend_schema(summary='Trigger scan for missing files (ingest new files from filesystem)', request=AdminScanMissingRequestSerializer, responses={'202': {'type': 'object'}}, tags=['Admin'])
 def admin_trigger_scan_missing(request):
     if not (request.user.is_superuser or request.user.has_perm('users.acl_maintenance_reconcile')):
@@ -512,7 +542,7 @@ class AdminOrphanObjectsRequestSerializer(serializers.Serializer):
 
 
 @api_view(['POST'])
-@permission_classes([IsAdminUser])
+@permission_classes([IsAuthenticated])
 @extend_schema(
     summary='Cleanup orphan Objects (no DataFiles)',
     description='Finds and removes Objects that have no associated DataFiles. Also recalculates first_hjd and cleans stale observation_run M2M links.',
@@ -537,7 +567,7 @@ def admin_trigger_orphan_objects(request):
 
 
 @api_view(['POST'])
-@permission_classes([IsAdminUser])
+@permission_classes([IsAuthenticated])
 @extend_schema(
     summary='Unlink non-Light DataFiles from Objects',
     description='Removes Object–DataFile associations for all DataFiles that are not Light frames (flats, darks, bias, etc.).',
@@ -569,7 +599,7 @@ class AdminBannerSetSerializer(serializers.Serializer):
 
 @extend_schema(summary='Admin banner: get current banner', tags=['Admin'])
 @api_view(['GET'])
-@permission_classes([IsAdminUser])
+@permission_classes([IsAuthenticated])
 def admin_get_banner(request):
     if not (request.user.is_superuser or request.user.has_perm('users.acl_banner_manage')):
         return Response({'detail': 'Forbidden'}, status=403)
@@ -579,7 +609,7 @@ def admin_get_banner(request):
 
 @extend_schema(summary='Admin banner: set banner', tags=['Admin'])
 @api_view(['POST'])
-@permission_classes([IsAdminUser])
+@permission_classes([IsAuthenticated])
 @extend_schema(request=AdminBannerSetSerializer, responses={'200': {'type': 'object'}})
 def admin_set_banner(request):
     if not (request.user.is_superuser or request.user.has_perm('users.acl_banner_manage')):
@@ -598,7 +628,7 @@ def admin_set_banner(request):
 
 @extend_schema(summary='Admin banner: clear banner', tags=['Admin'])
 @api_view(['POST'])
-@permission_classes([IsAdminUser])
+@permission_classes([IsAuthenticated])
 def admin_clear_banner(request):
     if not (request.user.is_superuser or request.user.has_perm('users.acl_banner_manage')):
         return Response({'detail': 'Forbidden'}, status=403)
@@ -618,7 +648,7 @@ def banner_info(request):
 
 
 @api_view(['POST'])
-@permission_classes([IsAdminUser])
+@permission_classes([IsAuthenticated])
 @extend_schema(summary='Trigger dashboard stats refresh', responses={'202': {'type': 'object'}}, tags=['Admin'])
 def admin_trigger_refresh_dashboard_stats(request):
     """
@@ -637,7 +667,7 @@ def admin_trigger_refresh_dashboard_stats(request):
 
 
 @api_view(['POST'])
-@permission_classes([IsAdminUser])
+@permission_classes([IsAuthenticated])
 @extend_schema(summary='Trigger plate solving', responses={'202': {'type': 'object'}}, tags=['Admin'])
 def admin_trigger_plate_solve_task(request):
     """
@@ -654,7 +684,7 @@ def admin_trigger_plate_solve_task(request):
 
 
 @api_view(['POST'])
-@permission_classes([IsAdminUser])
+@permission_classes([IsAuthenticated])
 @extend_schema(
     summary='Re-evaluate plate-solved files',
     description='Re-run object association for plate-solved files where header had no coords or WCS differs from header by > threshold.',
@@ -681,7 +711,7 @@ def admin_trigger_re_evaluate_plate_solved(request):
     responses={200: serializers.Serializer}
 )
 @api_view(['POST'])
-@permission_classes([IsAdminUser])
+@permission_classes([IsAuthenticated, HasPerm('acl_object_delete_aliases')])
 def admin_delete_object_aliases(request, object_id):
     """Delete all identifiers where info_from_header=False for the given object."""
     try:
@@ -710,7 +740,7 @@ def admin_delete_object_aliases(request, object_id):
     responses={200: serializers.Serializer}
 )
 @api_view(['POST'])
-@permission_classes([IsAdminUser])
+@permission_classes([IsAuthenticated, HasPerm('acl_object_simbad_identifiers')])
 def admin_update_object_identifiers(request, object_id):
     """
     Update object identifiers from SIMBAD.
@@ -936,7 +966,7 @@ def admin_update_object_identifiers(request, object_id):
     responses={200: serializers.Serializer}
 )
 @api_view(['POST'])
-@permission_classes([IsAdminUser])
+@permission_classes([IsAuthenticated, HasPerm('acl_object_simbad_reanalyze')])
 def admin_reanalyse_object(request, object_id):
     """
     Re-analyse object from SIMBAD based on coordinates.
@@ -982,11 +1012,10 @@ def admin_reanalyse_object(request, object_id):
     ],
 )
 @api_view(['GET'])
-@permission_classes([IsAdminUser])
+@permission_classes([IsAuthenticated, HasPerm('acl_datafiles_exposure_type_user')])
 def admin_get_exposure_type_discrepancies(request):
     """
     Get DataFiles where header-based exposure_type differs from ML-classified exposure_type_ml.
-    Only accessible to admin/staff users.
     Supports filtering by header_type, ml_type, observation_run, and has_user_type.
     """
     # Get files where:
@@ -1054,7 +1083,7 @@ def admin_get_exposure_type_discrepancies(request):
     ],
 )
 @api_view(['PATCH'])
-@permission_classes([IsAdminUser])
+@permission_classes([IsAuthenticated, HasPerm('acl_datafiles_exposure_type_user')])
 def admin_update_exposure_type_user(request, pk):
     """
     Update the user-set exposure_type_user for a DataFile.
@@ -1124,11 +1153,10 @@ def admin_update_exposure_type_user(request, pk):
     ],
 )
 @api_view(['GET'])
-@permission_classes([IsAdminUser])
+@permission_classes([IsAuthenticated, HasPerm('acl_datafiles_spectrograph')])
 def admin_get_spectrograph_files(request):
     """
     Get DataFiles where spectrograph is set or exposure_type is WAVE.
-    Only accessible to admin/staff users.
     Supports filtering by spectrograph, exposure_type, observation_run, and file_name.
     """
     # Get files where:
@@ -1182,7 +1210,7 @@ def admin_get_spectrograph_files(request):
     ],
 )
 @api_view(['PATCH'])
-@permission_classes([IsAdminUser])
+@permission_classes([IsAuthenticated, HasPerm('acl_datafiles_spectrograph')])
 def admin_update_spectrograph(request, pk):
     """
     Update the spectrograph property for a DataFile.
@@ -1242,11 +1270,10 @@ def admin_update_spectrograph(request, pk):
     ],
 )
 @api_view(['GET'])
-@permission_classes([IsAdminUser])
+@permission_classes([IsAuthenticated, HasPerm('acl_datafiles_plate_solve')])
 def admin_get_unsolved_plate_files(request):
     """
     Get DataFiles where plate_solved=False.
-    Only accessible to admin/staff users.
     Supports filtering by observation_run and file_name.
         Only shows Light frames (effective_exposure_type='LI'), excluding spectra.
     """
@@ -1363,7 +1390,7 @@ def admin_get_unsolved_plate_files(request):
     parameters=[],
 )
 @api_view(['GET'])
-@permission_classes([IsAdminUser])
+@permission_classes([IsAuthenticated])
 def admin_get_observation_runs_for_plate_solving(request):
     """
     Get list of observation runs that have Light frames (for plate solving filter dropdown).
@@ -1397,7 +1424,7 @@ def admin_get_observation_runs_for_plate_solving(request):
     parameters=[],
 )
 @api_view(['POST'])
-@permission_classes([IsAdminUser])
+@permission_classes([IsAuthenticated, HasPerm('acl_datafiles_plate_solve')])
 def admin_trigger_plate_solve(request):
     """
     Manually trigger plate solving for specific DataFiles.
@@ -1447,7 +1474,7 @@ def admin_trigger_plate_solve(request):
     parameters=[],
 )
 @api_view(['GET'])
-@permission_classes([IsAdminUser])
+@permission_classes([IsAuthenticated])
 def admin_plate_solve_stats(request):
     """
     Get plate solving statistics.
@@ -1481,7 +1508,7 @@ def admin_plate_solve_stats(request):
     parameters=[],
 )
 @api_view(['GET'])
-@permission_classes([IsAdminUser])
+@permission_classes([IsAuthenticated])
 def admin_get_plate_solving_task_enabled(request):
     """Get plate solving task enabled status. Redis override takes precedence over settings."""
     from django.conf import settings
@@ -1498,7 +1525,7 @@ def admin_get_plate_solving_task_enabled(request):
     parameters=[],
 )
 @api_view(['POST'])
-@permission_classes([IsAdminUser])
+@permission_classes([IsAuthenticated])
 def admin_set_plate_solving_task_enabled(request):
     """Set plate solving task enabled status in Redis. Admins can toggle without restart."""
     enabled = request.data.get('enabled', False)
@@ -1519,11 +1546,14 @@ def admin_set_plate_solving_task_enabled(request):
     ],
 )
 @api_view(['GET'])
-@permission_classes([IsAdminUser])
+@permission_classes([IsAuthenticated])
 def admin_list_all_datafiles(request):
     """
-    List all DataFiles with filtering. Staff/Admin only. No run visibility restriction.
+    List all DataFiles with filtering (admin tooling; unrestricted by run visibility).
+    Requires at least one data-file admin ACL.
     """
+    if not _has_any_datafile_admin_acl(request.user):
+        return Response({'detail': 'Forbidden'}, status=403)
     from adminops.api.filters import AdminDataFileFilter
 
     queryset = DataFile.objects.select_related('observation_run').prefetch_related('object_set').all()
@@ -1635,7 +1665,7 @@ def _do_re_evaluate_run_all(queryset):
     request=serializers.Serializer,
 )
 @api_view(['POST'])
-@permission_classes([IsAdminUser])
+@permission_classes([IsAuthenticated, HasPerm('acl_datafiles_reevaluate')])
 def admin_re_evaluate_datafiles(request):
     """
     Run evaluate_data_file for selected DataFiles (all files, uses header-derived ra/dec).
@@ -1657,7 +1687,7 @@ def admin_re_evaluate_datafiles(request):
     tags=['Admin'],
 )
 @api_view(['POST'])
-@permission_classes([IsAdminUser])
+@permission_classes([IsAuthenticated, HasPerm('acl_run_datafiles_bulk_admin')])
 def admin_re_evaluate_run(request, run_id: int):
     """
     Re-evaluate ALL DataFiles belonging to the given Observation Run.
@@ -1682,7 +1712,7 @@ def admin_re_evaluate_run(request, run_id: int):
     request=serializers.Serializer,
 )
 @api_view(['POST'])
-@permission_classes([IsAdminUser])
+@permission_classes([IsAuthenticated, HasPerm('acl_datafiles_link_object')])
 def admin_link_datafiles_to_object(request):
     """
     Associate selected DataFiles with an existing Object.
@@ -1735,7 +1765,7 @@ def admin_link_datafiles_to_object(request):
     request=serializers.Serializer,
 )
 @api_view(['POST'])
-@permission_classes([IsAdminUser])
+@permission_classes([IsAuthenticated, HasPerm('acl_datafiles_unlink_object')])
 def admin_unlink_datafiles_from_objects(request):
     """
     Remove Object–DataFile associations for the given DataFiles.

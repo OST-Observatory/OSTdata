@@ -8,7 +8,7 @@
             <v-card-title class="d-flex align-center justify-space-between">
               Basic Data
               <div class="d-flex align-center" style="gap: 8px">
-                <v-tooltip v-if="isAdmin" text="Re-evaluate all DataFiles (object detection)" location="bottom">
+                <v-tooltip v-if="canRunBulkAdmin" text="Re-evaluate all DataFiles (object detection)" location="bottom">
                   <template #activator="{ props }">
                     <v-btn
                       v-bind="props"
@@ -34,7 +34,7 @@
                     ></v-btn>
                   </template>
                 </v-tooltip>
-                <v-tooltip v-if="isAuthenticated" text="Edit observation type" location="bottom">
+                <v-tooltip v-if="canEditObsType" text="Edit observation type" location="bottom">
                   <template #activator="{ props }">
                     <v-btn
                       v-bind="props"
@@ -107,7 +107,7 @@
           <v-card class="uniform-height">
             <v-card-title class="d-flex align-center justify-space-between">
               Notes
-              <v-tooltip v-if="isAuthenticated" text="Edit notes" location="bottom">
+              <v-tooltip v-if="canEditNotes" text="Edit notes" location="bottom">
                 <template #activator="{ props }">
                   <v-btn
                     v-bind="props"
@@ -133,7 +133,7 @@
           <v-card class="uniform-height">
             <v-card-title class="d-flex align-center justify-space-between">
               Tags
-              <v-tooltip v-if="isAuthenticated" text="Edit tags" location="bottom">
+              <v-tooltip v-if="canEditTags" text="Edit tags" location="bottom">
                 <template #activator="{ props }">
                   <v-btn
                     v-bind="props"
@@ -165,7 +165,7 @@
       </v-row>
 
       <!-- Override Flags (Admin only) -->
-      <v-row v-if="isAdmin" @click="expandOverrideFlagsIfCollapsed" :class="{ 'expand-clickable': !showOverrideFlags }">
+      <v-row v-if="canClearRunOverrides" @click="expandOverrideFlagsIfCollapsed" :class="{ 'expand-clickable': !showOverrideFlags }">
         <v-col cols="12">
           <v-card class="mb-4">
             <v-card-title class="d-flex justify-space-between align-center">
@@ -1052,8 +1052,12 @@ const route = useRoute()
 const notify = useNotifyStore()
 const authStore = useAuthStore()
 const isAuthenticated = computed(() => authStore.isAuthenticated)
-const isAdmin = computed(() => authStore.isAdmin)
-const canEditRun = computed(() => authStore.isAdmin || authStore.hasPerm('users.acl_runs_edit') || authStore.hasPerm('acl_runs_edit'))
+const canEditRun = computed(() => authStore.hasPerm('users.acl_runs_edit') || authStore.hasPerm('acl_runs_edit'))
+const canRunBulkAdmin = computed(() => authStore.hasPerm('acl_run_datafiles_bulk_admin'))
+const canClearRunOverrides = computed(() => authStore.hasPerm('acl_run_detail_clear_overrides'))
+const canEditObsType = computed(() => authStore.hasPerm('acl_run_detail_edit_obs_type'))
+const canEditNotes = computed(() => authStore.hasPerm('acl_run_detail_edit_notes'))
+const canEditTags = computed(() => authStore.hasPerm('acl_run_detail_edit_tags'))
 const runId = route.params.id
 const clearingOverrides = ref(false)
 const clearingSingleOverride = ref({})
@@ -1258,7 +1262,7 @@ const runEditRecomputeDate = async () => {
 
 const reEvalRunLoading = ref(false)
 const reEvaluateRun = async () => {
-  if (!isAdmin.value || !runId) return
+  if (!canRunBulkAdmin.value || !runId) return
   reEvalRunLoading.value = true
   try {
     const res = await api.adminReEvaluateRun(runId)
@@ -1304,7 +1308,7 @@ const hasAnyOverride = computed(() => {
 })
 
 const clearSingleOverride = async (fieldName) => {
-  if (!isAdmin.value || !runId) return
+  if (!canClearRunOverrides.value || !runId) return
   const key = fieldName
   clearingSingleOverride.value[key] = true
   try {
@@ -1321,7 +1325,7 @@ const clearSingleOverride = async (fieldName) => {
 }
 
 const clearAllOverrides = async () => {
-  if (!isAdmin.value || !runId) return
+  if (!canClearRunOverrides.value || !runId) return
   clearingOverrides.value = true
   try {
     await api.adminClearAllOverrides('run', runId)
@@ -1851,6 +1855,7 @@ const closeFov = () => {
 }
 
 const openNotesDialog = () => {
+  if (!canEditNotes.value) return
   newNote.value = run.value?.note || ''
   notesDialog.value = true
 }
@@ -1861,6 +1866,7 @@ const closeNotesDialog = () => {
 }
 
 const saveRunNotes = async () => {
+  if (!canEditNotes.value) return
   try {
     await api.updateObservationRun(runId, { note: newNote.value })
     const data = await api.getObservationRun(runId)
@@ -1873,6 +1879,7 @@ const saveRunNotes = async () => {
 }
 
 const openObsTypeDialog = () => {
+  if (!canEditObsType.value) return
   editSpectroscopy.value = !!run.value?.spectroscopy
   editPhotometry.value = !!run.value?.photometry
   obsTypeDialog.value = true
@@ -1884,6 +1891,7 @@ const closeObsTypeDialog = () => {
 }
 
 const saveObsType = async () => {
+  if (!canEditObsType.value) return
   try {
     savingObsType.value = true
     await api.updateObservationRun(runId, { spectroscopy: editSpectroscopy.value, photometry: editPhotometry.value })
@@ -1899,6 +1907,7 @@ const saveObsType = async () => {
 }
 
 const openTagDialog = async () => {
+  if (!canEditTags.value) return
   try {
     // Load available tags if not loaded
     if (!availableTags.value.length) {
@@ -1923,6 +1932,7 @@ const closeTagDialog = () => {
 }
 
 const saveRunTags = async () => {
+  if (!canEditTags.value) return
   try {
     await api.updateObservationRun(runId, { tag_ids: selectedTags.value })
     const data = await api.getObservationRun(runId)

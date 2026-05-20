@@ -338,9 +338,9 @@
   const notify = useNotifyStore()
   const auth = useAuthStore()
   const myUserId = computed(() => auth?.user?.id)
-  const canViewAll = computed(() => auth.isAdmin || auth.hasPerm('users.acl_jobs_view_all') || auth.hasPerm('acl_jobs_view_all'))
-  const canBatchCancel = computed(() => auth.isAdmin || auth.hasPerm('users.acl_jobs_cancel_any') || auth.hasPerm('acl_jobs_cancel_any'))
-  const canTTLModify = computed(() => auth.isAdmin || auth.hasPerm('users.acl_jobs_ttl_modify') || auth.hasPerm('acl_jobs_ttl_modify'))
+  const canViewAll = computed(() => auth.hasPerm('users.acl_jobs_view_all') || auth.hasPerm('acl_jobs_view_all'))
+  const canBatchCancel = computed(() => auth.hasPerm('users.acl_jobs_cancel_any') || auth.hasPerm('acl_jobs_cancel_any'))
+  const canTTLModify = computed(() => auth.hasPerm('users.acl_jobs_ttl_modify') || auth.hasPerm('acl_jobs_ttl_modify'))
   
   const headers = [
     { title: 'ID', key: 'id', sortable: true },

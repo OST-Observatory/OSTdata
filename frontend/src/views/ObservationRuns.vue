@@ -245,7 +245,7 @@
           </template>
 
           <template v-slot:item.actions="{ item }">
-            <v-tooltip v-if="canAdmin" text="Re-evaluate all DataFiles (object detection)" location="top">
+            <v-tooltip v-if="canReEvaluateRun" text="Re-evaluate all DataFiles (object detection)" location="top">
               <template #activator="{ props }">
                 <v-btn
                   v-bind="props"
@@ -469,10 +469,10 @@ const notify = useNotifyStore()
 const authStore = useAuthStore()
 const display = useDisplay()
 const isMobile = computed(() => display.mdAndDown.value)
-const canAdmin = computed(() => authStore.isAdmin)
-const canEditRun = computed(() => authStore.isAdmin || authStore.hasPerm('users.acl_runs_edit') || authStore.hasPerm('acl_runs_edit'))
-const canPublish = computed(() => authStore.isAdmin || authStore.hasPerm('users.acl_runs_publish') || authStore.hasPerm('acl_runs_publish'))
-const canDeleteRun = computed(() => authStore.isAdmin || authStore.hasPerm('users.acl_runs_delete') || authStore.hasPerm('acl_runs_delete'))
+const canReEvaluateRun = computed(() => authStore.hasPerm('acl_run_datafiles_bulk_admin'))
+const canEditRun = computed(() => authStore.hasPerm('users.acl_runs_edit') || authStore.hasPerm('acl_runs_edit'))
+const canPublish = computed(() => authStore.hasPerm('users.acl_runs_publish') || authStore.hasPerm('acl_runs_publish'))
+const canDeleteRun = computed(() => authStore.hasPerm('users.acl_runs_delete') || authStore.hasPerm('acl_runs_delete'))
 
 const headers = [
   { title: 'Name', key: 'name', sortable: true },
@@ -664,7 +664,7 @@ const removeRun = async (item) => {
 
 const reEvalRunId = ref(null)
 const reEvaluateRun = async (item) => {
-  if (!canAdmin.value || !(item?.pk || item?.id)) return
+  if (!canReEvaluateRun.value || !(item?.pk || item?.id)) return
   const id = item.pk || item.id
   reEvalRunId.value = id
   try {

@@ -28,6 +28,24 @@ from obs_run.models import ObservationRun, DataFile
 from objects.models import Object
 from obs_run.utils import normalize_alias, INSTRUMENT_ALIASES, INSTRUMENT_CATALOG, check_and_set_override, get_override_field_name
 from .serializers import RunSerializer
+
+# PATCH fields on ObservationRun -> ACL codename(s) required (superuser bypasses; acl_runs_edit grants all)
+RUN_PATCH_FIELD_PERMS = {
+    'acl_run_detail_edit_obs_type': frozenset({'photometry', 'spectroscopy'}),
+    'acl_run_detail_edit_notes': frozenset({'note'}),
+    'acl_run_detail_edit_tags': frozenset({'tag_ids'}),
+    'acl_runs_edit': frozenset({'name', 'reduction_status', 'mid_observation_jd'}),
+}
+_RUN_PATCH_KNOWN_FIELDS = frozenset({'is_public'}).union(*RUN_PATCH_FIELD_PERMS.values())
+
+
+def _perms_required_for_run_patch(data_keys):
+    keys = set(data_keys)
+    required = set()
+    for perm, fields in RUN_PATCH_FIELD_PERMS.items():
+        if keys & fields:
+            required.add(perm)
+    return required
 from utilities import get_effective_exposure_type_filter, annotate_effective_exposure_type
 from .filter import RunFilter
 from ..plotting import (
@@ -127,15 +145,32 @@ class RunViewSet(viewsets.ModelViewSet):
         except Exception:
             return False
 
+    def _check_run_patch_permissions(self, user, data) -> bool:
+        if not user or not getattr(user, 'is_authenticated', False):
+            return False
+        if getattr(user, 'is_superuser', False):
+            return True
+        keys = set(data.keys())
+        if 'is_public' in keys and not self._has(user, 'acl_runs_publish'):
+            return False
+        if self._has(user, 'acl_runs_edit'):
+            return True
+        for perm in _perms_required_for_run_patch(keys):
+            if not self._has(user, perm):
+                return False
+        if keys - _RUN_PATCH_KNOWN_FIELDS:
+            return False
+        return True
+
     def get_permissions(self):
         return [IsAuthenticatedOrReadOnly()]
 
     def update(self, request, *args, **kwargs):
-        if not self._has(request.user, 'acl_runs_edit'):
-            return Response({'detail': 'Forbidden'}, status=403)
         instance = self.get_object()
         serializer = self.get_serializer(instance, data=request.data)
         serializer.is_valid(raise_exception=True)
+        if not self._check_run_patch_permissions(request.user, serializer.validated_data):
+            return Response({'detail': 'Forbidden'}, status=403)
         
         # Track changes and set override flags
         override_fields = []
@@ -158,18 +193,11 @@ class RunViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
 
     def partial_update(self, request, *args, **kwargs):
-        if not self._has(request.user, 'acl_runs_edit'):
-            return Response({'detail': 'Forbidden'}, status=403)
-        try:
-            data = request.data if hasattr(request, 'data') else {}
-            if 'is_public' in data and not self._has(request.user, 'acl_runs_publish'):
-                return Response({'detail': 'Forbidden (publish)'}, status=403)
-        except Exception:
-            pass
-        
         instance = self.get_object()
         serializer = self.get_serializer(instance, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
+        if not self._check_run_patch_permissions(request.user, serializer.validated_data):
+            return Response({'detail': 'Forbidden'}, status=403)
         
         # Track changes and set override flags
         override_fields = []

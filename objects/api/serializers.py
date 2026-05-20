@@ -83,7 +83,10 @@ class ObjectListSerializer(ModelSerializer):
         super().__init__(*args, **kwargs)
         # Make override flags read-only for non-admin users
         request = self.context.get('request')
-        if request and not (request.user.is_superuser or request.user.has_perm('users.acl_objects_edit')):
+        if request and not (
+            request.user.is_superuser
+            or request.user.has_perm('users.acl_object_admin_edit')
+        ):
             for field_name in ['name_override', 'is_public_override', 'ra_override', 'dec_override',
                              'first_hjd_override', 'is_main_override', 'photometry_override',
                              'spectroscopy_override', 'simbad_resolved_override', 'object_type_override',

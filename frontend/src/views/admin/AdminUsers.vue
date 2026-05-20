@@ -250,9 +250,9 @@ const ldapResult = ref(null)
 const auth = useAuthStore()
 
 // ACL helpers
-const canView = computed(() => auth.isAdmin || auth.hasPerm('users.acl_users_view') || auth.hasPerm('acl_users_view'))
-const canEdit = computed(() => auth.isAdmin || auth.hasPerm('users.acl_users_edit_roles') || auth.hasPerm('acl_users_edit_roles'))
-const canDelete = computed(() => auth.isAdmin || auth.hasPerm('users.acl_users_delete') || auth.hasPerm('acl_users_delete'))
+const canView = computed(() => auth.hasPerm('users.acl_users_view') || auth.hasPerm('acl_users_view'))
+const canEdit = computed(() => auth.hasPerm('users.acl_users_edit_roles') || auth.hasPerm('acl_users_edit_roles'))
+const canDelete = computed(() => auth.hasPerm('users.acl_users_delete') || auth.hasPerm('acl_users_delete'))
 
 // ACL state
 const aclLoading = ref(false)

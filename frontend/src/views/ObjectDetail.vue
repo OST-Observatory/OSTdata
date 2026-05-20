@@ -19,7 +19,7 @@
           <v-card-title class="d-flex justify-space-between align-center">
             Basic Data
             <div class="d-flex align-center" style="gap: 8px">
-              <v-tooltip v-if="isAdmin" text="Re-analyse from SIMBAD (coordinates)" location="bottom">
+              <v-tooltip v-if="canSimbadReanalyze" text="Re-analyse from SIMBAD (coordinates)" location="bottom">
                 <template #activator="{ props }">
                   <v-btn
                     v-bind="props"
@@ -33,7 +33,7 @@
                   ></v-btn>
                 </template>
               </v-tooltip>
-              <v-tooltip v-if="isAdmin" text="Edit object (admin)" location="bottom">
+              <v-tooltip v-if="canObjectAdminEdit" text="Edit object (admin)" location="bottom">
                 <template #activator="{ props }">
                   <v-btn
                     v-bind="props"
@@ -45,7 +45,7 @@
                   ></v-btn>
                 </template>
               </v-tooltip>
-              <v-tooltip v-if="isAdmin" text="Update identifiers from SIMBAD" location="bottom">
+              <v-tooltip v-if="canSimbadIdentifiers" text="Update identifiers from SIMBAD" location="bottom">
                 <template #activator="{ props }">
                   <v-btn
                     v-bind="props"
@@ -57,7 +57,7 @@
                   ></v-btn>
                 </template>
               </v-tooltip>
-              <v-tooltip v-if="isAuthenticated" text="Edit basic data" location="bottom">
+              <v-tooltip v-if="canEditBasic" text="Edit basic data" location="bottom">
                 <template #activator="{ props }">
                   <v-btn
                     v-bind="props"
@@ -152,7 +152,7 @@
         <v-card class="uniform-height">
           <v-card-title class="d-flex justify-space-between align-center">
             Notes
-            <v-tooltip v-if="isAuthenticated" text="Edit notes" location="bottom">
+            <v-tooltip v-if="canEditNotes" text="Edit notes" location="bottom">
               <template #activator="{ props }">
                 <v-btn
                   v-bind="props"
@@ -176,7 +176,7 @@
         <v-card class="uniform-height">
           <v-card-title class="d-flex justify-space-between align-center">
             Tags
-            <v-tooltip v-if="isAuthenticated" text="Edit tags" location="bottom">
+            <v-tooltip v-if="canEditTags" text="Edit tags" location="bottom">
               <template #activator="{ props }">
                 <v-btn
                   v-bind="props"
@@ -220,7 +220,7 @@
     </v-row>
 
     <!-- Override Flags (Admin only) -->
-    <v-row v-if="isAdmin" @click="expandOverrideFlagsIfCollapsed" :class="{ 'expand-clickable': !showOverrideFlags }">
+    <v-row v-if="canObjectAdminEdit" @click="expandOverrideFlagsIfCollapsed" :class="{ 'expand-clickable': !showOverrideFlags }">
       <v-col cols="12">
         <v-card class="mb-4">
           <v-card-title class="d-flex justify-space-between align-center">
@@ -716,7 +716,7 @@
         <v-card>
           <v-card-title class="d-flex align-center justify-space-between">
             Aliases
-            <v-tooltip v-if="isAdmin && aliases?.length" text="Delete all aliases" location="top">
+            <v-tooltip v-if="canDeleteAliases && aliases?.length" text="Delete all aliases" location="top">
               <template #activator="{ props }">
                 <v-btn
                   v-bind="props"
@@ -1378,7 +1378,13 @@ import { pollDownloadJobUntilReady } from '@/utils/downloadJobPoll'
 const route = useRoute()
 const authStore = useAuthStore()
 const notify = useNotifyStore()
-const isAdmin = computed(() => authStore.isAdmin)
+const canEditBasic = computed(() => authStore.hasPerm('acl_object_detail_edit_basic'))
+const canEditNotes = computed(() => authStore.hasPerm('acl_object_detail_edit_notes'))
+const canEditTags = computed(() => authStore.hasPerm('acl_object_detail_edit_tags'))
+const canSimbadReanalyze = computed(() => authStore.hasPerm('acl_object_simbad_reanalyze'))
+const canObjectAdminEdit = computed(() => authStore.hasPerm('acl_object_admin_edit'))
+const canSimbadIdentifiers = computed(() => authStore.hasPerm('acl_object_simbad_identifiers'))
+const canDeleteAliases = computed(() => authStore.hasPerm('acl_object_delete_aliases'))
 const clearingOverrides = ref(false)
 const clearingSingleOverride = ref({})
 
@@ -1577,7 +1583,7 @@ const openObjectEdit = () => {
 }
 
 const openSimbadIdentifiersDialog = () => {
-  if (!object.value?.pk || !isAdmin.value) return
+  if (!object.value?.pk || !canSimbadIdentifiers.value) return
   simbadMatchMethod.value = 'name'
   simbadDryRun.value = true
   simbadResult.value = null
@@ -1612,7 +1618,7 @@ const updateIdentifiersFromSimbad = async () => {
 }
 
 const saveObjectEdit = async () => {
-  if (!object.value) return
+  if (!object.value || !canObjectAdminEdit.value) return
   try {
     objectEditSaving.value = true
     const payload = {
@@ -1650,7 +1656,7 @@ const closeBasicDialog = () => {
 }
 
 const saveBasicData = async () => {
-  if (!object.value) return
+  if (!object.value || !canEditBasic.value) return
   try {
     savingBasic.value = true
     const payload = {
@@ -1671,7 +1677,7 @@ const saveBasicData = async () => {
 }
 
 const reanalyseObjectFromSimbad = async () => {
-  if (!object.value?.pk || !isAdmin.value) return
+  if (!object.value?.pk || !canObjectAdminEdit.value) return
   reanalyseLoading.value = true
   try {
     const result = await api.adminReanalyseObject(object.value.pk)
@@ -1951,6 +1957,7 @@ const closeTagDialog = () => {
 }
 
 const saveTags = async () => {
+  if (!canEditTags.value) return
   try {
     const objectId = route.params.id
     await api.updateObject(objectId, { tag_ids: selectedTags.value })
@@ -1985,7 +1992,7 @@ const expandOverrideFlagsIfCollapsed = () => {
 }
 
 const clearSingleOverride = async (fieldName) => {
-  if (!isAdmin.value || !object.value?.pk) return
+  if (!canObjectAdminEdit.value || !object.value?.pk) return
   const key = fieldName
   clearingSingleOverride.value[key] = true
   try {
@@ -2000,7 +2007,7 @@ const clearSingleOverride = async (fieldName) => {
 }
 
 const clearAllOverrides = async () => {
-  if (!isAdmin.value || !object.value?.pk) return
+  if (!canObjectAdminEdit.value || !object.value?.pk) return
   clearingOverrides.value = true
   try {
     await api.adminClearAllOverrides('object', object.value.pk)
@@ -2043,6 +2050,7 @@ const closeNotesDialog = () => {
 }
 
 const saveNotes = async () => {
+  if (!canEditNotes.value) return
   try {
     const objectId = route.params.id
     await api.updateObject(objectId, { note: newNote.value })

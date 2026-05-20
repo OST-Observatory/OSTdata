@@ -1,0 +1,20 @@
+/** Permission codenames for admin navigation (any one grants /admin access). */
+export const ADMIN_NAV_PERMS = [
+  'users.acl_users_view', 'acl_users_view',
+  'users.acl_users_edit_roles', 'acl_users_edit_roles',
+  'users.acl_system_health_view', 'acl_system_health_view',
+  'users.acl_maintenance_cleanup', 'acl_maintenance_cleanup',
+  'users.acl_maintenance_reconcile', 'acl_maintenance_reconcile',
+  'users.acl_maintenance_orphans', 'acl_maintenance_orphans',
+  'users.acl_banner_manage', 'acl_banner_manage',
+  'users.acl_jobs_view_all', 'acl_jobs_view_all',
+  'users.acl_jobs_cancel_any', 'acl_jobs_cancel_any',
+  'users.acl_jobs_ttl_modify', 'acl_jobs_ttl_modify',
+  'users.acl_datafiles_plate_solve', 'acl_datafiles_plate_solve',
+  'users.acl_datafiles_reevaluate', 'acl_datafiles_reevaluate',
+  'users.acl_datafiles_clear_overrides', 'acl_datafiles_clear_overrides',
+  'users.acl_datafiles_exposure_type_user', 'acl_datafiles_exposure_type_user',
+  'users.acl_datafiles_spectrograph', 'acl_datafiles_spectrograph',
+  'users.acl_datafiles_link_object', 'acl_datafiles_link_object',
+  'users.acl_datafiles_unlink_object', 'acl_datafiles_unlink_object',
+]

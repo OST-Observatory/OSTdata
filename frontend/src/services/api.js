@@ -380,7 +380,7 @@ export const api = {
   adminMaintenanceRefreshDashboardStats: () => fetchWithAuth('/admin/maintenance/refresh-dashboard-stats/', { method: 'POST' }),
   adminMaintenanceTriggerPlateSolve: () => fetchWithAuth('/admin/maintenance/plate-solving/', { method: 'POST' }),
   adminMaintenanceReEvaluatePlateSolved: () => fetchWithAuth('/admin/maintenance/re-evaluate-plate-solved/', { method: 'POST' }),
-  getAllDataFiles: (params = {}) => fetchWithAuth('/admin/datafiles/', { params }),
+  getAllDataFiles: (params = {}) => fetchWithAuth('/runs/datafiles/', { params }),
   adminReEvaluateDataFiles: (ids = []) => fetchWithAuth('/admin/datafiles/re-evaluate/', {
     method: 'POST',
     body: JSON.stringify({ ids }),

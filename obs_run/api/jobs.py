@@ -3,7 +3,8 @@ from pathlib import Path
 from django.utils import timezone
 from django.db import transaction
 from rest_framework.decorators import api_view, permission_classes
-from ostdata.permissions import IsAdminOrSuperuser as IsAdminUser
+from rest_framework.permissions import IsAuthenticated
+from ostdata.permissions import HasPerm
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiExample
@@ -20,6 +21,7 @@ from obs_run.models import ObservationRun, DataFile, DownloadJob
 from obs_run.tasks import cleanup_expired_downloads, reconcile_filesystem
 from obs_run.tasks import cleanup_orphans_and_hashcheck
 from obs_run.services.downloads import enqueue_download_job_for_run, enqueue_download_job_bulk
+from ostdata.custom_permissions import get_allowed_run_objects_to_view_for_user
 
 
 class DownloadJobBulkRequestSerializer(serializers.Serializer):
@@ -69,6 +71,12 @@ def create_download_job_bulk(request):
     payload = request.data if hasattr(request, 'data') else {}
     selected_ids = payload.get('ids') or []
     filters = payload.get('filters') or {}
+    if selected_ids:
+        allowed = get_allowed_run_objects_to_view_for_user(
+            DataFile.objects.filter(pk__in=selected_ids),
+            request.user,
+        )
+        selected_ids = list(allowed.values_list('pk', flat=True))
     job = enqueue_download_job_bulk(
         user=request.user if request.user.is_authenticated else None,
         selected_ids=selected_ids,
@@ -160,7 +168,7 @@ def download_job_status(request, job_id):
 def list_download_jobs(request):
     """List download jobs. Admins see all; authenticated users see their own; anonymous see none."""
     qs = DownloadJob.objects.all().order_by('-created_at')
-    if request.user.is_authenticated and (request.user.is_staff or request.user.is_superuser):
+    if request.user.is_authenticated:
         if not (request.user.is_superuser or request.user.has_perm('users.acl_jobs_view_all')):
             qs = qs.filter(user_id=request.user.pk)
     elif request.user.is_authenticated:
@@ -177,7 +185,9 @@ def list_download_jobs(request):
         except Exception:
             pass
     user_param = request.query_params.get('user')
-    if user_param and request.user.is_authenticated and (request.user.is_staff or request.user.is_superuser):
+    if user_param and request.user.is_authenticated and (
+        request.user.is_superuser or request.user.has_perm('users.acl_jobs_view_all')
+    ):
         try:
             qs = qs.filter(user_id=int(user_param))
         except Exception:
@@ -209,18 +219,22 @@ def cancel_download_job(request, job_id):
         job = DownloadJob.objects.get(pk=job_id)
     except DownloadJob.DoesNotExist:
         return Response({'detail': 'Not found'}, status=404)
-    is_admin = bool(getattr(request.user, 'is_staff', False) or getattr(request.user, 'is_superuser', False))
-    if job.user_id and (not request.user.is_authenticated or (request.user.pk != job.user_id and not is_admin)):
+    can_cancel_any = bool(
+        request.user.is_authenticated
+        and (request.user.is_superuser or request.user.has_perm('users.acl_jobs_cancel_any'))
+    )
+    if job.user_id and (not request.user.is_authenticated or (
+        request.user.pk != job.user_id and not can_cancel_any
+    )):
         return Response({'detail': 'Not found'}, status=404)
-    if is_admin and job.user_id and request.user.pk != job.user_id:
-        if not (request.user.is_superuser or request.user.has_perm('users.acl_jobs_cancel_any')):
-            return Response({'detail': 'Forbidden'}, status=403)
+    if can_cancel_any and job.user_id and request.user.pk != job.user_id:
+        pass  # allowed via acl_jobs_cancel_any
     if job.status in ('done', 'failed', 'cancelled', 'expired'):
         return Response({'status': job.status, 'error': job.error or ''})
     job.status = 'cancelled'
     job.finished_at = timezone.now()
     try:
-        actor = 'administrator' if getattr(request.user, 'is_staff', False) or getattr(request.user, 'is_superuser', False) else 'user'
+        actor = 'administrator' if can_cancel_any else 'user'
         msg = f'Cancelled by {actor}'
         try:
             from datetime import timedelta
@@ -254,7 +268,7 @@ def cancel_download_job(request, job_id):
 
 @extend_schema(summary='Batch cancel download jobs (admin)')
 @api_view(['POST'])
-@permission_classes([IsAdminUser])
+@permission_classes([IsAuthenticated, HasPerm('acl_jobs_cancel_any')])
 def batch_cancel_download_jobs(request):
     """Admin: cancel multiple jobs by ids."""
     if not (request.user.is_superuser or request.user.has_perm('users.acl_jobs_cancel_any')):
@@ -314,7 +328,7 @@ def batch_cancel_download_jobs(request):
 
 @extend_schema(summary='Batch extend download job expiry (admin)')
 @api_view(['POST'])
-@permission_classes([IsAdminUser])
+@permission_classes([IsAuthenticated, HasPerm('acl_jobs_ttl_modify')])
 def batch_extend_jobs_expiry(request):
     """Admin: extend expiry for multiple jobs by N hours (default 48)."""
     if not (request.user.is_superuser or request.user.has_perm('users.acl_jobs_ttl_modify')):
@@ -347,7 +361,7 @@ def batch_extend_jobs_expiry(request):
 
 @extend_schema(summary='Batch expire download jobs immediately (admin)')
 @api_view(['POST'])
-@permission_classes([IsAdminUser])
+@permission_classes([IsAuthenticated, HasPerm('acl_jobs_ttl_modify')])
 def batch_expire_jobs_now(request):
     """Admin: immediately expire jobs (delete file if present, set status to expired)."""
     if not (request.user.is_superuser or request.user.has_perm('users.acl_jobs_ttl_modify')):

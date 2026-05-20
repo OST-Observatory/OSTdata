@@ -491,7 +491,7 @@
       </v-col>
     </v-row>
     <v-row>
-      <v-col cols="12" md="12" v-if="auth.isAdmin">
+      <v-col cols="12" md="12" v-if="auth.isSuperuser">
         <v-card class="mb-4">
           <v-card-title class="text-h6">
             <div class="d-flex align-center justify-space-between" style="width: 100%">
@@ -711,10 +711,10 @@ const scanLimit = ref('')
 const orphObjDryRun = ref(true)
 const unlinkNonLightDryRun = ref(true)
 
-const canCleanup = computed(() => auth.isAdmin || auth.hasPerm('users.acl_maintenance_cleanup') || auth.hasPerm('acl_maintenance_cleanup'))
-const canReconcile = computed(() => auth.isAdmin || auth.hasPerm('users.acl_maintenance_reconcile') || auth.hasPerm('acl_maintenance_reconcile'))
-const canOrphans = computed(() => auth.isAdmin || auth.hasPerm('users.acl_maintenance_orphans') || auth.hasPerm('acl_maintenance_orphans'))
-const canBanner = computed(() => auth.isAdmin || auth.hasPerm('users.acl_banner_manage') || auth.hasPerm('acl_banner_manage'))
+const canCleanup = computed(() => auth.hasPerm('users.acl_maintenance_cleanup') || auth.hasPerm('acl_maintenance_cleanup'))
+const canReconcile = computed(() => auth.hasPerm('users.acl_maintenance_reconcile') || auth.hasPerm('acl_maintenance_reconcile'))
+const canOrphans = computed(() => auth.hasPerm('users.acl_maintenance_orphans') || auth.hasPerm('acl_maintenance_orphans'))
+const canBanner = computed(() => auth.hasPerm('users.acl_banner_manage') || auth.hasPerm('acl_banner_manage'))
 // Banner state
 const bannerEnabled = ref(false)
 const bannerMessage = ref('')

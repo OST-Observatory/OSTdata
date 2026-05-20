@@ -132,9 +132,9 @@ def build_zip_task(self, job_id: int):
         if job.run_id:
             qs = qs.filter(observation_run_id=job.run_id)
 
-        # Anonymous jobs: only include files from public runs
-        if job.user is None:
-            qs = qs.filter(observation_run__is_public=True)
+        from ostdata.custom_permissions import get_allowed_run_objects_to_view_for_user
+        user = job.user
+        qs = get_allowed_run_objects_to_view_for_user(qs, user)
 
         # Limit to selected ids when provided
         if job.selected_ids:

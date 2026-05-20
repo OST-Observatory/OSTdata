@@ -1,26 +1,46 @@
-from rest_framework.permissions import BasePermission
+from rest_framework.permissions import BasePermission, IsAuthenticated
 
 
-class HasPerm(BasePermission):
+def HasPerm(perm_codename: str):
     """
-    Generic permission that checks for a Django permission codename on the 'users' app.
-    Example: HasPerm('acl_runs_edit') checks user.has_perm('users.acl_runs_edit') or is_superuser.
+    Factory returning a DRF permission class for a users.acl_* codename.
+    Usage: @permission_classes([IsAuthenticated, HasPerm('acl_users_view')])
+    DRF instantiates the returned class with (), so this must be a factory, not an instance.
     """
-    perm_codename: str = ''
+    codename = perm_codename
 
-    def __init__(self, perm_codename: str = ''):
-        if perm_codename:
-            self.perm_codename = perm_codename
+    class _HasPerm(BasePermission):
+        def has_permission(self, request, view):
+            return user_has_acl(request.user, codename)
 
-    def has_permission(self, request, view):
-        try:
-            if getattr(request.user, 'is_superuser', False):
-                return True
-            if not self.perm_codename:
-                return False
-            return request.user.has_perm(f'users.{self.perm_codename}')
-        except Exception:
+    _HasPerm.__name__ = f'HasPerm_{codename}'
+    _HasPerm.__qualname__ = f'HasPerm_{codename}'
+    return _HasPerm
+
+
+def user_has_acl(user, codename: str) -> bool:
+    try:
+        if getattr(user, 'is_superuser', False):
+            return True
+        if not user or not getattr(user, 'is_authenticated', False):
             return False
+        return user.has_perm(f'users.{codename}')
+    except Exception:
+        return False
+
+
+def IsAuthenticatedWithAcl(codename: str):
+    """Factory: IsAuthenticated + ACL check (superuser bypasses)."""
+    acl_codename = codename
+
+    class _IsAuthenticatedWithAcl(BasePermission):
+        def has_permission(self, request, view):
+            if not IsAuthenticated().has_permission(request, view):
+                return False
+            return user_has_acl(request.user, acl_codename)
+
+    _IsAuthenticatedWithAcl.__name__ = f'IsAuthenticatedWithAcl_{acl_codename}'
+    return _IsAuthenticatedWithAcl
 
 
 class IsAdminOrSuperuser(BasePermission):
@@ -34,8 +54,6 @@ class IsAdminOrSuperuser(BasePermission):
             user = request.user
             if not user or not user.is_authenticated:
                 return False
-            # Allow if user is staff OR superuser
             return bool(getattr(user, 'is_staff', False) or getattr(user, 'is_superuser', False))
         except Exception:
             return False
-

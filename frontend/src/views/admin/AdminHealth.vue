@@ -279,7 +279,7 @@
   const health = ref({})
   const notify = useNotifyStore()
   const auth = useAuthStore()
-  const canView = computed(() => auth.isAdmin || auth.hasPerm('users.acl_system_health_view') || auth.hasPerm('acl_system_health_view'))
+  const canView = computed(() => auth.hasPerm('users.acl_system_health_view') || auth.hasPerm('acl_system_health_view'))
   const autoRefresh = ref(true)
   const refreshSeconds = 10
   let intervalId = null

@@ -35,6 +35,29 @@ import astropy.units as u
 #   OBJECTS
 # ===============================================================
 
+# PATCH fields on Object -> ACL codename(s) required (superuser bypasses)
+OBJECT_PATCH_FIELD_PERMS = {
+    'acl_object_detail_edit_basic': frozenset({'object_type', 'photometry', 'spectroscopy'}),
+    'acl_object_detail_edit_notes': frozenset({'note'}),
+    'acl_object_detail_edit_tags': frozenset({'tag_ids'}),
+    'acl_object_admin_edit': frozenset({
+        'name', 'is_public', 'ra', 'dec', 'first_hjd', 'is_main', 'simbad_resolved',
+    }),
+}
+_OBJECT_PATCH_KNOWN_FIELDS = frozenset().union(*OBJECT_PATCH_FIELD_PERMS.values())
+
+
+def _perms_required_for_object_patch(data_keys):
+    keys = set(data_keys)
+    required = set()
+    for perm, fields in OBJECT_PATCH_FIELD_PERMS.items():
+        if keys & fields:
+            required.add(perm)
+    if keys - _OBJECT_PATCH_KNOWN_FIELDS:
+        required.add('acl_objects_edit')
+    return required
+
+
 class StandardResultsSetPagination(PageNumberPagination):
     page_size = 10
     page_size_query_param = 'limit'
@@ -78,6 +101,16 @@ class ObjectViewSet(viewsets.ModelViewSet):
             return bool(user and (user.is_superuser or user.has_perm(f'users.{codename}')))
         except Exception:
             return False
+
+    def _check_object_patch_permissions(self, user, data) -> bool:
+        if not user or not getattr(user, 'is_authenticated', False):
+            return False
+        if getattr(user, 'is_superuser', False):
+            return True
+        for perm in _perms_required_for_object_patch(data.keys()):
+            if not self._has(user, perm):
+                return False
+        return True
 
     def get_queryset(self):
         queryset = super().get_queryset().prefetch_related('tags', 'observation_run', 'datafiles')
@@ -173,11 +206,11 @@ class ObjectViewSet(viewsets.ModelViewSet):
         instance.save(update_fields=['exclude_from_orphan_cleanup'])
 
     def update(self, request, *args, **kwargs):
-        if not self._has(request.user, 'acl_objects_edit'):
-            return Response({'detail': 'Forbidden'}, status=status.HTTP_403_FORBIDDEN)
         instance = self.get_object()
         serializer = self.get_serializer(instance, data=request.data)
         serializer.is_valid(raise_exception=True)
+        if not self._check_object_patch_permissions(request.user, serializer.validated_data):
+            return Response({'detail': 'Forbidden'}, status=status.HTTP_403_FORBIDDEN)
         
         # Track changes and set override flags
         from obs_run.utils import check_and_set_override, get_override_field_name
@@ -202,11 +235,11 @@ class ObjectViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
 
     def partial_update(self, request, *args, **kwargs):
-        if not self._has(request.user, 'acl_objects_edit'):
-            return Response({'detail': 'Forbidden'}, status=status.HTTP_403_FORBIDDEN)
         instance = self.get_object()
         serializer = self.get_serializer(instance, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
+        if not self._check_object_patch_permissions(request.user, serializer.validated_data):
+            return Response({'detail': 'Forbidden'}, status=status.HTTP_403_FORBIDDEN)
         
         # Track changes and set override flags
         from obs_run.utils import check_and_set_override, get_override_field_name

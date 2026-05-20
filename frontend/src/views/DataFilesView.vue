@@ -84,13 +84,13 @@
       <v-card-text class="d-flex align-center justify-space-between flex-wrap" style="gap: 8px">
         <div class="text-body-2">{{ selectedCount }} selected</div>
         <div class="d-flex align-center flex-wrap" style="gap: 8px">
-          <v-btn color="primary" variant="outlined" prepend-icon="mdi-star-four-points" :loading="busy.plateSolve" @click="bulkPlateSolve">Trigger Plate Solve</v-btn>
-          <v-btn color="primary" variant="outlined" prepend-icon="mdi-pencil" @click="openBulkExposureTypeDialog">Set User Type</v-btn>
-          <v-btn color="primary" variant="outlined" prepend-icon="mdi-telescope" @click="openBulkSpectrographDialog">Set Spectrograph</v-btn>
-          <v-btn color="primary" variant="outlined" prepend-icon="mdi-refresh" :loading="busy.reEvaluate" @click="bulkReEvaluate">Re-evaluate</v-btn>
-          <v-btn color="secondary" variant="outlined" prepend-icon="mdi-flag-off" :loading="busy.clearOverrides" @click="bulkClearOverrides">Clear Overrides</v-btn>
-          <v-btn color="primary" variant="outlined" prepend-icon="mdi-link" :loading="busy.linkObject" @click="openLinkObjectDialog(null)">Link to Object</v-btn>
-          <v-btn color="secondary" variant="outlined" prepend-icon="mdi-link-off" :loading="busy.unlinkObject" @click="openUnlinkConfirm(null)">Unlink from Objects</v-btn>
+          <v-btn v-if="canPlateSolve" color="primary" variant="outlined" prepend-icon="mdi-star-four-points" :loading="busy.plateSolve" @click="bulkPlateSolve">Trigger Plate Solve</v-btn>
+          <v-btn v-if="canExposureTypeUser" color="primary" variant="outlined" prepend-icon="mdi-pencil" @click="openBulkExposureTypeDialog">Set User Type</v-btn>
+          <v-btn v-if="canSpectrograph" color="primary" variant="outlined" prepend-icon="mdi-telescope" @click="openBulkSpectrographDialog">Set Spectrograph</v-btn>
+          <v-btn v-if="canReEvaluate" color="primary" variant="outlined" prepend-icon="mdi-refresh" :loading="busy.reEvaluate" @click="bulkReEvaluate">Re-evaluate</v-btn>
+          <v-btn v-if="canClearOverrides" color="secondary" variant="outlined" prepend-icon="mdi-flag-off" :loading="busy.clearOverrides" @click="bulkClearOverrides">Clear Overrides</v-btn>
+          <v-btn v-if="canLinkObject" color="primary" variant="outlined" prepend-icon="mdi-link" :loading="busy.linkObject" @click="openLinkObjectDialog(null)">Link to Object</v-btn>
+          <v-btn v-if="canUnlinkObject" color="secondary" variant="outlined" prepend-icon="mdi-link-off" :loading="busy.unlinkObject" @click="openUnlinkConfirm(null)">Unlink from Objects</v-btn>
           <v-btn color="primary" variant="outlined" prepend-icon="mdi-download" :loading="busy.download" @click="bulkDownloadSelected">Download selected</v-btn>
         </div>
       </v-card-text>
@@ -204,16 +204,22 @@
               <v-list-item prepend-icon="mdi-eye" title="Preview thumbnail" @click="openPreview(item)" />
               <v-list-item prepend-icon="mdi-code-tags" title="FITS header" @click="openHeader(item)" />
               <v-list-item prepend-icon="mdi-crosshairs-gps" title="WCS information" @click="openWcs(item)" />
-              <v-divider />
-              <v-list-item prepend-icon="mdi-pencil" title="Set exposure type" @click="openExposureTypeDialog(item)" />
-              <v-list-item prepend-icon="mdi-telescope" title="Set spectrograph" @click="openSpectrographDialog(item)" />
-              <v-divider />
-              <v-list-item prepend-icon="mdi-link" title="Link to object" @click="openLinkObjectDialog(item)" />
-              <v-list-item prepend-icon="mdi-link-off" title="Unlink from objects" @click="openUnlinkConfirm(item)" />
-              <v-list-item prepend-icon="mdi-refresh" title="Re-evaluate object" @click="reEvaluateSingle(item)" />
-              <v-divider />
-              <v-list-item prepend-icon="mdi-star-four-points" title="Trigger plate solve" @click="triggerPlateSolveSingle(item)" />
-              <v-list-item prepend-icon="mdi-flag-off" title="Clear override flags" @click="clearOverrideSingleItem(item)" />
+              <template v-if="canExposureTypeUser || canSpectrograph || canLinkObject || canUnlinkObject || canReEvaluate || canPlateSolve || canClearOverrides">
+                <v-divider />
+              </template>
+              <v-list-item v-if="canExposureTypeUser" prepend-icon="mdi-pencil" title="Set exposure type" @click="openExposureTypeDialog(item)" />
+              <v-list-item v-if="canSpectrograph" prepend-icon="mdi-telescope" title="Set spectrograph" @click="openSpectrographDialog(item)" />
+              <template v-if="canLinkObject || canUnlinkObject || canReEvaluate">
+                <v-divider />
+              </template>
+              <v-list-item v-if="canLinkObject" prepend-icon="mdi-link" title="Link to object" @click="openLinkObjectDialog(item)" />
+              <v-list-item v-if="canUnlinkObject" prepend-icon="mdi-link-off" title="Unlink from objects" @click="openUnlinkConfirm(item)" />
+              <v-list-item v-if="canReEvaluate" prepend-icon="mdi-refresh" title="Re-evaluate object" @click="reEvaluateSingle(item)" />
+              <template v-if="canPlateSolve || canClearOverrides">
+                <v-divider />
+              </template>
+              <v-list-item v-if="canPlateSolve" prepend-icon="mdi-star-four-points" title="Trigger plate solve" @click="triggerPlateSolveSingle(item)" />
+              <v-list-item v-if="canClearOverrides" prepend-icon="mdi-flag-off" title="Clear override flags" @click="clearOverrideSingleItem(item)" />
               <v-divider />
               <v-list-item prepend-icon="mdi-download" title="Download" :href="api.getDataFileDownloadUrl(item.pk)" target="_blank" rel="noopener" />
             </v-list>
@@ -365,6 +371,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { api } from '@/services/api'
+import { useAuthStore } from '@/store/auth'
 import { useNotifyStore } from '@/store/notify'
 import { buildDownloadPrepMessage } from '@/config/downloadJobs'
 import { pollDownloadJobUntilReady } from '@/utils/downloadJobPoll'
@@ -372,6 +379,14 @@ import EmptyState from '@/components/ui/EmptyState.vue'
 import LoadingState from '@/components/ui/LoadingState.vue'
 
 const notify = useNotifyStore()
+const auth = useAuthStore()
+const canPlateSolve = computed(() => auth.hasPerm('acl_datafiles_plate_solve'))
+const canReEvaluate = computed(() => auth.hasPerm('acl_datafiles_reevaluate'))
+const canClearOverrides = computed(() => auth.hasPerm('acl_datafiles_clear_overrides'))
+const canExposureTypeUser = computed(() => auth.hasPerm('acl_datafiles_exposure_type_user'))
+const canSpectrograph = computed(() => auth.hasPerm('acl_datafiles_spectrograph'))
+const canLinkObject = computed(() => auth.hasPerm('acl_datafiles_link_object'))
+const canUnlinkObject = computed(() => auth.hasPerm('acl_datafiles_unlink_object'))
 const loading = ref(false)
 const items = ref([])
 const itemsPerPage = ref(25)

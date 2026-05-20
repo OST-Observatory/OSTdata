@@ -186,6 +186,40 @@ class DataFileFilter(filters.FilterSet):
         field_name="plate_solved",
     )
 
+    observation_run_name = filters.CharFilter(
+        field_name='observation_run__name',
+        lookup_expr='icontains',
+    )
+
+    telescope = filters.CharFilter(
+        field_name='telescope',
+        lookup_expr='icontains',
+    )
+
+    exposure_type_ml = filters.MultipleChoiceFilter(
+        field_name='exposure_type_ml',
+        choices=DataFile.EXPOSURE_TYPE_POSSIBILITIES,
+    )
+
+    exposure_type_user = filters.MultipleChoiceFilter(
+        field_name='exposure_type_user',
+        choices=DataFile.EXPOSURE_TYPE_POSSIBILITIES,
+    )
+
+    has_user_type = filters.BooleanFilter(method='filter_has_user_type')
+
+    effective_exposure_type = filters.MultipleChoiceFilter(
+        method='filter_effective_exposure_type',
+        choices=DataFile.EXPOSURE_TYPE_POSSIBILITIES,
+    )
+
+    spectrograph = filters.ChoiceFilter(
+        field_name='spectrograph',
+        choices=DataFile.spectrograph_possibilities,
+    )
+
+    has_error = filters.BooleanFilter(method='filter_has_plate_error')
+
     #   File name contains (match on path string)
     file_name = filters.CharFilter(
         field_name="datafile",
@@ -258,13 +292,29 @@ class DataFileFilter(filters.FilterSet):
             q &= (Q(main_target__icontains=t) | Q(header_target_name__icontains=t))
         return queryset.filter(q)
 
+    def filter_has_plate_error(self, queryset, name, value):
+        if value is True:
+            return queryset.filter(plate_solve_error__isnull=False).exclude(plate_solve_error='')
+        if value is False:
+            return queryset.filter(Q(plate_solve_error__isnull=True) | Q(plate_solve_error=''))
+        return queryset
+
+    def filter_has_user_type(self, queryset, name, value):
+        if value is True:
+            return queryset.exclude(Q(exposure_type_user__isnull=True) | Q(exposure_type_user=''))
+        if value is False:
+            return queryset.filter(Q(exposure_type_user__isnull=True) | Q(exposure_type_user=''))
+        return queryset
+
     def filter_effective_exposure_type(self, queryset, name, value):
         """
         Filter by effective exposure type using the priority logic.
         """
         if not value:
             return queryset
-        # Annotate queryset with effective_exposure_type
+        values = [value] if isinstance(value, str) else list(value)
+        values = [v for v in values if v]
+        if not values:
+            return queryset
         queryset = annotate_effective_exposure_type(queryset)
-        # Filter by effective_exposure_type
-        return queryset.filter(annotated_effective_exposure_type__in=value)
+        return queryset.filter(annotated_effective_exposure_type__in=values)

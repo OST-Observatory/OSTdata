@@ -10,6 +10,7 @@ from obs_run.models import ObservationRun, DataFile
 from .serializers import DataFileSerializer
 from .filter import DataFileFilter
 from utilities import annotate_effective_exposure_type
+from ostdata.custom_permissions import get_allowed_run_objects_to_view_for_user
 
 from django.http import HttpResponse
 from io import BytesIO
@@ -81,9 +82,20 @@ def get_datafile_thumbnail(request, pk):
     Optional query params: w (int, default 512)
     """
     try:
-        df = DataFile.objects.get(pk=pk)
+        df = DataFile.objects.select_related('observation_run').get(pk=pk)
     except DataFile.DoesNotExist:
         return Response({"detail": "Not found"}, status=404)
+
+    run = df.observation_run
+    if request.user.is_anonymous:
+        if run and not run.is_public:
+            return Response({"detail": "Not found"}, status=404)
+    elif run and not run.is_public:
+        try:
+            if not request.user.can_read(run):
+                return Response({"detail": "Not found"}, status=404)
+        except Exception:
+            return Response({"detail": "Not found"}, status=404)
 
     max_dim = 512
     try:
@@ -175,8 +187,14 @@ def get_datafile_header(request, pk):
         return Response({"detail": "Not found"}, status=404)
 
     run = df.observation_run
-    if request.user.is_anonymous and run and not run.is_public:
-        return Response({"detail": "Not found"}, status=404)
+    if run and not run.is_public:
+        if request.user.is_anonymous:
+            return Response({"detail": "Not found"}, status=404)
+        try:
+            if not request.user.can_read(run):
+                return Response({"detail": "Not found"}, status=404)
+        except Exception:
+            return Response({"detail": "Not found"}, status=404)
 
     file_path = Path(df.datafile)
     if not file_path.exists() or not file_path.is_file():
@@ -208,8 +226,14 @@ def download_datafile(request, pk):
         return Response({"detail": "Not found"}, status=404)
 
     run = df.observation_run
-    if request.user.is_anonymous and run and not run.is_public:
-        return Response({"detail": "Not found"}, status=404)
+    if run and not run.is_public:
+        if request.user.is_anonymous:
+            return Response({"detail": "Not found"}, status=404)
+        try:
+            if not request.user.can_read(run):
+                return Response({"detail": "Not found"}, status=404)
+        except Exception:
+            return Response({"detail": "Not found"}, status=404)
 
     file_path = Path(df.datafile)
     if not file_path.exists() or not file_path.is_file():
@@ -330,10 +354,7 @@ def download_datafiles_bulk(request):
     Access: anonymous users only get files belonging to public runs.
     """
     qs = DataFile.objects.all().select_related('observation_run')
-
-    # Visibility for anonymous users
-    if request.user.is_anonymous:
-        qs = qs.filter(observation_run__is_public=True)
+    qs = get_allowed_run_objects_to_view_for_user(qs, request.user)
 
     # Apply ids constraint first if provided
     ids_param = request.query_params.get('ids')
@@ -441,8 +462,20 @@ class DataFileViewSet(viewsets.ModelViewSet):
     filter_backends = (DjangoFilterBackend,)
     filterset_class = DataFileFilter
 
+    def get_queryset(self):
+        qs = super().get_queryset()
+        return get_allowed_run_objects_to_view_for_user(qs, self.request.user)
+
     def list(self, request, *args, **kwargs):
         queryset = self.filter_queryset(self.get_queryset())
+
+        ordering = request.query_params.get('ordering')
+        allowed_sort = [
+            'pk', 'datafile', 'observation_run', 'file_type', 'instrument', 'main_target',
+            'exposure_type', 'exptime', 'obs_date', 'plate_solved', 'plate_solve_attempted_at',
+        ]
+        if ordering and ordering.lstrip('-') in allowed_sort:
+            queryset = queryset.order_by(ordering, 'pk')
 
         # Server-side binning filter (derived from FITS header), applied before pagination
         binning = request.query_params.get('binning')
