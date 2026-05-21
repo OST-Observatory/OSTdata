@@ -80,6 +80,17 @@ const adminTiles = [
     featured: true,
   },
   {
+    title: 'Audit log',
+    description: 'Recent edits to objects, runs, data files, identifiers, and tags.',
+    icon: 'mdi-history',
+    avatarColor: 'brown',
+    to: '/admin/audit-log',
+    actionLabel: 'Open audit log',
+    actionIcon: 'mdi-arrow-right',
+    ariaLabel: 'Open audit log',
+    featured: true,
+  },
+  {
     title: 'Download Jobs',
     description: 'Monitor download jobs and cancel stuck tasks.',
     icon: 'mdi-download-network-outline',

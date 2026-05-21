@@ -578,7 +578,8 @@ def solve_and_update_datafile(datafile, service=None, save=True):
             datafile.wcs_crval2 = solution.get('fits_crval2')
             
             if save:
-                datafile.save()
+                from ostdata.history_reason import REASON_TASK_PLATE_SOLVE, save_with_reason
+                save_with_reason(datafile, REASON_TASK_PLATE_SOLVE)
             
             return {
                 'success': True,

@@ -186,6 +186,16 @@ def build_zip_task(self, job_id: int):
                 ttl_hours = 72
             job.expires_at = job.finished_at + timedelta(hours=ttl_hours)
             job.save(update_fields=['status', 'error', 'finished_at', 'expires_at'])
+            try:
+                from adminops.audit_events import log_download_job_event
+                log_download_job_event(
+                    job,
+                    action='failed',
+                    change_reason='task:download_job_failed',
+                    summary=job.error or 'Download job failed',
+                )
+            except Exception:
+                pass
             return
 
         tmp = tempfile.NamedTemporaryFile(delete=False, suffix='.zip')
@@ -311,6 +321,17 @@ def build_zip_task(self, job_id: int):
             ttl_hours = 72
         job.expires_at = job.finished_at + timedelta(hours=ttl_hours)
         job.save(update_fields=['status', 'progress', 'bytes_done', 'finished_at', 'expires_at'])
+        try:
+            from adminops.audit_events import log_download_job_event
+            log_download_job_event(
+                job,
+                action='done',
+                change_reason='task:download_job_done',
+                user=job.user,
+                summary=f'Download job completed ({job.bytes_done} bytes)',
+            )
+        except Exception:
+            pass
     except Exception as e:
         # On unexpected failure, also set an expiry to allow cleanup
         try:
@@ -320,6 +341,18 @@ def build_zip_task(self, job_id: int):
         finished = timezone.now()
         expires = finished + timedelta(hours=ttl_hours)
         DownloadJob.objects.filter(pk=job.pk).update(status='failed', error=str(e), finished_at=finished, expires_at=expires)
+        try:
+            from adminops.audit_events import log_download_job_event
+            job_ref = DownloadJob.objects.filter(pk=job.pk).first()
+            if job_ref:
+                log_download_job_event(
+                    job_ref,
+                    action='failed',
+                    change_reason='task:download_job_failed',
+                    summary=str(e)[:200],
+                )
+        except Exception:
+            pass
 
 
 @shared_task(bind=True)
@@ -581,7 +614,15 @@ def scan_missing_filesystem(self, dry_run: bool = True, limit: int | None = None
                                 run.mid_observation_jd = float(a or b or 0.0)
                             else:
                                 run.mid_observation_jd = float(a + (b - a) / 2.0)
-                            run.save(update_fields=['mid_observation_jd'])
+                            from ostdata.history_reason import (
+                                REASON_TASK_SCAN_MISSING_RUN_JD,
+                                save_with_reason,
+                            )
+                            save_with_reason(
+                                run,
+                                REASON_TASK_SCAN_MISSING_RUN_JD,
+                                update_fields=['mid_observation_jd'],
+                            )
                 except Exception:
                     # Do not fail the whole task on recompute errors
                     errors += 1
@@ -705,7 +746,15 @@ def cleanup_orphan_objects(self, dry_run: bool = True):
             if obj.first_hjd != new_first_hjd:
                 if not dry_run:
                     obj.first_hjd = new_first_hjd
-                    obj.save(update_fields=['first_hjd'])
+                    from ostdata.history_reason import (
+                        REASON_TASK_ORPHAN_OBJECTS_FIRST_HJD,
+                        save_with_reason,
+                    )
+                    save_with_reason(
+                        obj,
+                        REASON_TASK_ORPHAN_OBJECTS_FIRST_HJD,
+                        update_fields=['first_hjd'],
+                    )
                 first_hjd_updated += 1
             
             # Also clean up observation_run M2M if no DataFiles remain for that run

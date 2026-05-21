@@ -67,6 +67,7 @@ const routes = [
         'users.acl_datafiles_exposure_type_user', 'acl_datafiles_exposure_type_user',
         'users.acl_datafiles_spectrograph', 'acl_datafiles_spectrograph',
         'users.acl_objects_edit', 'acl_objects_edit',
+        'users.acl_admin_audit_log_view', 'acl_admin_audit_log_view',
       ],
       title: 'Admin',
       description: 'Administration panel.',
@@ -77,6 +78,17 @@ const routes = [
     name: 'admin-users',
     component: () => import('@/views/admin/AdminUsers.vue'),
     meta: { requiresAuth: true, requiresAnyPerms: ['users.acl_users_view','acl_users_view'], title: 'Admin – Users', description: 'Manage users and roles.' }
+  },
+  {
+    path: '/admin/audit-log',
+    name: 'admin-audit-log',
+    component: () => import('@/views/admin/AdminAuditLog.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAnyPerms: ['users.acl_admin_audit_log_view', 'acl_admin_audit_log_view'],
+      title: 'Admin – Audit log',
+      description: 'Recent changes to objects, runs, data files, identifiers, and tags.',
+    },
   },
   {
     path: '/admin/jobs',

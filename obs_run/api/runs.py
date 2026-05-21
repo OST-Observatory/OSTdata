@@ -185,11 +185,13 @@ class RunViewSet(viewsets.ModelViewSet):
                     override_fields.append(get_override_field_name(field_name))
         
         serializer.save()
-        
-        # Save override flags if any were set
+
         if override_fields:
             instance.save(update_fields=override_fields)
-        
+
+        from ostdata.history_reason import REASON_API_RUN_PATCH, apply_history_reason
+        apply_history_reason(instance, REASON_API_RUN_PATCH)
+
         return Response(serializer.data)
 
     def partial_update(self, request, *args, **kwargs):
@@ -212,11 +214,13 @@ class RunViewSet(viewsets.ModelViewSet):
                     override_fields.append(get_override_field_name(field_name))
         
         serializer.save()
-        
-        # Save override flags if any were set
+
         if override_fields:
             instance.save(update_fields=override_fields)
-        
+
+        from ostdata.history_reason import REASON_API_RUN_PATCH, apply_history_reason
+        apply_history_reason(instance, REASON_API_RUN_PATCH)
+
         return Response(serializer.data)
 
     def destroy(self, request, *args, **kwargs):

@@ -40,6 +40,16 @@ class TagViewSet(viewsets.ModelViewSet):
       except Exception:
          return False
 
+   def perform_create(self, serializer):
+      from ostdata.history_reason import REASON_API_TAG_CREATE, apply_history_reason
+      serializer.save()
+      apply_history_reason(serializer.instance, REASON_API_TAG_CREATE)
+
+   def perform_update(self, serializer):
+      from ostdata.history_reason import REASON_API_TAG_PATCH, apply_history_reason
+      serializer.save()
+      apply_history_reason(serializer.instance, REASON_API_TAG_PATCH)
+
    def create(self, request, *args, **kwargs):
       if not self._has(request.user, 'acl_tags_manage'):
          return Response({'detail': 'Forbidden'}, status=status.HTTP_403_FORBIDDEN)
@@ -54,6 +64,11 @@ class TagViewSet(viewsets.ModelViewSet):
       if not self._has(request.user, 'acl_tags_manage'):
          return Response({'detail': 'Forbidden'}, status=status.HTTP_403_FORBIDDEN)
       return super().partial_update(request, *args, **kwargs)
+
+   def perform_destroy(self, instance):
+      from ostdata.history_reason import REASON_API_TAG_DELETE, set_instance_change_reason
+      set_instance_change_reason(instance, REASON_API_TAG_DELETE)
+      instance.delete()
 
    def destroy(self, request, *args, **kwargs):
       if not self._has(request.user, 'acl_tags_manage'):

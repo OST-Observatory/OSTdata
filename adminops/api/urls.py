@@ -1,5 +1,6 @@
 from django.urls import path
 from .views import (
+    admin_audit_log,
     admin_reanalyse_object,
     admin_list_all_datafiles,
     admin_re_evaluate_datafiles,
@@ -47,6 +48,7 @@ from objects.api.solar_image_views import (
 app_name = 'adminops-api'
 
 urlpatterns = [
+    path('audit-log/', admin_audit_log, name='audit_log'),
     path('health/', admin_health, name='health'),
     path('maintenance/cleanup-downloads/', admin_trigger_cleanup_downloads, name='cleanup_downloads'),
     path('maintenance/reconcile/', admin_trigger_reconcile, name='reconcile'),

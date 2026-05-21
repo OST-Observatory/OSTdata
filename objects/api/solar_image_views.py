@@ -87,6 +87,20 @@ def admin_upload_solar_system_image(request):
         return Response({'detail': f'Unsupported image type: {content_type}'}, status=400)
     path = save_image_for_object(obj, uploaded)
     has_image, url, stem = image_info_for_object(obj, request)
+    try:
+        from adminops.audit_events import log_audit_event
+        log_audit_event(
+            model_type='solar_image',
+            action='updated',
+            entity_label=obj.name,
+            entity_path=f'/objects/{obj.pk}',
+            change_reason='admin:solar_image_upload',
+            user=request.user,
+            instance_id=obj.pk,
+            summary=f'Uploaded solar image ({path.name})',
+        )
+    except Exception:
+        pass
     return Response({
         'pk': obj.pk,
         'sanitized_filename': stem,
@@ -105,4 +119,19 @@ def admin_delete_solar_system_image(request, object_id: int):
     except Object.DoesNotExist:
         return Response({'detail': 'Solar-system object not found'}, status=404)
     deleted = delete_image_for_object(obj)
+    if deleted:
+        try:
+            from adminops.audit_events import log_audit_event
+            log_audit_event(
+                model_type='solar_image',
+                action='deleted',
+                entity_label=obj.name,
+                entity_path=f'/objects/{obj.pk}',
+                change_reason='admin:solar_image_delete',
+                user=request.user,
+                instance_id=obj.pk,
+                summary='Deleted solar-system preview image',
+            )
+        except Exception:
+            pass
     return Response({'deleted': deleted, 'sanitized_filename': sanitize_object_image_stem(obj.name)})

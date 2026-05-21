@@ -559,4 +559,5 @@ def analyze_fits(datafile):
     if assign_inferred and should_allow_auto_update(datafile, 'instrument'):
         datafile.instrument = inferred
 
-    datafile.save()
+    from ostdata.history_reason import REASON_TASK_ANALYZE_HEADER, save_with_reason
+    save_with_reason(datafile, REASON_TASK_ANALYZE_HEADER)

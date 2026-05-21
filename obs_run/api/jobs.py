@@ -251,6 +251,17 @@ def cancel_download_job(request, job_id):
     except Exception:
         job.save(update_fields=['status', 'finished_at'])
     try:
+        from adminops.audit_events import log_download_job_event
+        log_download_job_event(
+            job,
+            action='updated',
+            change_reason='admin:job_cancel',
+            user=request.user,
+            summary='Download job cancelled',
+        )
+    except Exception:
+        pass
+    try:
         broker = getattr(settings, 'CELERY_BROKER_URL', '') or os.environ.get('CELERY_BROKER_URL', '')
         if broker.startswith('redis') and _redis:
             from urllib.parse import urlparse
@@ -304,6 +315,22 @@ def batch_cancel_download_jobs(request):
         except Exception:
             job.save(update_fields=['status', 'finished_at', 'expires_at'])
         cancelled += 1
+    if cancelled:
+        try:
+            from adminops.audit_events import log_audit_event
+            log_audit_event(
+                model_type='download_job',
+                action='updated',
+                entity_label=f'{cancelled} download jobs',
+                entity_path='/admin/jobs',
+                change_reason='admin:job_batch_cancel',
+                user=request.user,
+                is_batch=True,
+                batch_count=cancelled,
+                summary=f'Batch-cancelled {cancelled} download job(s)',
+            )
+        except Exception:
+            pass
     try:
         broker = getattr(settings, 'CELERY_BROKER_URL', '') or os.environ.get('CELERY_BROKER_URL', '')
         if broker.startswith('redis') and _redis:

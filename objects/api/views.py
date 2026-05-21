@@ -205,10 +205,12 @@ class ObjectViewSet(viewsets.ModelViewSet):
         return super().create(request, *args, **kwargs)
 
     def perform_create(self, serializer):
+        from ostdata.history_reason import REASON_API_OBJECT_CREATE, apply_history_reason
         serializer.save()
         instance = serializer.instance
         instance.exclude_from_orphan_cleanup = True
         instance.save(update_fields=['exclude_from_orphan_cleanup'])
+        apply_history_reason(instance, REASON_API_OBJECT_CREATE)
 
     def update(self, request, *args, **kwargs):
         instance = self.get_object()
@@ -232,11 +234,13 @@ class ObjectViewSet(viewsets.ModelViewSet):
                     override_fields.append(get_override_field_name(field_name))
         
         serializer.save()
-        
-        # Save override flags if any were set
+
         if override_fields:
             instance.save(update_fields=override_fields)
-        
+
+        from ostdata.history_reason import REASON_API_OBJECT_PATCH, apply_history_reason
+        apply_history_reason(instance, REASON_API_OBJECT_PATCH)
+
         return Response(serializer.data)
 
     def partial_update(self, request, *args, **kwargs):
@@ -274,6 +278,9 @@ class ObjectViewSet(viewsets.ModelViewSet):
         if name_changed:
             from utilities import propagate_object_name_to_datafiles
             propagate_object_name_to_datafiles(instance)
+
+        from ostdata.history_reason import REASON_API_OBJECT_PATCH, apply_history_reason
+        apply_history_reason(instance, REASON_API_OBJECT_PATCH)
 
         return Response(serializer.data)
 

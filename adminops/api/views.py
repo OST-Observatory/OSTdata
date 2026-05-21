@@ -170,6 +170,95 @@ def admin_health(request):
     data = gather_admin_health()
     return Response(data, status=200)
 
+
+@extend_schema(
+    summary='Admin audit log (last changes from model history)',
+    tags=['Admin'],
+    parameters=[
+        OpenApiParameter(name='page', type=int, location=OpenApiParameter.QUERY, required=False),
+        OpenApiParameter(name='page_size', type=int, location=OpenApiParameter.QUERY, required=False),
+        OpenApiParameter(name='model_type', type=str, location=OpenApiParameter.QUERY, required=False),
+        OpenApiParameter(name='user_only', type=bool, location=OpenApiParameter.QUERY, required=False),
+        OpenApiParameter(
+            name='hide_system_datafiles',
+            type=bool,
+            location=OpenApiParameter.QUERY,
+            required=False,
+        ),
+        OpenApiParameter(
+            name='hide_override_fields',
+            type=bool,
+            location=OpenApiParameter.QUERY,
+            required=False,
+        ),
+        OpenApiParameter(
+            name='days',
+            type=int,
+            location=OpenApiParameter.QUERY,
+            required=False,
+            description='Limit to last N days (7, 30, or 90).',
+        ),
+        OpenApiParameter(
+            name='action',
+            type=str,
+            location=OpenApiParameter.QUERY,
+            required=False,
+            description='Filter by action: created, updated, deleted.',
+        ),
+        OpenApiParameter(
+            name='search',
+            type=str,
+            location=OpenApiParameter.QUERY,
+            required=False,
+            description='Search entity, user, reason, and changed fields.',
+        ),
+    ],
+)
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, HasPerm('acl_admin_audit_log_view')])
+def admin_audit_log(request):
+    from adminops.audit_log import _parse_bool, _parse_days, get_audit_log_page
+
+    try:
+        page = int(request.query_params.get('page', 1))
+    except (TypeError, ValueError):
+        page = 1
+    try:
+        page_size = int(request.query_params.get('page_size', 25))
+    except (TypeError, ValueError):
+        page_size = 25
+
+    model_type = (request.query_params.get('model_type') or '').strip() or None
+    user_only = _parse_bool(request.query_params.get('user_only'), default=False)
+    hide_system_datafiles = _parse_bool(
+        request.query_params.get('hide_system_datafiles'),
+        default=True,
+    )
+    hide_override_fields = _parse_bool(
+        request.query_params.get('hide_override_fields'),
+        default=False,
+    )
+    days = _parse_days(request.query_params.get('days'))
+    group_batches = _parse_bool(request.query_params.get('group_batches'), default=True)
+    action = (request.query_params.get('action') or '').strip() or None
+    search = (request.query_params.get('search') or '').strip() or None
+
+    return Response(
+        get_audit_log_page(
+            page=page,
+            page_size=page_size,
+            model_type=model_type,
+            user_only=user_only,
+            hide_system_datafiles=hide_system_datafiles,
+            hide_override_fields=hide_override_fields,
+            days=days,
+            group_batches=group_batches,
+            action=action,
+            search=search,
+        ),
+        status=200,
+    )
+
 @extend_schema(summary='Set observation date (mid JD) for a run', tags=['Admin'])
 @api_view(['POST'])
 @permission_classes([IsAuthenticated, HasPerm('acl_runs_edit')])
@@ -210,7 +299,8 @@ def admin_run_set_date(request, run_id: int):
         override_fields = ['mid_observation_jd']
         if check_and_set_override(run, 'mid_observation_jd', run.mid_observation_jd, old_jd):
             override_fields.append(get_override_field_name('mid_observation_jd'))
-        run.save(update_fields=override_fields)
+        from ostdata.history_reason import REASON_ADMIN_RUN_SET_DATE, save_with_reason
+        save_with_reason(run, REASON_ADMIN_RUN_SET_DATE, update_fields=override_fields)
         return Response({'pk': run.pk, 'name': run.name, 'mid_observation_jd': run.mid_observation_jd})
     except Exception as e:
         logger.exception("Failed to set mid_observation_jd for run %s: %s", run_id, e)
@@ -234,7 +324,8 @@ def admin_run_recompute_date(request, run_id: int):
             run.mid_observation_jd = float(a or b or 0.0)
         else:
             run.mid_observation_jd = float(a + (b - a) / 2.0)
-        run.save(update_fields=['mid_observation_jd'])
+        from ostdata.history_reason import REASON_ADMIN_RUN_RECOMPUTE_DATE, save_with_reason
+        save_with_reason(run, REASON_ADMIN_RUN_RECOMPUTE_DATE, update_fields=['mid_observation_jd'])
         return Response({'pk': run.pk, 'name': run.name, 'mid_observation_jd': run.mid_observation_jd})
     except Exception as e:
         logger.exception("Failed to recompute mid_observation_jd for run %s: %s", run_id, e)
@@ -278,8 +369,9 @@ def admin_clear_override_flag(request, model_type: str, instance_id: int, field_
         return Response({'detail': f'Override field {override_field_name} does not exist'}, status=400)
     
     try:
+        from ostdata.history_reason import REASON_ADMIN_CLEAR_OVERRIDE, save_with_reason
         setattr(instance, override_field_name, False)
-        instance.save(update_fields=[override_field_name])
+        save_with_reason(instance, REASON_ADMIN_CLEAR_OVERRIDE, update_fields=[override_field_name])
         return Response({
             'success': True,
             'model_type': model_type,
@@ -351,8 +443,9 @@ def admin_clear_all_overrides(request, model_type: str, instance_id: int):
                 cleared_flags.append(field_name)
     
     if update_fields:
-        instance.save(update_fields=update_fields)
-    
+        from ostdata.history_reason import REASON_ADMIN_CLEAR_ALL_OVERRIDES, save_with_reason
+        save_with_reason(instance, REASON_ADMIN_CLEAR_ALL_OVERRIDES, update_fields=update_fields)
+
     return Response({
         'success': True,
         'model_type': model_type,
@@ -623,6 +716,20 @@ def admin_set_banner(request):
     if not ok:
         logger.error("Failed to persist banner payload: %s", payload)
         return Response({'error': 'Failed to persist banner'}, status=500)
+    try:
+        from adminops.audit_events import log_audit_event
+        log_audit_event(
+            model_type='banner',
+            action='updated',
+            entity_label='Site banner',
+            entity_path='/admin/maintenance',
+            change_reason='admin:banner_set',
+            user=request.user,
+            changes=[{'field': 'banner', 'old': None, 'new': payload}],
+            summary=f"Banner {'enabled' if enabled else 'disabled'}",
+        )
+    except Exception:
+        pass
     return Response(payload)
 
 
@@ -636,6 +743,19 @@ def admin_clear_banner(request):
     if not ok:
         logger.error("Failed to clear banner")
         return Response({'error': 'Failed to clear banner'}, status=500)
+    try:
+        from adminops.audit_events import log_audit_event
+        log_audit_event(
+            model_type='banner',
+            action='deleted',
+            entity_label='Site banner',
+            entity_path='/admin/maintenance',
+            change_reason='admin:banner_clear',
+            user=request.user,
+            summary='Banner cleared',
+        )
+    except Exception:
+        pass
     return Response({'cleared': True})
 
 
@@ -722,7 +842,12 @@ def admin_delete_object_aliases(request, object_id):
         logger.exception(f'Error fetching object {object_id}: {e}')
         return Response({'error': f'Error fetching object: {str(e)}'}, status=500)
     try:
-        deleted_count = obj.identifier_set.filter(info_from_header=False).delete()[0]
+        from ostdata.history_reason import REASON_ADMIN_DELETE_ALIASES, set_instance_change_reason
+        deleted_count = 0
+        for ident in obj.identifier_set.filter(info_from_header=False):
+            set_instance_change_reason(ident, REASON_ADMIN_DELETE_ALIASES)
+            ident.delete()
+            deleted_count += 1
         return Response({
             'success': True,
             'deleted_count': deleted_count,
@@ -903,19 +1028,27 @@ def admin_update_object_identifiers(request, object_id):
             # Actually update identifiers
             try:
                 with transaction.atomic():
-                    # Delete all existing identifiers (excluding header-based ones)
-                    deleted_count = obj.identifier_set.filter(info_from_header=False).delete()[0]
-                    
-                    # Create new identifiers from SIMBAD
+                    from ostdata.history_reason import (
+                        REASON_ADMIN_SIMBAD_IDENTIFIERS,
+                        set_instance_change_reason,
+                    )
+                    deleted_count = 0
+                    for ident in obj.identifier_set.filter(info_from_header=False):
+                        set_instance_change_reason(ident, REASON_ADMIN_SIMBAD_IDENTIFIERS)
+                        ident.delete()
+                        deleted_count += 1
+
                     created_count = 0
                     for alias in new_identifiers:
                         try:
-                            Identifier.objects.create(
+                            ident = Identifier(
                                 obj=obj,
                                 name=alias,
                                 href=simbad_href,
                                 info_from_header=False,
                             )
+                            set_instance_change_reason(ident, REASON_ADMIN_SIMBAD_IDENTIFIERS)
+                            ident.save()
                             created_count += 1
                         except Exception as e:
                             logger.exception(f'Error creating identifier "{alias}" for object {object_id}: {e}')
@@ -1120,7 +1253,12 @@ def admin_update_exposure_type_user(request, pk):
     if isinstance(exposure_type_user_override, bool):
         datafile.exposure_type_user_override = exposure_type_user_override
 
-    datafile.save(update_fields=['exposure_type_user', 'exposure_type_user_override'])
+    from ostdata.history_reason import REASON_ADMIN_EXPOSURE_TYPE_USER, save_with_reason
+    save_with_reason(
+        datafile,
+        REASON_ADMIN_EXPOSURE_TYPE_USER,
+        update_fields=['exposure_type_user', 'exposure_type_user_override'],
+    )
 
     # Re-evaluate object association when set to Light (LI) so coordinate-based
     # resolution can run for files that were previously misclassified
@@ -1247,7 +1385,12 @@ def admin_update_spectrograph(request, pk):
     if isinstance(spectrograph_override, bool):
         datafile.spectrograph_override = spectrograph_override
 
-    datafile.save(update_fields=['spectrograph', 'spectrograph_override'])
+    from ostdata.history_reason import REASON_ADMIN_SPECTROGRAPH, save_with_reason
+    save_with_reason(
+        datafile,
+        REASON_ADMIN_SPECTROGRAPH,
+        update_fields=['spectrograph', 'spectrograph_override'],
+    )
 
     # Automatically update photometry/spectroscopy flags for associated observation runs and objects
     # Update observation run
@@ -1745,7 +1888,8 @@ def admin_link_datafiles_to_object(request):
         # Update main_target so it shows in Target column (like evaluate_data_file does)
         if should_allow_auto_update(datafile, 'main_target'):
             datafile.main_target = obj.name
-            datafile.save(update_fields=['main_target'])
+            from ostdata.history_reason import REASON_ADMIN_LINK_DATAFILES, save_with_reason
+            save_with_reason(datafile, REASON_ADMIN_LINK_DATAFILES, update_fields=['main_target'])
         linked += 1
 
     # Update photometry/spectroscopy flags

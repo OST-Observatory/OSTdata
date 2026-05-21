@@ -190,6 +190,62 @@ class UserAdminViewSet(viewsets.ModelViewSet):
             return Response({'detail': 'Forbidden'}, status=status.HTTP_403_FORBIDDEN)
         return super().partial_update(request, *args, **kwargs)
 
+    _AUDIT_USER_FIELDS = (
+        'is_active', 'is_staff', 'is_supervisor', 'is_student',
+        'email', 'first_name', 'last_name', 'note',
+    )
+
+    def _audit_log_user_changes(self, instance, request, changes: list):
+        if not changes:
+            return
+        try:
+            from adminops.audit_events import log_audit_event
+            log_audit_event(
+                model_type='user_role',
+                action='updated',
+                entity_label=instance.username,
+                entity_path='/admin/users',
+                change_reason='admin:user_roles',
+                user=request.user,
+                instance_id=instance.pk,
+                changes=changes,
+                summary=f'Updated user {instance.username}',
+            )
+        except Exception:
+            pass
+
+    def perform_update(self, serializer):
+        instance = serializer.instance
+        old_values = {
+            field: getattr(instance, field)
+            for field in self._AUDIT_USER_FIELDS
+            if field in serializer.validated_data
+        }
+        serializer.save()
+        changes = []
+        for field, old_val in old_values.items():
+            new_val = getattr(serializer.instance, field)
+            if old_val != new_val:
+                changes.append({'field': field, 'old': old_val, 'new': new_val})
+        self._audit_log_user_changes(serializer.instance, self.request, changes)
+
+    def perform_destroy(self, instance):
+        try:
+            from adminops.audit_events import log_audit_event
+            log_audit_event(
+                model_type='user_role',
+                action='deleted',
+                entity_label=instance.username,
+                entity_path='/admin/users',
+                change_reason='admin:user_delete',
+                user=self.request.user,
+                instance_id=instance.pk,
+                summary=f'User {instance.username} deleted',
+            )
+        except Exception:
+            pass
+        instance.delete()
+
     def destroy(self, request, *args, **kwargs):
         if not self._has(request.user, 'acl_users_delete'):
             return Response({'detail': 'Forbidden'}, status=status.HTTP_403_FORBIDDEN)
@@ -387,6 +443,7 @@ def admin_ldap_test(request):
 ACL_PERMISSIONS = [
     # (codename, name)
     ('acl_users_view', 'Users: view'),
+    ('acl_admin_audit_log_view', 'Admin: audit log view'),
     ('acl_users_edit_roles', 'Users: edit roles'),
     ('acl_users_delete', 'Users: delete'),
     ('acl_objects_view_private', 'Objects: view private'),
@@ -449,10 +506,10 @@ ACL_DEFAULTS = {
         'acl_objects_delete', 'acl_runs_edit', 'acl_runs_delete', 'acl_runs_publish', 'acl_tags_manage',
         'acl_jobs_view_all', 'acl_jobs_cancel_any', 'acl_jobs_ttl_modify', 'acl_maintenance_cleanup',
         'acl_maintenance_reconcile', 'acl_maintenance_orphans', 'acl_banner_manage',
-        'acl_system_health_view', 'acl_system_settings_view',
+        'acl_system_health_view', 'acl_system_settings_view', 'acl_admin_audit_log_view',
     } | _NEW_STAFF_DATAFILE_TOOLS,
     'supervisor': {
-        'acl_users_view', 'acl_objects_view_private', 'acl_objects_edit', 'acl_objects_merge',
+        'acl_users_view', 'acl_admin_audit_log_view', 'acl_objects_view_private', 'acl_objects_edit', 'acl_objects_merge',
         'acl_runs_edit', 'acl_runs_publish', 'acl_tags_manage', 'acl_jobs_view_all',
         'acl_system_health_view',
     },
@@ -592,5 +649,19 @@ def admin_acl_set(request):
         if codes:
             to_add = list(Permission.objects.filter(id__in=[perm_map[c] for c in codes]))
             grp.permissions.add(*to_add)
+    try:
+        from adminops.audit_events import log_audit_event
+        log_audit_event(
+            model_type='acl',
+            action='updated',
+            entity_label='ACL role matrix',
+            entity_path='/admin/users',
+            change_reason='admin:acl_set',
+            user=request.user,
+            changes=[{'field': 'matrix', 'old': None, 'new': new_matrix}],
+            summary='ACL permissions updated for role groups',
+        )
+    except Exception:
+        pass
     return Response(_build_acl_payload())
     

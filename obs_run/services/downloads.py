@@ -33,6 +33,17 @@ def enqueue_download_job_for_run(
             status='queued',
         )
     build_zip_task.delay(job.pk)
+    try:
+        from adminops.audit_events import log_download_job_event
+        log_download_job_event(
+            job,
+            action='created',
+            change_reason='api:download_job_create',
+            user=user if (user and getattr(user, 'is_authenticated', False)) else None,
+            summary=f'Download job queued ({len(selected_ids)} file id(s))',
+        )
+    except Exception:
+        pass
     return EnqueuedJob(id=job.pk, status=job.status)
 
 
@@ -51,6 +62,17 @@ def enqueue_download_job_bulk(
         status='queued',
     )
     build_zip_task.delay(job.pk)
+    try:
+        from adminops.audit_events import log_download_job_event
+        log_download_job_event(
+            job,
+            action='created',
+            change_reason='api:download_job_create_bulk',
+            user=user if (user and getattr(user, 'is_authenticated', False)) else None,
+            summary=f'Bulk download job queued ({len(selected_ids)} file id(s))',
+        )
+    except Exception:
+        pass
     return EnqueuedJob(id=job.pk, status=job.status)
 
 
