@@ -4,20 +4,6 @@
     <v-row>
       <v-col cols="12" md="6" lg="4">
         <v-card variant="outlined" class="mb-4">
-          <v-card-title class="text-h6">Tags</v-card-title>
-          <v-card-text>
-            Create, edit, and delete tags.
-          </v-card-text>
-          <v-card-actions>
-            <v-btn color="primary" :to="{ path: '/tags' }" aria-label="Open Tags management">
-              Open Tags
-            </v-btn>
-          </v-card-actions>
-        </v-card>
-      </v-col>
-
-      <v-col cols="12" md="6" lg="4">
-        <v-card variant="outlined" class="mb-4">
           <v-card-title class="text-h6">Users & Roles</v-card-title>
           <v-card-text>
             Manage user activation and staff roles.
@@ -74,20 +60,6 @@
 
       <v-col cols="12" md="6" lg="4">
         <v-card variant="outlined" class="mb-4">
-          <v-card-title class="text-h6">Observation Runs</v-card-title>
-          <v-card-text>
-            Review runs and update metadata.
-          </v-card-text>
-          <v-card-actions>
-            <v-btn color="primary" :to="{ path: '/observation-runs' }" aria-label="Open Observation Runs">
-              Open Runs
-            </v-btn>
-          </v-card-actions>
-        </v-card>
-      </v-col>
-
-      <v-col cols="12" md="6" lg="4">
-        <v-card variant="outlined" class="mb-4">
           <v-card-title class="text-h6">Objects</v-card-title>
           <v-card-text>
             Create objects and upload preview images for solar-system targets.
@@ -118,7 +90,7 @@
         <v-card variant="outlined" class="mb-4">
           <v-card-title class="text-h6">Spectrograph Management</v-card-title>
           <v-card-text>
-            Manage spectrograph property for data files with spectrograph set or WAVE exposure type.
+            Manage data files with spectrograph set or WAVE exposure type.
           </v-card-text>
           <v-card-actions>
             <v-btn color="primary" :to="{ path: '/admin/spectrograph-files' }" aria-label="Open Spectrograph Management">
