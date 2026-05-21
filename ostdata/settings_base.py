@@ -151,6 +151,12 @@ if _frontend_dist.exists():
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+# Solar-system object preview images (filename stem = sanitized object name)
+SOLAR_SYSTEM_OBJECT_IMAGES_DIR = env.path(
+    'SOLAR_SYSTEM_OBJECT_IMAGES_DIR',
+    default=BASE_DIR / 'data' / 'solar_system_images',
+)
+
 # Celery
 from celery.schedules import crontab
 CELERY_TASK_ALWAYS_EAGER = env.bool('CELERY_TASK_ALWAYS_EAGER', default=False)

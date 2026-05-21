@@ -37,3 +37,7 @@ old/
 frontend/dist/
 cnn_training_data.json
 
+# Solar-system object preview images (uploaded via admin; keep directory only)
+data/solar_system_images/*
+!data/solar_system_images/.gitkeep
+

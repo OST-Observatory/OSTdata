@@ -66,6 +66,7 @@ const routes = [
         'users.acl_datafiles_plate_solve', 'acl_datafiles_plate_solve',
         'users.acl_datafiles_exposure_type_user', 'acl_datafiles_exposure_type_user',
         'users.acl_datafiles_spectrograph', 'acl_datafiles_spectrograph',
+        'users.acl_objects_edit', 'acl_objects_edit',
       ],
       title: 'Admin',
       description: 'Administration panel.',
@@ -112,6 +113,17 @@ const routes = [
     name: 'admin-plate-solving',
     component: () => import('@/views/admin/AdminPlateSolving.vue'),
     meta: { requiresAuth: true, requiresAnyPerms: ['users.acl_datafiles_plate_solve','acl_datafiles_plate_solve'], title: 'Admin – Plate Solving', description: 'Manage plate solving for data files.' }
+  },
+  {
+    path: '/admin/objects',
+    name: 'admin-objects',
+    component: () => import('@/views/admin/AdminObjects.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAnyPerms: ['users.acl_objects_edit', 'acl_objects_edit'],
+      title: 'Admin – Objects',
+      description: 'Create objects and manage solar-system preview images.',
+    },
   },
   {
     path: '/login',

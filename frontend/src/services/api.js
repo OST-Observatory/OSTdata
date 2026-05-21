@@ -310,6 +310,7 @@ export const api = {
     return fetchWithAuth('/objects/vuetify', { params: queryParams })
   },
   getObject: (id) => fetchWithAuth(`/objects/${id}/`),
+  getObjectSolarImageUrl: (id) => `${API_BASE_URL}/objects/${encodeURIComponent(id)}/solar-image/`,
   getObjectObservationRuns: (id) => fetchWithAuth(`/objects/${id}/observation_runs/`),
   getObjectDataFiles: (id) => fetchWithAuth(`/objects/${id}/datafiles/`),
   // Use last_modified (supported server-side) instead of created_at
@@ -401,6 +402,17 @@ export const api = {
   adminClearAllOverrides: (modelType, instanceId) => fetchWithAuth(`/admin/override-flags/${encodeURIComponent(modelType)}/${encodeURIComponent(instanceId)}/clear-all/`, { method: 'POST' }),
   adminListOverrideFlags: () => fetchWithAuth('/admin/override-flags/list/'),
   adminDeleteObjectAliases: (objectId) => fetchWithAuth(`/admin/objects/${encodeURIComponent(objectId)}/delete-aliases/`, { method: 'POST' }),
+  adminListSolarSystemImages: () => fetchWithAuth('/admin/objects/solar-system-images/'),
+  adminUploadSolarSystemImage: (objectId, file) => {
+    const fd = new FormData()
+    fd.append('object_id', String(objectId))
+    fd.append('file', file)
+    return fetchWithAuth('/admin/objects/solar-system-images/upload/', { method: 'POST', body: fd })
+  },
+  adminDeleteSolarSystemImage: (objectId) => fetchWithAuth(
+    `/admin/objects/solar-system-images/${encodeURIComponent(objectId)}/`,
+    { method: 'DELETE' },
+  ),
   adminUpdateObjectIdentifiers: (objectId, matchMethod, dryRun) => fetchWithAuth(`/admin/objects/${encodeURIComponent(objectId)}/update-identifiers/`, {
     method: 'POST',
     body: JSON.stringify({

@@ -3,6 +3,7 @@ from django.urls import include, path
 from rest_framework import routers
 
 from .views import ObjectViewSet, getObjectRunViewSet, getObjectDatafileViewSet, ObjectVuetifyViewSet
+from .solar_image_views import object_solar_image
 
 app_name = 'objects-api'
 
@@ -15,7 +16,12 @@ urlpatterns = [
         ObjectVuetifyViewSet.as_view({'get': 'list'}),
         name='object-vuetify-list',
     ),
-    path('', include(router.urls) ),
+    path(
+        '<int:pk>/solar-image/',
+        object_solar_image,
+        name='object_solar_image',
+    ),
+    path('', include(router.urls)),
     path(
         '<int:object_pk>/observation_runs/',
         getObjectRunViewSet.as_view({'get': 'list'}),

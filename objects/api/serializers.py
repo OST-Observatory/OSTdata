@@ -12,6 +12,7 @@ from objects.models import Object
 from tags.models import Tag
 from tags.api.serializers import TagSerializer
 from obs_run.utils import normalize_alias, INSTRUMENT_ALIASES, TELESCOPE_ALIASES
+from objects.solar_system_images import image_info_for_object
 
 # ===============================================================
 #   OBJECTS
@@ -36,6 +37,8 @@ class ObjectListSerializer(ModelSerializer):
         source='tags',
     )
     identifiers = SerializerMethodField()
+    has_solar_system_image = SerializerMethodField()
+    solar_system_image_url = SerializerMethodField()
 
     class Meta:
         model = Object
@@ -76,6 +79,8 @@ class ObjectListSerializer(ModelSerializer):
             'object_type_override',
             'note_override',
             'exclude_from_orphan_cleanup',
+            'has_solar_system_image',
+            'solar_system_image_url',
         ]
         read_only_fields = ('pk',)
     
@@ -94,6 +99,18 @@ class ObjectListSerializer(ModelSerializer):
                 if field_name in self.fields:
                     self.fields[field_name].read_only = True
 
+
+    def get_has_solar_system_image(self, obj):
+        if getattr(obj, 'object_type', None) != 'SO':
+            return False
+        has_image, _, _ = image_info_for_object(obj, self.context.get('request'))
+        return has_image
+
+    def get_solar_system_image_url(self, obj):
+        if getattr(obj, 'object_type', None) != 'SO':
+            return None
+        has_image, url, _ = image_info_for_object(obj, self.context.get('request'))
+        return url if has_image else None
 
     def get_observation_run(self, obj):
         runs = obj.observation_run.all()

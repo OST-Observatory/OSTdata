@@ -205,15 +205,26 @@
         </v-card>
       </v-col>
       
-      <!-- Aladin Lite Sky Map -->
+      <!-- Sky map or solar-system preview image -->
       <v-col cols="12" md="3">
         <v-card class="uniform-height">
-          <v-card-title>Sky Map</v-card-title>
-          <v-card-text>
-            <div v-if="aladinLoading" class="d-flex align-center justify-center" style="width: 100%; height: 265px;">
-              <v-progress-circular indeterminate color="primary" />
+          <v-card-title>{{ shouldShowSolarImage ? '' : 'Sky Map' }}</v-card-title>
+          <v-card-text class="map-panel-body">
+            <div v-if="shouldShowSolarImage" class="solar-object-image-wrap">
+              <v-img
+                :src="solarImageSrc"
+                :alt="object?.name || 'Object image'"
+                cover
+                class="solar-object-image"
+                @error="onSolarImageError"
+              />
             </div>
-            <div v-show="!aladinLoading" id="aladin-lite-div" style="width: 100%; height: 265px;"></div>
+            <template v-else>
+              <div v-if="aladinLoading" class="sky-map-panel d-flex align-center justify-center">
+                <v-progress-circular indeterminate color="primary" />
+              </div>
+              <div v-show="!aladinLoading" id="aladin-lite-div" class="sky-map-panel"></div>
+            </template>
           </v-card-text>
         </v-card>
       </v-col>
@@ -1383,7 +1394,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed, watch } from 'vue'
+import { ref, onMounted, computed, watch, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
 import { api } from '@/services/api'
 import { useAuthStore } from '@/store/auth'
@@ -1421,6 +1432,35 @@ const showDataFiles = ref(false)
 const loadingObservationRuns = ref(false)
 const loadingDataFiles = ref(false)
 const aladinLoading = ref(true)
+const solarImageFailed = ref(false)
+
+const isSolarSystemObject = computed(() => object.value?.object_type === 'SO')
+const shouldShowSolarImage = computed(() =>
+  isSolarSystemObject.value &&
+  !!object.value?.has_solar_system_image &&
+  !solarImageFailed.value,
+)
+const solarImageSrc = computed(() => {
+  if (!shouldShowSolarImage.value) return ''
+  const id = object.value?.pk ?? object.value?.id
+  if (object.value?.solar_system_image_url) return object.value.solar_system_image_url
+  if (id != null) return api.getObjectSolarImageUrl(id)
+  return ''
+})
+
+const onSolarImageError = () => {
+  solarImageFailed.value = true
+  nextTick(() => initializeAladinLite())
+}
+
+const initSkyMapOrSolarImage = () => {
+  solarImageFailed.value = false
+  if (shouldShowSolarImage.value) {
+    aladinLoading.value = false
+    return
+  }
+  nextTick(() => initializeAladinLite())
+}
 const objDfPage = ref(1)
 const objDfItemsPerPage = ref(10)
 const objDfSortBy = ref([{ key: 'obs_date', order: 'desc' }])
@@ -1753,7 +1793,7 @@ const loadObject = async () => {
     await loadObservationRuns(objectId)
     await loadDataFiles(objectId)
     await loadAvailableTags()
-    initializeAladinLite()
+    initSkyMapOrSolarImage()
   } catch (error) {
     console.error('Error loading object:', error)
   }
@@ -2642,6 +2682,37 @@ watch(object, (val) => {
 .uniform-height .v-card-text {
   flex: 1;
   overflow-y: auto;
+}
+
+.uniform-height .v-card-text.map-panel-body {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: 12px;
+  overflow: hidden;
+}
+
+.solar-object-image-wrap,
+.sky-map-panel {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  position: relative;
+  overflow: hidden;
+  border-radius: 4px;
+}
+
+.solar-object-image-wrap :deep(.v-img) {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100% !important;
+  max-height: none;
+}
+
+.solar-object-image-wrap :deep(.v-img__img) {
+  object-fit: cover;
+  object-position: center;
 }
 
 .expand-clickable {

@@ -38,6 +38,11 @@ from .views import (
     admin_set_plate_solving_task_enabled,
     admin_get_observation_runs_for_plate_solving,
 )
+from objects.api.solar_image_views import (
+    admin_delete_solar_system_image,
+    admin_list_solar_system_images,
+    admin_upload_solar_system_image,
+)
 
 app_name = 'adminops-api'
 
@@ -65,6 +70,9 @@ urlpatterns = [
     path('objects/<int:object_id>/delete-aliases/', admin_delete_object_aliases, name='delete_object_aliases'),
     path('objects/<int:object_id>/update-identifiers/', admin_update_object_identifiers, name='update_object_identifiers'),
     path('objects/<int:object_id>/reanalyse/', admin_reanalyse_object, name='reanalyse_object'),
+    path('objects/solar-system-images/', admin_list_solar_system_images, name='solar_system_images_list'),
+    path('objects/solar-system-images/upload/', admin_upload_solar_system_image, name='solar_system_images_upload'),
+    path('objects/solar-system-images/<int:object_id>/', admin_delete_solar_system_image, name='solar_system_images_delete'),
     # DataFiles list (all) and re-evaluate
     path('datafiles/', admin_list_all_datafiles, name='list_all_datafiles'),
     path('datafiles/re-evaluate/', admin_re_evaluate_datafiles, name='re_evaluate_datafiles'),
