@@ -1,0 +1,93 @@
+/**
+ * Dark theme polish — complements vuetify.ts "observatory" palette.
+ * Keeps depth and blue harmony without near-black flat UI.
+ */
+
+.v-theme--dark.v-application,
+.v-theme--dark .v-main {
+  background: linear-gradient(
+    165deg,
+    rgb(var(--v-theme-background)) 0%,
+    color-mix(in srgb, rgb(var(--v-theme-background)) 88%, rgb(var(--v-theme-primary)) 12%) 100%
+  );
+}
+
+/* Cards & panels: blue-tinted borders instead of flat gray */
+.v-theme--dark .v-card--variant-outlined,
+.v-theme--dark .v-sheet--variant-outlined {
+  border-color: rgba(var(--v-theme-primary), 0.18) !important;
+}
+
+.v-theme--dark .v-card--variant-elevated,
+.v-theme--dark .v-card:not(.v-card--variant-outlined):not(.v-card--variant-text):not(.v-card--variant-plain) {
+  box-shadow: var(--v-theme-shadow-card) !important;
+}
+
+/* Form fields */
+.v-theme--dark .v-field--variant-outlined .v-field__outline {
+  --v-field-border-opacity: 0.35;
+}
+
+.v-theme--dark .v-field--variant-outlined:not(.v-field--focused) .v-field__outline {
+  color: rgba(var(--v-theme-on-surface), 0.35);
+}
+
+.v-theme--dark .v-field--variant-outlined.v-field--focused .v-field__outline {
+  color: rgb(var(--v-theme-primary));
+}
+
+/* Tables */
+.v-theme--dark .custom-table tbody tr:hover {
+  background-color: rgba(var(--v-theme-primary), 0.08) !important;
+}
+
+.v-theme--dark .custom-table thead th,
+.v-theme--dark .custom-table thead td {
+  background-color: rgba(var(--v-theme-primary), 0.1);
+  border-bottom-color: rgba(var(--v-theme-primary), 0.28) !important;
+}
+
+/* Chips: tonal reads clearer on slate surfaces */
+.v-theme--dark .v-chip--variant-tonal {
+  background-color: rgba(var(--v-theme-primary), 0.16) !important;
+  color: rgb(var(--v-theme-primary-light)) !important;
+}
+
+/* Alerts */
+.v-theme--dark .v-alert--variant-tonal.bg-success {
+  background-color: rgba(var(--v-theme-success), 0.14) !important;
+}
+
+.v-theme--dark .v-alert--variant-tonal.bg-warning {
+  background-color: rgba(var(--v-theme-warning), 0.14) !important;
+}
+
+.v-theme--dark .v-alert--variant-tonal.bg-error {
+  background-color: rgba(var(--v-theme-error), 0.14) !important;
+}
+
+.v-theme--dark .v-alert--variant-tonal.bg-info {
+  background-color: rgba(var(--v-theme-info), 0.14) !important;
+}
+
+/* Expansion panels / menus */
+.v-theme--dark .v-expansion-panel {
+  background: rgb(var(--v-theme-surface));
+}
+
+.v-theme--dark .v-menu > .v-overlay__content {
+  border: 1px solid rgba(var(--v-theme-primary), 0.2);
+  box-shadow: var(--v-theme-shadow-card-hover);
+}
+
+/* Focus ring follows theme primary */
+.v-theme--dark :focus-visible {
+  outline-color: rgba(var(--v-theme-primary), 0.85);
+}
+
+.v-theme--dark .nav-btn:focus-visible {
+  box-shadow:
+    0 0 0 2px rgba(var(--v-theme-primary), 0.5) inset,
+    0 0 0 2px rgba(var(--v-theme-on-secondary), 0.25),
+    0 2px 8px rgba(0, 0, 0, 0.35) !important;
+}

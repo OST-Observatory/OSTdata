@@ -3,6 +3,7 @@ import '@mdi/font/css/materialdesignicons.css'
 import 'vuetify/styles'
 import '@/styles/switch-contrast.css'
 import '@/styles/admin-cards.css'
+import '@/styles/dark-theme.css'
 
 // Vuetify
 import { createVuetify, type ThemeDefinition } from 'vuetify'
@@ -83,39 +84,50 @@ const ostdataTheme: ThemeDefinition = {
   },
 }
 
+/** Dark companion to ostdata light theme — slate blues, not near-black. */
 const darkTheme: ThemeDefinition = {
   dark: true,
   colors: {
-    primary: '#90caf9',
-    'primary-dark': '#42a5f5',
-    'primary-light': '#1e293b',
-    'on-primary': '#0b0f14',
-    // Make secondary readable on dark backgrounds (used by text-secondary)
-    secondary: '#a0aec0',
-    'secondary-dark': '#64748b',
-    'secondary-light': '#cbd5e1',
-    'on-secondary': '#0b0f14',
-    success: '#66bb6a',
-    'on-success': '#0b0f14',
-    warning: '#ffa726',
-    'on-warning': '#0b0f14',
-    error: '#ef5350',
-    'on-error': '#0b0f14',
-    info: '#29b6f6',
-    'on-info': '#0b0f14',
-    surface: '#161f33',
-    'on-surface': '#e2e8f0',
-    'surface-variant': '#1e293b',
-    'on-surface-variant': '#cbd5e1',
-    background: '#0b0f14',
-    'on-background': '#e2e8f0',
+    // Primary: same family as light #1584cb, tuned for dark surfaces
+    primary: '#5eb8e8',
+    'primary-dark': '#3da3d9',
+    'primary-light': '#9ad4f5',
+    'on-primary': '#0c1824',
+
+    // App bar / footer — deep blue (parallel to light secondary #2c5282)
+    secondary: '#2f4f73',
+    'secondary-dark': '#243f5c',
+    'secondary-light': '#6b8fb8',
+    'on-secondary': '#eef4fc',
+
+    success: '#5cc48a',
+    'on-success': '#0c1824',
+    warning: '#e8ad52',
+    'on-warning': '#1a1408',
+    error: '#f0787e',
+    'on-error': '#1f0c0d',
+    info: '#5eb8e8',
+    'on-info': '#0c1824',
+
+    // Layered surfaces (clear steps above background)
+    background: '#1a2433',
+    'on-background': '#d4deec',
+    surface: '#243247',
+    'on-surface': '#eef3fa',
+    'surface-bright': '#2f3f56',
+    'on-surface-bright': '#f4f7fc',
+    'surface-light': '#364862',
+    'on-surface-light': '#e8eef6',
+    'surface-variant': '#33445c',
+    'on-surface-variant': '#b8c6d9',
   },
   variables: {
-    'theme-shadow-app-bar': '0 2px 8px rgba(0,0,0,0.6)',
-    'theme-shadow-card': '0 2px 4px rgba(0,0,0,0.5)',
-    'theme-shadow-card-hover': '0 4px 8px rgba(0,0,0,0.6)',
-    'theme-border-app-bar': '1px solid rgba(255,255,255,0.06)',
-    'theme-border-card': '1px solid rgba(255,255,255,0.06)',
+    'theme-shadow-app-bar': '0 2px 12px rgba(8, 20, 36, 0.55)',
+    'theme-shadow-card': '0 2px 10px rgba(8, 20, 36, 0.4)',
+    'theme-shadow-card-hover': '0 6px 20px rgba(8, 20, 36, 0.5)',
+    'theme-shadow-card-light': '0 1px 6px rgba(8, 20, 36, 0.3)',
+    'theme-border-app-bar': '1px solid rgba(94, 184, 232, 0.22)',
+    'theme-border-card': '1px solid rgba(94, 184, 232, 0.16)',
     'theme-radius-sm': '4px',
     'theme-radius-md': '8px',
     'theme-radius-lg': '12px',
@@ -126,11 +138,11 @@ const darkTheme: ThemeDefinition = {
     'theme-spacing-xl': '24px',
     'theme-transition-fast': '0.2s ease-in-out',
     'theme-transition-normal': '0.3s ease-in-out',
-    'theme-opacity-hover': 0.08,
+    'theme-opacity-hover': 0.1,
     'theme-container-max-width': '1400px',
     'theme-scrollbar-width': '8px',
     'theme-scrollbar-height': '8px',
-  }
+  },
 }
 
 export default createVuetify({

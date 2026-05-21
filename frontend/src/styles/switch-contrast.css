@@ -34,12 +34,13 @@
   font-weight: 500;
 }
 
-/* Dark theme: keep OFF track/thumb visible on dark surfaces */
+/* Dark: OFF track uses primary tint to match observatory palette */
 .v-theme--dark .hi-contrast-switch:not(.v-selection-control--dirty) .v-switch__track {
-  background-color: rgba(var(--v-theme-on-surface), 0.25) !important;
-  border-color: rgba(var(--v-theme-on-surface), 0.45) !important;
+  background-color: rgba(var(--v-theme-primary), 0.22) !important;
+  border-color: rgba(var(--v-theme-primary), 0.38) !important;
 }
 
 .v-theme--dark .hi-contrast-switch:not(.v-selection-control--dirty) .v-switch__thumb {
-  border-color: rgba(var(--v-theme-on-surface), 0.7) !important;
+  background-color: rgb(var(--v-theme-surface-bright)) !important;
+  border-color: rgba(var(--v-theme-primary-light), 0.9) !important;
 }

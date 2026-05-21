@@ -1,22 +1,18 @@
-/* Dark theme: admin panels and nested cells need stronger separation from page background. */
-
-.v-theme--dark .v-card--variant-outlined {
-  border-color: rgba(255, 255, 255, 0.12) !important;
-}
+/* Admin panels — extra lift in dark mode (base palette in vuetify.ts + dark-theme.css). */
 
 .v-theme--dark .admin-maint-card.v-card--variant-outlined,
 .v-theme--dark .admin-health-card.v-card--variant-outlined,
 .v-theme--dark .admin-tile.v-card--variant-outlined {
   background-color: rgb(var(--v-theme-surface)) !important;
-  border-color: rgba(255, 255, 255, 0.14) !important;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+  border-color: rgba(var(--v-theme-primary), 0.22) !important;
+  box-shadow: var(--v-theme-shadow-card);
 }
 
 .v-theme--dark .admin-maint-card:hover,
 .v-theme--dark .admin-health-card:hover,
 .v-theme--dark .admin-tile:hover {
-  border-color: rgba(var(--v-theme-primary), 0.5) !important;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
+  border-color: rgba(var(--v-theme-primary), 0.45) !important;
+  box-shadow: var(--v-theme-shadow-card-hover);
 }
 
 .v-theme--dark .admin-maint-card--featured,
@@ -24,14 +20,14 @@
 .v-theme--dark .admin-tile--featured {
   background: linear-gradient(
     145deg,
-    rgba(var(--v-theme-primary), 0.14) 0%,
-    rgb(var(--v-theme-surface)) 55%
+    rgba(var(--v-theme-primary), 0.16) 0%,
+    rgb(var(--v-theme-surface)) 58%
   ) !important;
-  border-color: rgba(var(--v-theme-primary), 0.45) !important;
+  border-color: rgba(var(--v-theme-primary), 0.4) !important;
 }
 
 .v-theme--dark .maint-task-cell,
 .v-theme--dark .health-service-cell {
-  background: rgba(var(--v-theme-on-surface), 0.06);
-  border-color: rgba(255, 255, 255, 0.1);
+  background: rgba(var(--v-theme-primary), 0.06);
+  border-color: rgba(var(--v-theme-primary), 0.14);
 }

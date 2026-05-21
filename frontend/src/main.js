@@ -19,7 +19,7 @@ const applyFocusRingStyle = () => {
   const style = document.createElement('style')
   style.innerHTML = `
   :focus-visible {
-    outline: 2px solid rgba(59, 130, 246, 0.9); /* blue ring */
+    outline: 2px solid rgba(var(--v-theme-primary), 0.9);
     outline-offset: 2px;
   }
   .nav-btn:focus-visible {
