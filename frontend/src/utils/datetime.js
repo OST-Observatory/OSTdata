@@ -4,9 +4,39 @@ const getLocales = () => (typeof navigator !== 'undefined' && navigator.language
 
 const getTimeZone = () => import.meta.env.VITE_TIME_ZONE || undefined
 
+/**
+ * Parse API datetimes (ISO-8601). Naive strings are treated as UTC (Django USE_TZ).
+ */
+export function parseApiDateTime(value) {
+  if (value == null || value === '') return null
+  if (value instanceof Date) return value
+  const s = String(value).trim()
+  if (!s) return null
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(s) && !/[zZ]|[+-]\d{2}:?\d{2}$/.test(s)) {
+    return new Date(`${s}Z`)
+  }
+  const d = new Date(s)
+  return Number.isNaN(d.getTime()) ? null : d
+}
+
+/** Relative time for admin lists; returns "Never" when empty. */
+export function formatRelativeFromNow(value) {
+  const d = parseApiDateTime(value)
+  if (!d) return 'Never'
+  const diff = Math.max(0, Math.round((Date.now() - d.getTime()) / 1000))
+  if (diff < 60) return `${diff}s ago`
+  const m = Math.floor(diff / 60)
+  if (m < 60) return `${m}m ago`
+  const h = Math.floor(m / 60)
+  if (h < 24) return `${h}h ago`
+  const days = Math.floor(h / 24)
+  if (days < 14) return `${days}d ago`
+  return formatDateTime(d)
+}
+
 export function formatDateTime(value, options = { dateStyle: 'short', timeStyle: 'medium' }) {
   if (!value) return 'N/A'
-  const d = value instanceof Date ? value : new Date(value)
+  const d = parseApiDateTime(value) ?? (value instanceof Date ? value : new Date(value))
   try {
     return new Intl.DateTimeFormat(getLocales(), { ...options, timeZone: getTimeZone() }).format(d)
   } catch (e) {

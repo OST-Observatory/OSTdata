@@ -11,6 +11,7 @@ from django.contrib.auth.models import Group, Permission
 from django.contrib.contenttypes.models import ContentType
 from django.contrib.auth import authenticate
 from django.contrib.auth import logout as django_logout
+from django.contrib.auth.models import update_last_login
 from django.views.decorators.csrf import csrf_exempt
 
 from users.models import User
@@ -37,6 +38,8 @@ def login(request):
     user = authenticate(username=username, password=password)
     
     if user:
+        # Token login bypasses django.contrib.auth.login(); update last_login explicitly.
+        update_last_login(None, user)
         try:
             # Light-touch: sync role flags to Django groups so ACL applies consistently
             def _ensure_group(name: str, enabled: bool):

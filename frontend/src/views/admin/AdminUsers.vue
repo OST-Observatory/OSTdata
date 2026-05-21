@@ -129,7 +129,12 @@
           </v-chip>
         </template>
         <template #item.last_login="{ item }">
-          <span class="text-caption">{{ formatRelative(item.last_login) }}</span>
+          <span
+            class="text-caption"
+            :title="lastLoginTitle(item.last_login)"
+          >
+            {{ formatLastLogin(item.last_login) }}
+          </span>
         </template>
         <template #item.is_active="{ item }">
           <v-switch
@@ -238,6 +243,7 @@ import { useNotifyStore } from '@/store/notify'
 import EmptyState from '@/components/ui/EmptyState.vue'
 import LoadingState from '@/components/ui/LoadingState.vue'
 import { useAuthStore } from '@/store/auth'
+import { formatDateTime, formatRelativeFromNow, parseApiDateTime } from '@/utils/datetime'
 
 const loading = ref(false)
 const items = ref([])
@@ -420,19 +426,11 @@ const saveAcl = async () => {
 onMounted(() => {
   loadAcl()
 })
-const formatRelative = (iso) => {
-  if (!iso) return '—'
-  try {
-    const d = new Date(iso)
-    const diff = Math.max(0, Math.round((Date.now() - d.getTime()) / 1000))
-    if (diff < 60) return `${diff}s ago`
-    const m = Math.floor(diff / 60)
-    if (m < 60) return `${m}m ago`
-    const h = Math.floor(m / 60)
-    if (h < 24) return `${h}h ago`
-    const days = Math.floor(h / 24)
-    return `${days}d ago`
-  } catch { return iso }
+const formatLastLogin = (iso) => formatRelativeFromNow(iso)
+
+const lastLoginTitle = (iso) => {
+  const d = parseApiDateTime(iso)
+  return d ? formatDateTime(d) : 'No recorded login via the app API'
 }
 </script>
 
