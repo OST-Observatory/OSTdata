@@ -1067,12 +1067,14 @@
               <v-skeleton-loader v-if="loadingDataFiles" type="table"></v-skeleton-loader>
               <template v-else>
                 <v-data-table
-                  v-if="sortedDataFiles && sortedDataFiles.length"
+                  v-if="filteredDataFiles.length"
                   :headers="objectDataFileHeaders"
-                  :items="sortedDataFiles"
-                  :items-per-page="objDfItemsPerPage === -1 ? sortedDataFiles.length : objDfItemsPerPage"
+                  :items="filteredDataFiles"
+                  :items-per-page="objDfItemsPerPage === -1 ? filteredDataFiles.length : objDfItemsPerPage"
                   :page="objDfPage"
                   :sort-by="objDfSortBy"
+                  :custom-key-sort="objDfCustomKeySort"
+                  must-sort
                   @update:sort-by="handleObjDfSort"
                   @update:page="handleObjDfPageChange"
                   hide-default-footer
@@ -2331,7 +2333,29 @@ const filteredDataFiles = computed(() => {
   return items
 })
 
-// Sort function for data files
+/** Parse DataFile obs_date (often "YYYY-MM-DD HH:mm:ss") to ms for sorting. */
+const parseDatafileObsDateMs = (value) => {
+  if (value == null || value === '') return 0
+  if (value instanceof Date) {
+    const t = value.getTime()
+    return Number.isFinite(t) ? t : 0
+  }
+  let s = String(value).trim()
+  if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(s)) {
+    s = s.replace(' ', 'T')
+    if (!/[zZ]|[+-]\d{2}:\d{2}$/.test(s)) s += 'Z'
+  }
+  const t = Date.parse(s)
+  return Number.isFinite(t) ? t : 0
+}
+
+const objDfCustomKeySort = {
+  obs_date: (a, b) => parseDatafileObsDateMs(a) - parseDatafileObsDateMs(b),
+  exptime: (a, b) => (Number(a) || 0) - (Number(b) || 0),
+  plate_solved: (a, b) => (a ? 1 : 0) - (b ? 1 : 0),
+}
+
+// Sort function for data files (pagination / select-all; mirrors custom-key-sort)
 const sortDataFiles = (items, sortBy) => {
   if (!sortBy || sortBy.length === 0) return items
   
@@ -2341,44 +2365,37 @@ const sortDataFiles = (items, sortBy) => {
   const order = sort.order === 'desc' ? -1 : 1
   
   sorted.sort((a, b) => {
-    let aVal = a[key]
-    let bVal = b[key]
-    
-    // Handle special cases
+    let cmp = 0
     if (key === 'obs_date') {
-      aVal = a.obs_date ? new Date(a.obs_date).getTime() : 0
-      bVal = b.obs_date ? new Date(b.obs_date).getTime() : 0
+      cmp = parseDatafileObsDateMs(a.obs_date) - parseDatafileObsDateMs(b.obs_date)
     } else if (key === 'exptime') {
-      aVal = a.exptime || 0
-      bVal = b.exptime || 0
+      cmp = (Number(a.exptime) || 0) - (Number(b.exptime) || 0)
     } else if (key === 'binning') {
-      // Parse binning like "2x2" to numeric value for sorting
       const parseBinning = (bin) => {
         if (!bin) return 0
         const match = String(bin).match(/(\d+)x(\d+)/)
-        return match ? parseInt(match[1]) * parseInt(match[2]) : 0
+        return match ? parseInt(match[1], 10) * parseInt(match[2], 10) : 0
       }
-      aVal = parseBinning(a.binning)
-      bVal = parseBinning(b.binning)
+      cmp = parseBinning(a.binning) - parseBinning(b.binning)
     } else if (key === 'exposure_type_display') {
-      aVal = a.exposure_type_display || a.exposure_type || ''
-      bVal = b.exposure_type_display || b.exposure_type || ''
+      const aVal = a.exposure_type_display || a.exposure_type || ''
+      const bVal = b.exposure_type_display || b.exposure_type || ''
+      cmp = String(aVal).localeCompare(String(bVal))
     } else if (key === 'plate_solved') {
-      aVal = a.plate_solved ? 1 : 0
-      bVal = b.plate_solved ? 1 : 0
+      cmp = (a.plate_solved ? 1 : 0) - (b.plate_solved ? 1 : 0)
+    } else {
+      let aVal = a[key]
+      let bVal = b[key]
+      if (aVal == null) aVal = ''
+      if (bVal == null) bVal = ''
+      if (typeof aVal === 'string' && typeof bVal === 'string') {
+        cmp = String(aVal).localeCompare(String(bVal))
+      } else {
+        if (aVal < bVal) cmp = -1
+        else if (aVal > bVal) cmp = 1
+      }
     }
-    
-    // Handle null/undefined
-    if (aVal == null) aVal = ''
-    if (bVal == null) bVal = ''
-    
-    // Compare
-    if (typeof aVal === 'string' && typeof bVal === 'string') {
-      return aVal.localeCompare(bVal) * order
-    }
-    if (aVal < bVal) return -1 * order
-    if (aVal > bVal) return 1 * order
-    return 0
+    return cmp * order
   })
   
   return sorted
@@ -2463,8 +2480,18 @@ const handleObjDfPageChange = (newPage) => {
 }
 
 const handleObjDfSort = (newSortBy) => {
-  objDfSortBy.value = newSortBy.length > 0 ? newSortBy : [{ key: 'obs_date', order: 'desc' }]
-  // Reset to first page when sorting changes
+  const prev = objDfSortBy.value[0] || { key: 'obs_date', order: 'desc' }
+  // Vuetify may emit [] when toggling; cycle asc <-> desc instead of resetting to desc
+  if (!newSortBy?.length) {
+    objDfSortBy.value = [{ key: prev.key, order: prev.order === 'desc' ? 'asc' : 'desc' }]
+  } else {
+    const next = newSortBy[0]
+    if (next.key === prev.key && next.order === prev.order) {
+      objDfSortBy.value = [{ key: next.key, order: prev.order === 'desc' ? 'asc' : 'desc' }]
+    } else {
+      objDfSortBy.value = newSortBy
+    }
+  }
   objDfPage.value = 1
 }
 
