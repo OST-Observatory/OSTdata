@@ -949,7 +949,7 @@ def refresh_dashboard_stats(self):
     Can be scheduled via Celery Beat (e.g., every 15-30 minutes) or triggered manually.
     
     Cache keys:
-    - dashboard_stats_v2: Main stats (30 min TTL)
+    - dashboard_stats_v3: Main stats (30 min TTL)
     - dashboard_storage_size: Storage size (2 hour TTL)
     """
     from django.core.cache import cache
@@ -959,6 +959,7 @@ def refresh_dashboard_stats(self):
     from objects.models import Object
     import environ
     from obs_run.auxil import get_size_dir
+    from obs_run.utils import count_history_created_since
     
     try:
         dtime_naive = datetime.now() - timedelta(days=7)
@@ -982,7 +983,7 @@ def refresh_dashboard_stats(self):
             tiff=Count('pk', filter=Q(file_type='TIFF')),
             ser=Count('pk', filter=Q(file_type='SER')),
         )
-        files_7d_count = DataFile.history.filter(history_date__gte=aware_datetime).count()
+        files_7d_count = count_history_created_since(DataFile.history, aware_datetime)
         
         # === OBJECTS: Single aggregated query ===
         object_stats = Object.objects.aggregate(
@@ -995,7 +996,7 @@ def refresh_dashboard_stats(self):
             other=Count('pk', filter=Q(object_type='OT')),
             unknown=Count('pk', filter=Q(object_type='UK')),
         )
-        objects_7d_count = Object.history.filter(history_date__gte=aware_datetime).count()
+        objects_7d_count = count_history_created_since(Object.history, aware_datetime)
         
         # === RUNS: Single aggregated query ===
         run_stats = ObservationRun.objects.aggregate(
@@ -1005,7 +1006,7 @@ def refresh_dashboard_stats(self):
             reduction_error=Count('pk', filter=Q(reduction_status='ER')),
             not_reduced=Count('pk', filter=Q(reduction_status='NE')),
         )
-        runs_7d_count = ObservationRun.history.filter(history_date__gte=aware_datetime).count()
+        runs_7d_count = count_history_created_since(ObservationRun.history, aware_datetime)
         
         # === STORAGE SIZE ===
         env = environ.Env()
@@ -1056,7 +1057,7 @@ def refresh_dashboard_stats(self):
         }
         
         # Cache results
-        cache.set('dashboard_stats_v2', stats, timeout=1800)  # 30 min
+        cache.set('dashboard_stats_v3', stats, timeout=1800)  # 30 min
         cache.set('dashboard_storage_size', storage_size, timeout=7200)  # 2 hours
         
         result = {

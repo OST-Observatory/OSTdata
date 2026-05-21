@@ -26,7 +26,14 @@ logger = logging.getLogger(__name__)
 
 from obs_run.models import ObservationRun, DataFile
 from objects.models import Object
-from obs_run.utils import normalize_alias, INSTRUMENT_ALIASES, INSTRUMENT_CATALOG, check_and_set_override, get_override_field_name
+from obs_run.utils import (
+    normalize_alias,
+    INSTRUMENT_ALIASES,
+    INSTRUMENT_CATALOG,
+    check_and_set_override,
+    get_override_field_name,
+    count_history_created_since,
+)
 from .serializers import RunSerializer
 
 # PATCH fields on ObservationRun -> ACL codename(s) required (superuser bypasses; acl_runs_edit grants all)
@@ -466,9 +473,9 @@ def getDashboardStats(request):
     """
     from django.core.cache import cache
     
-    # Try to return cached stats
+    # Try to return cached stats (v3: 7d counts use history_type='+' only)
     try:
-        cached = cache.get('dashboard_stats_v2')
+        cached = cache.get('dashboard_stats_v3')
         if cached:
             return Response(cached)
     except Exception:
@@ -497,8 +504,7 @@ def getDashboardStats(request):
         tiff=Count('pk', filter=Q(file_type='TIFF')),
         ser=Count('pk', filter=Q(file_type='SER')),
     )
-    # History table for last week count (separate query, unavoidable)
-    files_7d_count = DataFile.history.filter(history_date__gte=aware_datetime).count()
+    files_7d_count = count_history_created_since(DataFile.history, aware_datetime)
     
     # === OBJECTS: Single aggregated query ===
     object_stats = Object.objects.aggregate(
@@ -511,7 +517,7 @@ def getDashboardStats(request):
         other=Count('pk', filter=Q(object_type='OT')),
         unknown=Count('pk', filter=Q(object_type='UK')),
     )
-    objects_7d_count = Object.history.filter(history_date__gte=aware_datetime).count()
+    objects_7d_count = count_history_created_since(Object.history, aware_datetime)
     
     # === RUNS: Single aggregated query ===
     run_stats = ObservationRun.objects.aggregate(
@@ -521,7 +527,7 @@ def getDashboardStats(request):
         reduction_error=Count('pk', filter=Q(reduction_status='ER')),
         not_reduced=Count('pk', filter=Q(reduction_status='NE')),
     )
-    runs_7d_count = ObservationRun.history.filter(history_date__gte=aware_datetime).count()
+    runs_7d_count = count_history_created_since(ObservationRun.history, aware_datetime)
     
     # === STORAGE SIZE: Cached separately (expensive filesystem operation) ===
     storage_size = None
@@ -585,7 +591,7 @@ def getDashboardStats(request):
     
     # Cache stats for 30 minutes
     try:
-        cache.set('dashboard_stats_v2', stats, timeout=1800)
+        cache.set('dashboard_stats_v3', stats, timeout=1800)
     except Exception:
         pass
     

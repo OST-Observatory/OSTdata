@@ -283,3 +283,17 @@ def detect_user_changes_from_history(instance) -> list:
     except Exception:
         return changed_fields
 
+
+# django-simple-history: '+' created, '~' updated, '-' deleted
+HISTORY_TYPE_CREATED = '+'
+
+
+def count_history_created_since(history_manager, since):
+    """Count records created (not updated) on or after *since*."""
+    return (
+        history_manager.filter(history_date__gte=since, history_type=HISTORY_TYPE_CREATED)
+        .values('id')
+        .distinct()
+        .count()
+    )
+
