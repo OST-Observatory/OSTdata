@@ -13,6 +13,7 @@ from tags.models import Tag
 from tags.api.serializers import TagSerializer
 from obs_run.utils import normalize_alias, INSTRUMENT_ALIASES, TELESCOPE_ALIASES
 from objects.solar_system_images import image_info_for_object
+from objects.search import find_search_match_via
 
 # ===============================================================
 #   OBJECTS
@@ -39,6 +40,7 @@ class ObjectListSerializer(ModelSerializer):
     identifiers = SerializerMethodField()
     has_solar_system_image = SerializerMethodField()
     solar_system_image_url = SerializerMethodField()
+    search_match_via = SerializerMethodField()
 
     class Meta:
         model = Object
@@ -81,6 +83,7 @@ class ObjectListSerializer(ModelSerializer):
             'exclude_from_orphan_cleanup',
             'has_solar_system_image',
             'solar_system_image_url',
+            'search_match_via',
         ]
         read_only_fields = ('pk',)
     
@@ -99,6 +102,12 @@ class ObjectListSerializer(ModelSerializer):
                 if field_name in self.fields:
                     self.fields[field_name].read_only = True
 
+
+    def get_search_match_via(self, obj):
+        search = self.context.get('search')
+        if not search:
+            return None
+        return find_search_match_via(obj, search)
 
     def get_has_solar_system_image(self, obj):
         if getattr(obj, 'object_type', None) != 'SO':

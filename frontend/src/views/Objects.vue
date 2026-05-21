@@ -56,7 +56,7 @@
             <v-col cols="12" sm="4">
               <v-text-field
                 v-model="search"
-                label="Search objects"
+                label="Search objects (name or alias)"
                 prepend-inner-icon="mdi-magnify"
                 single-line
                 hide-details
@@ -304,13 +304,17 @@
           <template v-slot:item.name="{ item }">
             <v-tooltip :text="getDisplayName(item)" location="top">
               <template #activator="{ props }">
-                <router-link
-                  v-bind="props"
-                  :to="`/objects/${item.pk}`"
-                  class="text-decoration-none primary--text table-link cell-truncate"
-                >
-                  {{ getDisplayName(item) }}
-                </router-link>
+                <div v-bind="props">
+                  <router-link
+                    :to="`/objects/${item.pk}`"
+                    class="text-decoration-none primary--text table-link cell-truncate"
+                  >
+                    {{ getDisplayName(item) }}
+                  </router-link>
+                  <div v-if="item.search_match_via" class="text-caption text-medium-emphasis">
+                    via alias {{ item.search_match_via }}
+                  </div>
+                </div>
               </template>
             </v-tooltip>
           </template>

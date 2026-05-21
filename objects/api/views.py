@@ -9,14 +9,19 @@ from django_filters.rest_framework import DjangoFilterBackend
 
 from objects.models import Object, Identifier
 from django.db import models
-from django.db.models import Q, Value
-from django.db.models.functions import Replace
 from django.db.models import Count, Q
 from rest_framework.decorators import action
 from drf_spectacular.utils import extend_schema, OpenApiParameter
 from django.utils.http import http_date
 
 from .serializers import ObjectListSerializer
+from objects.search import (
+    IDENTIFIER_LOOKUP,
+    IDENTIFIER_PREFETCH,
+    annotate_object_name_nospace,
+    build_object_search_q,
+    normalize_search_term,
+)
 
 from obs_run.api.serializers import RunSerializer, DataFileSerializer
 
@@ -492,16 +497,20 @@ class ObjectVuetifyViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         queryset = super().get_queryset().prefetch_related('tags', 'observation_run', 'datafiles')
         
-        # Handle search parameter
+        # Handle search parameter (object name + identifier aliases)
         search = self.request.query_params.get('search', None)
         if search:
-            try:
-                s = str(search).strip()
-                # Match either raw name or name without spaces
-                queryset = queryset.annotate(name_nospace=Replace('name', Value(' '), Value('')))
-                queryset = queryset.filter(Q(name__icontains=s) | Q(name_nospace__icontains=s.replace(' ', '')))
-            except Exception:
-                queryset = queryset.filter(name__icontains=search)
+            s = normalize_search_term(str(search))
+            if s:
+                try:
+                    queryset = annotate_object_name_nospace(queryset)
+                    queryset = queryset.filter(build_object_search_q(s))
+                    queryset = queryset.prefetch_related(IDENTIFIER_PREFETCH)
+                except Exception:
+                    queryset = queryset.filter(
+                        Q(name__icontains=s)
+                        | Q(**{f'{IDENTIFIER_LOOKUP}__name__icontains': s})
+                    ).distinct()
         
         # Handle object type filter
         object_type = self.request.query_params.get('object_type', None)
@@ -587,6 +596,13 @@ class ObjectVuetifyViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(is_public=True)
 
         return queryset.distinct()  # Ensure we don't get duplicate objects
+
+    def get_serializer_context(self):
+        ctx = super().get_serializer_context()
+        search = self.request.query_params.get('search')
+        if search:
+            ctx['search'] = normalize_search_term(str(search))
+        return ctx
 
     def list(self, request, *args, **kwargs):
         # Validate sortBy param

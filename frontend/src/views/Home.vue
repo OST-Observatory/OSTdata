@@ -4,7 +4,7 @@
       <v-col cols="12" class="mb-4">
         <h1 class="text-h4 mb-2">Overwhelmingly Small Telescope Data Archive</h1>
         <p class="text-body-1 mb-2">
-          Explore the plethora of observations made with the telescopes of the Overwhelmingly Small Telescope (OST) Observatory at the University of Potsdam. Search by object name or by sky coordinates to quickly jump into details.
+          Explore the plethora of observations made with the telescopes of the Overwhelmingly Small Telescope (OST) Observatory at the University of Potsdam. Search by object name, alias (identifier), or sky coordinates to quickly jump into details.
         </p>
       </v-col>
     </v-row>
@@ -19,8 +19,8 @@
           hide-details
           clearable
           :loading="searching"
-          label="Search by name (e.g. M67, NGC 7000) or coordinates: RA hh:mm:ss, Dec ±dd:mm:ss, Radius (e.g. 60&quot;, 2&apos;, 0.1 deg)"
-          placeholder="Examples: M67 • 10:45:03 +12:34:56 60&quot; • 05:35:17.3 -05:23:28 2&apos;"
+          label="Search by name or alias (e.g. M67, NGC 7000) or coordinates: RA hh:mm:ss, Dec ±dd:mm:ss, Radius (e.g. 60&quot;, 2&apos;, 0.1 deg)"
+          placeholder="Examples: M67 • M 31 • 10:45:03 +12:34:56 60&quot;"
           @keyup.enter="doSearch"
         />
       </v-col>
@@ -52,9 +52,14 @@
               class="custom-table"
             >
               <template #item.name="{ item }">
-                <router-link :to="`/objects/${item.pk}`" class="text-decoration-none text-primary table-link cell-truncate">
-                  {{ item.name }}
-                </router-link>
+                <div>
+                  <router-link :to="`/objects/${item.pk}`" class="text-decoration-none text-primary table-link cell-truncate">
+                    {{ item.name }}
+                  </router-link>
+                  <div v-if="item.search_match_via" class="text-caption text-medium-emphasis">
+                    via alias {{ item.search_match_via }}
+                  </div>
+                </div>
               </template>
               <template #item.object_type="{ item }">{{ item.object_type_display }}</template>
               <template #item.ra="{ item }">{{ formatRA(item.ra) }}</template>
@@ -176,7 +181,7 @@
 
     <v-row v-else-if="hasSearched">
       <v-col cols="12">
-        <v-alert type="info" variant="tonal">No results. Try another name or coordinates.</v-alert>
+        <v-alert type="info" variant="tonal">No results. Try another name, alias, or coordinates.</v-alert>
       </v-col>
     </v-row>
   </v-container>
@@ -240,7 +245,7 @@ const doSearch = async () => {
       const search = String(query.value || '').trim()
       const res = await api.getObjectsVuetify({ page: 1, itemsPerPage: 50, search })
       objects.value = res.items || []
-      await fetchRunsByTarget(search)
+      await fetchRunsForObjects(objects.value)
     }
   } catch (e) {
     error.value = 'Search failed.'
@@ -251,31 +256,11 @@ const doSearch = async () => {
   }
 }
 
-const fetchRunsByTarget = async (name) => {
-  try {
-    if (!name) { runs.value = []; searchingRuns.value = false; return }
-    // Ask server for runs containing this target (name icontains)
-    const res = await api.getObservationRuns({ page: 1, limit: 200, target: name })
-    if (Array.isArray(res?.results)) {
-      runs.value = res.results
-    } else if (Array.isArray(res?.items)) {
-      runs.value = res.items
-    } else if (Array.isArray(res)) {
-      runs.value = res
-    } else {
-      runs.value = []
-    }
-  } catch (e) {
-    console.error(e)
-    runs.value = []
-  } finally {
-    searchingRuns.value = false
-  }
-}
-
 const fetchRunsForObjects = async (objs) => {
   try {
-    const names = Array.from(new Set((objs || []).map(o => o?.name).filter(Boolean)))
+    const names = Array.from(new Set(
+      (objs || []).flatMap(o => [o?.name, o?.search_match_via].filter(Boolean)),
+    ))
     if (names.length === 0) { runs.value = []; return }
     // Fetch in batches to avoid too many requests
     const take = names.slice(0, 10)
