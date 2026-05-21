@@ -78,11 +78,11 @@
       <v-btn
         icon
         class="on-secondary nav-btn nav-gap"
-        aria-label="Toggle theme"
+        :aria-label="themeToggleAriaLabel"
         @click="toggleTheme"
       >
-        <v-icon>{{ isDark ? 'mdi-weather-night' : 'mdi-white-balance-sunny' }}</v-icon>
-        <v-tooltip activator="parent" location="bottom">{{ isDark ? 'Dark' : 'Light' }} theme</v-tooltip>
+        <v-icon>{{ themeToggleIcon }}</v-icon>
+        <v-tooltip activator="parent" location="bottom">{{ themeToggleTooltip }}</v-tooltip>
       </v-btn>
 
       <v-menu v-if="isAuthenticated" v-model="accountMenuOpen">
@@ -248,6 +248,14 @@ const router = useRouter()
 const vuetifyTheme = useTheme()
 const notify = useNotifyStore()
 const isDark = computed(() => vuetifyTheme.global.current.value.dark)
+/** Icon/label for the theme to switch *to*, not the active theme. */
+const themeToggleIcon = computed(() =>
+  isDark.value ? 'mdi-white-balance-sunny' : 'mdi-weather-night',
+)
+const themeToggleTooltip = computed(() =>
+  isDark.value ? 'Switch to light theme' : 'Switch to dark theme',
+)
+const themeToggleAriaLabel = computed(() => themeToggleTooltip.value)
 const accountMenuOpen = ref(false)
 const loginMenuOpen = ref(false)
 const documentTitle = computed(() => document?.title || 'OST Data Archive')
