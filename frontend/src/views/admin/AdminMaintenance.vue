@@ -1046,6 +1046,11 @@ onBeforeUnmount(() => {
   gap: 8px 12px;
 }
 
+/* Align switches with action button height */
+.maint-actions :deep(.v-switch) {
+  flex: 0 1 auto;
+}
+
 .maint-limit-field {
   max-width: 100px;
   flex: 0 1 100px;

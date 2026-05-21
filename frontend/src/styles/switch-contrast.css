@@ -1,0 +1,45 @@
+/* Higher-contrast v-switch OFF state (especially light theme). */
+.hi-contrast-switch:not(.v-selection-control--dirty) .v-switch__track {
+  background-color: rgba(var(--v-theme-on-surface), 0.2) !important;
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.35) !important;
+  opacity: 1 !important;
+}
+
+.hi-contrast-switch:not(.v-selection-control--dirty) .v-switch__thumb {
+  background-color: rgb(var(--v-theme-surface)) !important;
+  border: 2px solid rgba(var(--v-theme-on-surface), 0.55) !important;
+}
+
+.hi-contrast-switch.v-selection-control--dirty .v-switch__track,
+.hi-contrast-switch .v-switch__track.bg-primary {
+  background-color: rgb(var(--v-theme-primary)) !important;
+  border-color: rgb(var(--v-theme-primary)) !important;
+  opacity: 1 !important;
+}
+
+.hi-contrast-switch.v-selection-control--dirty .v-switch__thumb,
+.hi-contrast-switch input:checked ~ .v-selection-control__wrapper .v-switch__thumb {
+  background-color: rgb(var(--v-theme-on-primary)) !important;
+  border: 2px solid rgb(var(--v-theme-primary)) !important;
+}
+
+.hi-contrast-switch input:checked ~ .v-selection-control__wrapper .v-switch__track {
+  background-color: rgb(var(--v-theme-primary)) !important;
+  border-color: rgb(var(--v-theme-primary)) !important;
+  opacity: 1 !important;
+}
+
+.hi-contrast-switch .v-label {
+  color: rgba(var(--v-theme-on-surface), 0.85) !important;
+  font-weight: 500;
+}
+
+/* Dark theme: keep OFF track/thumb visible on dark surfaces */
+.v-theme--dark .hi-contrast-switch:not(.v-selection-control--dirty) .v-switch__track {
+  background-color: rgba(var(--v-theme-on-surface), 0.25) !important;
+  border-color: rgba(var(--v-theme-on-surface), 0.45) !important;
+}
+
+.v-theme--dark .hi-contrast-switch:not(.v-selection-control--dirty) .v-switch__thumb {
+  border-color: rgba(var(--v-theme-on-surface), 0.7) !important;
+}

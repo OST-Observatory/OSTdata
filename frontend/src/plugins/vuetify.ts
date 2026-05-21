@@ -1,6 +1,8 @@
 // Styles
 import '@mdi/font/css/materialdesignicons.css'
 import 'vuetify/styles'
+import '@/styles/switch-contrast.css'
+import '@/styles/admin-cards.css'
 
 // Vuetify
 import { createVuetify, type ThemeDefinition } from 'vuetify'
@@ -101,9 +103,9 @@ const darkTheme: ThemeDefinition = {
     'on-error': '#0b0f14',
     info: '#29b6f6',
     'on-info': '#0b0f14',
-    surface: '#0f172a',
+    surface: '#161f33',
     'on-surface': '#e2e8f0',
-    'surface-variant': '#111827',
+    'surface-variant': '#1e293b',
     'on-surface-variant': '#cbd5e1',
     background: '#0b0f14',
     'on-background': '#e2e8f0',
@@ -198,6 +200,10 @@ export default createVuetify({
     VChip: {
       size: 'small',
       variant: 'tonal',
+    },
+    VSwitch: {
+      color: 'primary',
+      class: 'hi-contrast-switch',
     },
   },
   display: {

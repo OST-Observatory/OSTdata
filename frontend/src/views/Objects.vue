@@ -1228,43 +1228,6 @@ const saveEdit = async () => {
   padding: 20px 0;
 }
 
-.hi-contrast-switch:not(.v-selection-control--dirty) :deep(.v-switch__track) {
-  background-color: rgba(var(--v-theme-on-surface), 0.20) !important;
-  border: 1px solid rgba(var(--v-theme-on-surface), 0.35) !important;
-}
-.hi-contrast-switch:not(.v-selection-control--dirty) :deep(.v-switch__thumb) {
-  background-color: rgb(var(--v-theme-surface)) !important;
-  border: 2px solid rgba(var(--v-theme-on-surface), 0.55) !important;
-}
-.hi-contrast-switch.v-selection-control--dirty :deep(.v-switch__track) {
-  background-color: rgb(var(--v-theme-primary)) !important;
-  border-color: rgb(var(--v-theme-primary)) !important;
-  opacity: 1 !important;
-}
-.hi-contrast-switch.v-selection-control--dirty :deep(.v-switch__thumb) {
-  background-color: #ffffff !important;
-  border: 2px solid rgb(var(--v-theme-primary)) !important;
-}
-.hi-contrast-switch :deep(input:checked ~ .v-selection-control__wrapper .v-switch__track) {
-  background-color: rgb(var(--v-theme-primary)) !important;
-  border-color: rgb(var(--v-theme-primary)) !important;
-  opacity: 1 !important;
-}
-.hi-contrast-switch :deep(input:checked ~ .v-selection-control__wrapper .v-switch__thumb) {
-  background-color: #ffffff !important;
-  border: 2px solid rgb(var(--v-theme-primary)) !important;
-}
-.hi-contrast-switch :deep(.v-label) {
-  color: rgba(var(--v-theme-on-surface), 0.85) !important;
-  font-weight: 500;
-}
-/* Ensure ON state is visibly blue even when Vuetify applies bg-primary on the track */
-.hi-contrast-switch :deep(.v-switch__track.bg-primary) {
-  background-color: rgb(var(--v-theme-primary)) !important;
-  border-color: rgb(var(--v-theme-primary)) !important;
-  opacity: 1 !important;
-}
-
 .v-data-table {
   background: transparent !important;
 }
