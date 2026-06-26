@@ -31,7 +31,11 @@ const applyFocusRingStyle = () => {
   .custom-table thead td {
     color: rgb(var(--v-theme-primary));
     font-weight: 700;
-    border-bottom: 1px solid rgba(var(--v-theme-primary), 0.25);
+    border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.2);
+  }
+  .v-theme--dark .custom-table thead th,
+  .v-theme--dark .custom-table thead td {
+    border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.34);
   }
   .custom-table thead tr:first-child th:first-child {
     border-top-left-radius: var(--v-theme-radius-md);

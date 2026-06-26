@@ -1,0 +1,65 @@
+/**
+ * Surface outlines — clearer separation of cards, tables, and panels from the page background.
+ * Light theme: subtle dark hairline; dark theme: subtle light hairline.
+ */
+
+.v-theme--ostdata {
+  --ost-surface-outline: rgba(var(--v-theme-on-surface), 0.16);
+  --ost-surface-outline-strong: rgba(var(--v-theme-on-surface), 0.24);
+}
+
+.v-theme--dark {
+  --ost-surface-outline: rgba(var(--v-theme-on-surface), 0.34);
+  --ost-surface-outline-strong: rgba(var(--v-theme-on-surface), 0.46);
+}
+
+/* Cards & sheets (skip flat/text/plain and transparent helpers) */
+.v-theme--ostdata .v-card:not(.v-card--variant-text):not(.v-card--variant-plain),
+.v-theme--ostdata .v-sheet:not(.v-sheet--variant-plain):not(.bg-transparent),
+.v-theme--dark .v-card:not(.v-card--variant-text):not(.v-card--variant-plain),
+.v-theme--dark .v-sheet:not(.v-sheet--variant-plain):not(.bg-transparent) {
+  border: 1px solid var(--ost-surface-outline) !important;
+}
+
+.v-theme--ostdata .v-card--variant-outlined,
+.v-theme--ostdata .v-sheet--variant-outlined,
+.v-theme--dark .v-card--variant-outlined,
+.v-theme--dark .v-sheet--variant-outlined {
+  border-color: var(--ost-surface-outline-strong) !important;
+}
+
+/* Standalone tables (nested tables rely on the parent card outline) */
+.v-theme--ostdata .v-table,
+.v-theme--ostdata .v-data-table,
+.v-theme--dark .v-table,
+.v-theme--dark .v-data-table {
+  border: 1px solid var(--ost-surface-outline);
+  border-radius: var(--v-theme-radius-md);
+  overflow: hidden;
+}
+
+.v-card .v-table,
+.v-card .v-data-table {
+  border: none !important;
+}
+
+/* Expansion panels & grouped boxes */
+.v-theme--ostdata .v-expansion-panel,
+.v-theme--dark .v-expansion-panel {
+  border: 1px solid var(--ost-surface-outline) !important;
+}
+
+.v-theme--ostdata .v-expansion-panels--variant-accordion,
+.v-theme--ostdata .v-expansion-panels--variant-inset,
+.v-theme--dark .v-expansion-panels--variant-accordion,
+.v-theme--dark .v-expansion-panels--variant-inset {
+  border: 1px solid var(--ost-surface-outline);
+  border-radius: var(--v-theme-radius-md);
+  overflow: hidden;
+}
+
+/* Tonal alerts read as bordered boxes */
+.v-theme--ostdata .v-alert--variant-tonal,
+.v-theme--dark .v-alert--variant-tonal {
+  border: 1px solid var(--ost-surface-outline) !important;
+}

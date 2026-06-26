@@ -12,12 +12,7 @@
   );
 }
 
-/* Cards & panels: blue-tinted borders instead of flat gray */
-.v-theme--dark .v-card--variant-outlined,
-.v-theme--dark .v-sheet--variant-outlined {
-  border-color: rgba(var(--v-theme-primary), 0.18) !important;
-}
-
+/* Cards & panels — surface outline from surface-borders.css; keep shadow depth */
 .v-theme--dark .v-card--variant-elevated,
 .v-theme--dark .v-card:not(.v-card--variant-outlined):not(.v-card--variant-text):not(.v-card--variant-plain) {
   box-shadow: var(--v-theme-shadow-card) !important;
@@ -44,7 +39,7 @@
 .v-theme--dark .custom-table thead th,
 .v-theme--dark .custom-table thead td {
   background-color: rgba(var(--v-theme-primary), 0.1);
-  border-bottom-color: rgba(var(--v-theme-primary), 0.28) !important;
+  border-bottom: 1px solid var(--ost-surface-outline-strong) !important;
 }
 
 /* Chips: tonal reads clearer on slate surfaces */

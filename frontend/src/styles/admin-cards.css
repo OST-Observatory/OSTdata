@@ -4,7 +4,7 @@
 .v-theme--dark .admin-health-card.v-card--variant-outlined,
 .v-theme--dark .admin-tile.v-card--variant-outlined {
   background-color: rgb(var(--v-theme-surface)) !important;
-  border-color: rgba(var(--v-theme-primary), 0.22) !important;
+  border-color: var(--ost-surface-outline-strong) !important;
   box-shadow: var(--v-theme-shadow-card);
 }
 

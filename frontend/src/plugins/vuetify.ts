@@ -4,6 +4,7 @@ import 'vuetify/styles'
 import '@/styles/switch-contrast.css'
 import '@/styles/admin-cards.css'
 import '@/styles/dark-theme.css'
+import '@/styles/surface-borders.css'
 
 // Vuetify
 import { createVuetify, type ThemeDefinition } from 'vuetify'
@@ -52,9 +53,9 @@ const ostdataTheme: ThemeDefinition = {
     'theme-shadow-card-hover': '0 4px 8px rgba(21, 132, 203, 0.18)',
     'theme-shadow-card-light': '0 2px 4px rgba(21, 132, 203, 0.08)',
     
-    // Borders - Slightly blue tinted
+    // Borders - subtle dark hairline on light surfaces
     'theme-border-app-bar': '1px solid rgba(21, 132, 203, 0.1)',
-    'theme-border-card': '1px solid rgba(21, 132, 203, 0.08)',
+    'theme-border-card': '1px solid rgba(45, 55, 72, 0.14)',
     
     // Border Radius
     'theme-radius-sm': '4px',
@@ -127,7 +128,7 @@ const darkTheme: ThemeDefinition = {
     'theme-shadow-card-hover': '0 6px 20px rgba(8, 20, 36, 0.5)',
     'theme-shadow-card-light': '0 1px 6px rgba(8, 20, 36, 0.3)',
     'theme-border-app-bar': '1px solid rgba(94, 184, 232, 0.22)',
-    'theme-border-card': '1px solid rgba(94, 184, 232, 0.16)',
+    'theme-border-card': '1px solid rgba(238, 243, 250, 0.22)',
     'theme-radius-sm': '4px',
     'theme-radius-md': '8px',
     'theme-radius-lg': '12px',
@@ -168,7 +169,7 @@ export default createVuetify({
     },
     VCard: {
       elevation: 2,
-      border: '1px solid rgba(21, 132, 203, 0.08)',
+      border: true,
       rounded: 'md',
       class: 'mb-4',
     },
