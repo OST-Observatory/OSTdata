@@ -435,6 +435,8 @@ def download_job_download(request, job_id):
         return Response({'detail': 'Not found'}, status=404)
     if job.user_id and (not request.user.is_authenticated or request.user.pk != job.user_id):
         return Response({'detail': 'Not found'}, status=404)
+    if job.user_id is None and request.user.is_anonymous and job.run and not job.run.is_public:
+        return Response({'detail': 'Not found'}, status=404)
     if job.status != 'done' or not job.file_path:
         return Response({'detail': 'Not ready'}, status=400)
     path = Path(job.file_path)

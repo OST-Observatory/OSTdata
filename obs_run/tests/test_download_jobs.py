@@ -3,7 +3,6 @@ from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from rest_framework import status
-from rest_framework.authtoken.models import Token
 from rest_framework.test import APITestCase
 
 from obs_run.models import DownloadJob, ObservationRun
@@ -16,8 +15,7 @@ class DownloadJobFlowTest(APITestCase):
     def test_enqueue_status_flow(self, delay):
         user = User.objects.create_user(username='dluser', password='pass')
         run = ObservationRun.objects.create(name='Pub', is_public=True)
-        token = Token.objects.create(user=user)
-        self.client.credentials(HTTP_AUTHORIZATION=f'Token {token.key}')
+        self.client.force_login(user)
 
         create_resp = self.client.post(
             f'/api/runs/runs/{run.pk}/download-jobs/',

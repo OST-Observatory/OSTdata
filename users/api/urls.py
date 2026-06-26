@@ -5,6 +5,7 @@ from . import views
 app_name = 'users-api'
 
 urlpatterns = [
+    path('auth/csrf/', views.csrf_cookie, name='csrf_cookie'),
     path('auth/login/', views.login, name='login'),
     path('auth/logout/', views.logout, name='logout'),
     path('auth/user/', views.user_info, name='user_info'),

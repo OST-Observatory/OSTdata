@@ -49,7 +49,6 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'rest_framework',
-    'rest_framework.authtoken',
     'django_filters',
     'simple_history',
     'corsheaders',
@@ -89,7 +88,6 @@ TEMPLATES = [
 # DRF
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
-        'rest_framework.authentication.TokenAuthentication',
         'rest_framework.authentication.SessionAuthentication',
     ],
     'DEFAULT_PERMISSION_CLASSES': [
@@ -118,6 +116,7 @@ REST_FRAMEWORK = {
         'plots': '30/min',
         'stats': '12/min',
         'jobs': '30/min',
+        'login': '10/min',
     },
     'DATETIME_FORMAT': 'iso-8601',
     'EXCEPTION_HANDLER': 'ostdata.exception_handlers.custom_exception_handler',
@@ -283,6 +282,12 @@ CORS_ALLOWED_HEADERS = [
     'accept', 'accept-encoding', 'authorization', 'content-type', 'dnt',
     'origin', 'user-agent', 'x-csrftoken', 'x-requested-with',
 ]
+
+# Session / CSRF cookies (SECURE flags overridden per environment)
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SAMESITE = 'Lax'
+CSRF_COOKIE_SAMESITE = 'Lax'
+SESSION_COOKIE_AGE = env.int('SESSION_COOKIE_AGE', default=1209600)  # 14 days
 
 # Optional LDAP scaffolding
 AUTH_LDAP_SERVER_URI = env.str('LDAP_SERVER_URI', default='')

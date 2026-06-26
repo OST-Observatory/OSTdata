@@ -5,7 +5,6 @@ from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from rest_framework import status
-from rest_framework.authtoken.models import Token
 from rest_framework.test import APITestCase
 
 from obs_run.models import DataFile, ObservationRun
@@ -26,8 +25,7 @@ class RunDownloadAuthorizationTest(APITestCase):
         self.private_job_url = f'/api/runs/runs/{self.private_run.pk}/download-jobs/'
 
     def _auth(self, user):
-        token = Token.objects.create(user=user)
-        self.client.credentials(HTTP_AUTHORIZATION=f'Token {token.key}')
+        self.client.force_login(user)
 
     def test_anonymous_private_run_download_denied(self):
         resp = self.client.get(self.private_url)

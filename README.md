@@ -957,6 +957,12 @@ Notes:
 
 # LDAP Authentication
 
+## SPA authentication (session cookies)
+
+The Vue SPA uses **Django session cookies** (HttpOnly) instead of DRF API tokens. The browser sends `credentials: include` on API requests; unsafe methods (`POST`, `PUT`, `PATCH`, `DELETE`) require a CSRF token from `GET /api/users/auth/csrf/` (`X-CSRFToken` header). Password changes invalidate the current session (re-login required). After deploy, users must sign in once; token-based API clients are no longer supported.
+
+Production serves the app under `/data_archive`; set `SESSION_COOKIE_PATH` and `CSRF_COOKIE_PATH` accordingly (see `.env.example`).
+
 OSTdata supports LDAP authentication for user login and group membership. The system supports both `memberOf` (standard LDAP/Active Directory) and `memberUid` (Posix groups) attributes for group membership determination.
 
 ## Configuration

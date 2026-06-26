@@ -90,8 +90,10 @@
 import { ref, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { useNotifyStore } from '@/store/notify'
+import { useAuthStore } from '@/store/auth'
 
 const router = useRouter()
+const authStore = useAuthStore()
 
 const form = ref(null)
 const loading = ref(false)
@@ -121,29 +123,16 @@ const handleChangePassword = async () => {
   success.value = ''
   
   try {
-    const response = await fetch('/api/users/auth/change-password/', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Token ${localStorage.getItem('token')}`
-      },
-      body: JSON.stringify(passwords)
-    })
-    
-    if (response.ok) {
-      success.value = 'Password changed successfully!'
-      try { notify.success('Password changed') } catch {}
-      // Clear form
-      passwords.old_password = ''
-      passwords.new_password1 = ''
-      passwords.new_password2 = ''
-      form.value.reset()
-    } else {
-      const data = await response.json()
-      error.value = data.error || 'Failed to change password'
-    }
+    await authStore.changePassword(passwords)
+    success.value = 'Password changed successfully!'
+    try { notify.success('Password changed. Please log in again.') } catch {}
+    passwords.old_password = ''
+    passwords.new_password1 = ''
+    passwords.new_password2 = ''
+    form.value.reset()
+    router.push({ path: '/login' })
   } catch (err) {
-    error.value = 'An error occurred while changing password'
+    error.value = err?.data?.error || err?.message || 'Failed to change password'
   } finally {
     loading.value = false
   }
@@ -154,4 +143,4 @@ const handleChangePassword = async () => {
 .fill-height {
   min-height: 100vh;
 }
-</style> 
+</style>

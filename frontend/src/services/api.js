@@ -1,24 +1,22 @@
 import { useAuthStore } from '@/store/auth'
 import router from '@/router'
 import { useNotifyStore } from '@/store/notify'
+import { withCsrfIfNeeded } from '@/utils/csrf'
 
 const API_BASE_URL = import.meta.env?.VITE_API_BASE || '/api'
 
 async function fetchWithAuth(url, options = {}) {
   const authStore = useAuthStore()
-  const headers = {
-    ...options.headers
-  }
+  const method = (options.method || 'GET').toUpperCase()
+  const headers = withCsrfIfNeeded(method, {
+    ...options.headers,
+  })
 
   // Only set Content-Type if not FormData (browser will set it automatically for FormData)
   if (!(options.body instanceof FormData)) {
     if (!headers['Content-Type'] && !headers['content-type']) {
       headers['Content-Type'] = 'application/json'
     }
-  }
-
-  if (authStore.token) {
-    headers['Authorization'] = `Token ${authStore.token}`
   }
 
   // Handle query parameters
@@ -196,12 +194,8 @@ export const api = {
     return `${base}/runs/jobs/${encodeURIComponent(jobId)}/download`
   },
   downloadJobFile: async (jobId) => {
-    // Authenticated fetch to download file as blob
-    const authStore = useAuthStore()
     const url = `${API_BASE_URL}/runs/jobs/${encodeURIComponent(jobId)}/download`
-    const headers = {}
-    if (authStore.token) headers['Authorization'] = `Token ${authStore.token}`
-    const resp = await fetch(url, { headers })
+    const resp = await fetch(url, { credentials: 'include' })
     if (!resp.ok) {
       let msg = `Download failed (${resp.status})`
       try {

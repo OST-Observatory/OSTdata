@@ -14,6 +14,14 @@ if _django_env == 'production':
         DEFAULT_FROM_EMAIL,
         FORCE_SCRIPT_NAME,
         CSRF_TRUSTED_ORIGINS,
+        SESSION_COOKIE_PATH,
+        CSRF_COOKIE_PATH,
     )
 else:
-    from .settings_development import DEBUG, ALLOWED_HOSTS, DATABASES, LOGGING
+    from .settings_development import (
+        DEBUG,
+        ALLOWED_HOSTS,
+        DATABASES,
+        LOGGING,
+        CSRF_TRUSTED_ORIGINS,
+    )

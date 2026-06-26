@@ -59,6 +59,9 @@ DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL")
 # Security headers (production defaults)
 SESSION_COOKIE_SECURE = True
 CSRF_COOKIE_SECURE = True
+_cookie_path = env('SESSION_COOKIE_PATH', default='/data_archive')
+SESSION_COOKIE_PATH = _cookie_path
+CSRF_COOKIE_PATH = env('CSRF_COOKIE_PATH', default=_cookie_path)
 SECURE_CONTENT_TYPE_NOSNIFF = True
 SECURE_REFERRER_POLICY = 'same-origin'
 X_FRAME_OPTIONS = 'DENY'
