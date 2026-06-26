@@ -1,21 +1,13 @@
 from pathlib import Path
 
-from os.path import join
-
-# from pathlib import Path
-
 import environ
 
-# Initialise environment variables
 env = environ.Env()
 environ.Env.read_env()
 
-# Build paths inside the project like this: os.path.join(BASE_DIR, ...)
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = False
-
 ALLOWED_HOSTS = env.list("ALLOWED_HOSTS")
 
 DATABASES = {
@@ -30,20 +22,14 @@ DATABASES = {
 }
 
 FORCE_SCRIPT_NAME = '/data_archive'
-# Ensure STATIC_URL matches the mounted prefix; can still be overridden by env
 STATIC_URL = env('STATIC_URL', default=f"{FORCE_SCRIPT_NAME.rstrip('/')}/static/")
 
 CSRF_TRUSTED_ORIGINS = env.list("TRUSTED_ORIGIN")
 
-# Logging
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
     'formatters': {
-        # 'standard': {
-        #     'format' : "[%(asctime)s] %(levelname)s [%(name)s:%(lineno)s] %(message)s",
-        #     'datefmt' : "%d/%b/%Y %H:%M:%S"
-        # },
         'verbose': {
             'format': '[{name}] {levelname} {module}:{lineno} {message}',
             'style': '{',
@@ -66,50 +52,7 @@ LOGGING = {
             'propagate': False,
         },
     },
-    # 'handlers': {
-    #     'default': {
-    #         'level': 'DEBUG',
-    #         'class': 'logging.handlers.WatchedFileHandler',
-    #         #'class': 'logging.handlers.RotatingFileHandler',
-    #         #'maxBytes': 1024 * 1024 * 100,  # 100 mb
-    #         #   TODO: Replace with Path
-    #         'filename': join(
-    #             BASE_DIR,
-    #             env("LOG_DIR", default='/tmp/'),
-    #             'not_django.log',
-    #             ),
-    #         'formatter': 'standard'
-    #     },
-    #     'django': {
-    #         'level': 'DEBUG',
-    #         'class': 'logging.handlers.WatchedFileHandler',
-    #         #'class': 'logging.handlers.RotatingFileHandler',
-    #         #'maxBytes': 1024 * 1024 * 100,  # 100 mb
-    #         #   TODO: Replace with Path
-    #         'filename': join(
-    #             BASE_DIR,
-    #             env("LOG_DIR", default='/tmp/'),
-    #             'django.log',
-    #             ),
-    #         'formatter': 'standard'
-    #     },
-    # },
-    # 'loggers': {
-    #     '': {
-    #         'handlers': ['default'],
-    #         'level': 'DEBUG',
-    #         'propagate': True
-    #     },
-    #     'django': {
-    #         'handlers': ['django'],
-    #         'level': 'INFO',
-    #         #'level': 'DEBUG',
-    #         'propagate': False,
-    #     },
-    # },
 }
-
-# Email settings
 
 DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL")
 
@@ -119,3 +62,14 @@ CSRF_COOKIE_SECURE = True
 SECURE_CONTENT_TYPE_NOSNIFF = True
 SECURE_REFERRER_POLICY = 'same-origin'
 X_FRAME_OPTIONS = 'DENY'
+
+# TLS / HSTS (toggle via env when TLS terminates at reverse proxy)
+SECURE_SSL_REDIRECT = env.bool('SECURE_SSL_REDIRECT', default=False)
+SECURE_PROXY_SSL_HEADER = (
+    ('HTTP_X_FORWARDED_PROTO', 'https')
+    if env.bool('SECURE_PROXY_SSL_HEADER', default=True)
+    else None
+)
+SECURE_HSTS_SECONDS = env.int('SECURE_HSTS_SECONDS', default=31536000)
+SECURE_HSTS_INCLUDE_SUBDOMAINS = env.bool('SECURE_HSTS_INCLUDE_SUBDOMAINS', default=True)
+SECURE_HSTS_PRELOAD = env.bool('SECURE_HSTS_PRELOAD', default=False)

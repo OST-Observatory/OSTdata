@@ -8,9 +8,13 @@ from obs_run.models import ObservationRun
 
 class IsAllowedOnRun(permissions.BasePermission):
     """
-        Custom permission to allow users to see/edit/add/remove objects only
-        if they have permission to perform those actions for the observation
-        runs this object belongs to.
+    Custom permission to allow users to see/edit/add/remove objects only
+    if they have permission to perform those actions for the observation
+    runs this object belongs to.
+
+    Note: only has_object_permission is implemented. Function-based views
+    (@api_view) do not invoke this automatically; those endpoints must
+    enforce access manually (e.g. can_read on the related run).
     """
 
     def has_object_permission(self, request, view, obj):
@@ -26,7 +30,7 @@ class IsAllowedOnRun(permissions.BasePermission):
                 return request.user.can_read(subject)
 
         #   User can add objects to this observation run?
-        if request.method == ['POST'] and not request.user.is_anonymous:
+        if request.method == 'POST' and not request.user.is_anonymous:
             return request.user.can_add(subject)
 
         #   Check if the user is allowed to edit/delete this specific
@@ -60,16 +64,12 @@ def get_allowed_run_objects_to_view_for_user(qs, user):
         #   ... return the "public" queryset if not
         return public
     else:
-        #   Check if user is allowed to view the observation run ...
         restricted = qs.filter(
             observation_run__pk__in=user.get_read_model(ObservationRun).values('pk')
-            )
-        if len(restricted) > 0:
-            #   ... if this is the case return the specific queryset ...
-            return restricted
-        else:
-            #   ... if not, return the public queryset
-            return public
+        )
+        if restricted.exists():
+            return public | restricted
+        return public
 #
 #
 # def get_allowed_runs_to_view_for_user(qs, user):
@@ -121,16 +121,12 @@ def get_allowed_model_to_view_for_user(qs, user, model):
         #   ... return the "public" queryset if not
         return public
     else:
-        #   Check if user is allowed to view the object ...
         restricted = qs.filter(
             pk__in=user.get_read_model(model).values('pk')
-            )
-        if len(restricted) > 0:
-            #   ... if this is the case return the specific queryset ...
-            return restricted
-        else:
-            #   ... if not, return the public queryset
-            return public
+        )
+        if restricted.exists():
+            return public | restricted
+        return public
 
 def check_user_can_view_run(function):
     """

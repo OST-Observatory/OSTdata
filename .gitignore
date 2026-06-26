@@ -18,14 +18,9 @@ observed_systems*
 upload_*
 ostdata/.env
 *.log
-*.csv
-*.csv#
 *.back
 .idea/
 db.sqlite3.save
-!media/docs/Bulk_system_example.csv
-*.txt
-*.dat
 read_cr2.py
 read_ser.py
 ok_but_wrong/
@@ -37,7 +32,14 @@ old/
 frontend/dist/
 cnn_training_data.json
 
+# Generated / local data exports (keep project text files versioned)
+logs/**/*.txt
+logs/**/*.csv
+*.csv#
+!requirements.txt
+!**/robots.txt
+!media/docs/Bulk_system_example.csv
+
 # Solar-system object preview images (uploaded via admin; keep directory only)
 data/solar_system_images/*
 !data/solar_system_images/.gitkeep
-

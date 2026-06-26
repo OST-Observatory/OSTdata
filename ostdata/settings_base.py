@@ -4,6 +4,7 @@ Django settings base for ostdata project (shared across environments).
 from pathlib import Path
 import platform
 import environ
+from django.core.exceptions import ImproperlyConfigured
 
 # Initialise environment variables
 env = environ.Env()
@@ -13,7 +14,25 @@ environ.Env.read_env()
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = env("SECRET_KEY")
+SECRET_KEY = env("SECRET_KEY", default="")
+
+_INSECURE_SECRET_PLACEHOLDERS = frozenset({
+    "+some_kind_of_secret+",
+    "____secret_key_used_in_production+++keep_secret+++",
+    "changeme",
+    "django-insecure",
+})
+_django_env_for_secret = env('DJANGO_ENV', default='development').strip().lower()
+if _django_env_for_secret == 'production':
+    if (
+        not SECRET_KEY
+        or SECRET_KEY in _INSECURE_SECRET_PLACEHOLDERS
+        or len(SECRET_KEY) < 50
+    ):
+        raise ImproperlyConfigured(
+            "SECRET_KEY must be set to a strong, unique value in production "
+            "(not a placeholder; at least 50 characters)."
+        )
 
 # Application definition
 INSTALLED_APPS = [
@@ -101,6 +120,7 @@ REST_FRAMEWORK = {
         'jobs': '30/min',
     },
     'DATETIME_FORMAT': 'iso-8601',
+    'EXCEPTION_HANDLER': 'ostdata.exception_handlers.custom_exception_handler',
 }
 
 # drf-spectacular
@@ -278,217 +298,8 @@ LDAP_GROUP_SUPERUSER_DN = env.str('LDAP_GROUP_SUPERUSER_DN', default='')
 LDAP_GROUP_SUPERVISOR_DN = env.str('LDAP_GROUP_SUPERVISOR_DN', default='')
 LDAP_GROUP_STUDENT_DN = env.str('LDAP_GROUP_STUDENT_DN', default='')
 
-try:
-    if AUTH_LDAP_SERVER_URI:
-        import ldap  # type: ignore
-        from django_auth_ldap.config import LDAPSearch, GroupOfNamesType
-        AUTHENTICATION_BACKENDS = (
-            'django_auth_ldap.backend.LDAPBackend',
-            'django.contrib.auth.backends.ModelBackend',
-        )
-        AUTH_LDAP_CONNECTION_OPTIONS = {
-            ldap.OPT_NETWORK_TIMEOUT: AUTH_LDAP_CONNECT_TIMEOUT,
-        }
-        if AUTH_LDAP_BIND_DN:
-            AUTH_LDAP_BIND_DN = AUTH_LDAP_BIND_DN
-            AUTH_LDAP_BIND_PASSWORD = AUTH_LDAP_BIND_PASSWORD
-        AUTH_LDAP_ALWAYS_UPDATE_USER = True
-        if AUTH_LDAP_USER_SEARCH_BASE:
-            AUTH_LDAP_USER_SEARCH = LDAPSearch(
-                AUTH_LDAP_USER_SEARCH_BASE,
-                ldap.SCOPE_SUBTREE,
-                AUTH_LDAP_USER_FILTER,
-            )
-        AUTH_LDAP_USER_ATTR_MAP = {
-            'first_name': 'givenName',
-            'last_name': 'sn',
-            'email': 'mail',
-        }
-        # Configure group type (required when using AUTH_LDAP_USER_FLAGS_BY_GROUP)
-        # GroupOfNamesType works with memberOf attribute (standard LDAP/Active Directory)
-        # Our custom memberUid support is handled separately in the populate_user hook
-        AUTH_LDAP_GROUP_TYPE = GroupOfNamesType()
-        
-        # Configure group search if GROUP_SEARCH_BASE is set
-        if AUTH_LDAP_GROUP_SEARCH_BASE:
-            AUTH_LDAP_GROUP_SEARCH = LDAPSearch(
-                AUTH_LDAP_GROUP_SEARCH_BASE,
-                ldap.SCOPE_SUBTREE,
-                '(objectClass=groupOfNames)',
-            )
-        
-        AUTH_LDAP_USER_FLAGS_BY_GROUP = {}
-        if LDAP_GROUP_STAFF_DN:
-            AUTH_LDAP_USER_FLAGS_BY_GROUP['is_staff'] = LDAP_GROUP_STAFF_DN
-        if LDAP_GROUP_SUPERUSER_DN:
-            AUTH_LDAP_USER_FLAGS_BY_GROUP['is_superuser'] = LDAP_GROUP_SUPERUSER_DN
-        
-        # Add memberUid support for all group types
-        if LDAP_GROUP_STAFF_DN or LDAP_GROUP_SUPERUSER_DN or LDAP_GROUP_SUPERVISOR_DN or LDAP_GROUP_STUDENT_DN:
-            from django_auth_ldap.backend import populate_user
-            import os
-            
-            def _check_ldap_group_membership_via_memberuid(group_dn, user_uid, ldap_conn=None):
-                """
-                Check if a user is a member of a group via memberUid attribute.
-                This is a fallback when memberOf is not available.
-                
-                Args:
-                    group_dn: Distinguished Name of the group
-                    user_uid: UID of the user to check
-                    ldap_conn: Optional existing LDAP connection (will create one if not provided)
-                
-                Returns:
-                    bool: True if user is a member, False otherwise
-                """
-                if not group_dn or not user_uid:
-                    return False
-                
-                conn = ldap_conn
-                should_close = False
-                try:
-                    if conn is None:
-                        import ldap as ldap_module
-                        from django.conf import settings as django_settings
-                        server_uri = getattr(django_settings, 'AUTH_LDAP_SERVER_URI', None) or os.environ.get('LDAP_SERVER_URI')
-                        if not server_uri:
-                            return False
-                        conn = ldap_module.initialize(server_uri)
-                        conn.set_option(ldap_module.OPT_REFERRALS, 0)
-                        start_tls = bool(getattr(django_settings, 'AUTH_LDAP_START_TLS', False) or str(os.environ.get('LDAP_START_TLS', 'false')).lower() in ('1', 'true', 'yes'))
-                        if start_tls:
-                            try:
-                                conn.start_tls_s()
-                            except Exception:
-                                pass
-                        bind_dn = getattr(django_settings, 'AUTH_LDAP_BIND_DN', None) or os.environ.get('LDAP_BIND_DN') or ''
-                        bind_pw = getattr(django_settings, 'AUTH_LDAP_BIND_PASSWORD', None) or os.environ.get('LDAP_BIND_PASSWORD') or ''
-                        try:
-                            if bind_dn:
-                                conn.simple_bind_s(bind_dn, bind_pw or '')
-                            else:
-                                conn.simple_bind_s()
-                        except Exception:
-                            return False
-                        should_close = True
-                    
-                    # Try to read the group entry
-                    try:
-                        import ldap as ldap_module
-                        attrs = ['memberUid']
-                        result = conn.search_s(group_dn, ldap_module.SCOPE_BASE, '(objectClass=*)', attrs)
-                        if result:
-                            _, group_vals = result[0]
-                            member_uids = group_vals.get('memberUid', [])
-                            if member_uids:
-                                # Convert bytes to strings if needed
-                                member_uids_str = []
-                                for uid in member_uids:
-                                    try:
-                                        uid_str = uid.decode('utf-8') if isinstance(uid, (bytes, bytearray)) else str(uid)
-                                        member_uids_str.append(uid_str)
-                                    except Exception:
-                                        member_uids_str.append(str(uid))
-                                # Check if user_uid is in the list
-                                return user_uid in member_uids_str
-                    except Exception:
-                        pass
-                except Exception:
-                    pass
-                finally:
-                    if should_close and conn:
-                        try:
-                            conn.unbind_s()
-                        except Exception:
-                            pass
-                return False
-            
-            def _ldap_sync_custom_flags(sender, user=None, ldap_user=None, **kwargs):
-                try:
-                    dns = set((ldap_user.group_dns or []))
-                    dirty = False
-                    
-                    # Get user's UID for memberUid checks
-                    user_uid = None
-                    try:
-                        user_uid = getattr(ldap_user, 'attrs', {}).get('uid', [None])[0]
-                        if user_uid:
-                            user_uid = user_uid.decode('utf-8') if isinstance(user_uid, (bytes, bytearray)) else str(user_uid)
-                    except Exception:
-                        pass
-                    
-                    # Try to get LDAP connection from ldap_user if available
-                    ldap_conn = None
-                    try:
-                        if hasattr(ldap_user, '_connection'):
-                            ldap_conn = ldap_user._connection
-                    except Exception:
-                        pass
-                    
-                    # Check is_staff via memberUid if configured
-                    if LDAP_GROUP_STAFF_DN:
-                        # First check memberOf (handled by django_auth_ldap, but we check here too)
-                        new_val = any(d.lower() == LDAP_GROUP_STAFF_DN.lower() for d in dns)
-                        # If not found via memberOf, try memberUid
-                        if not new_val and user_uid:
-                            new_val = _check_ldap_group_membership_via_memberuid(LDAP_GROUP_STAFF_DN, user_uid, ldap_conn)
-                        if user.is_staff != new_val:
-                            user.is_staff = new_val
-                            dirty = True
-                    
-                    # Check is_superuser via memberUid if configured
-                    if LDAP_GROUP_SUPERUSER_DN:
-                        # First check memberOf (handled by django_auth_ldap, but we check here too)
-                        new_val = any(d.lower() == LDAP_GROUP_SUPERUSER_DN.lower() for d in dns)
-                        # If not found via memberOf, try memberUid
-                        if not new_val and user_uid:
-                            new_val = _check_ldap_group_membership_via_memberuid(LDAP_GROUP_SUPERUSER_DN, user_uid, ldap_conn)
-                        if user.is_superuser != new_val:
-                            user.is_superuser = new_val
-                            dirty = True
-                    
-                    # Check is_supervisor via memberUid if configured
-                    if LDAP_GROUP_SUPERVISOR_DN:
-                        # First check memberOf
-                        new_val = any(d.lower() == LDAP_GROUP_SUPERVISOR_DN.lower() for d in dns)
-                        # If not found via memberOf, try memberUid
-                        if not new_val and user_uid:
-                            new_val = _check_ldap_group_membership_via_memberuid(LDAP_GROUP_SUPERVISOR_DN, user_uid, ldap_conn)
-                        if getattr(user, 'is_supervisor', False) != new_val:
-                            user.is_supervisor = new_val
-                            dirty = True
-                    
-                    # Check is_student via memberUid if configured
-                    if LDAP_GROUP_STUDENT_DN:
-                        # First check memberOf
-                        new_val = any(d.lower() == LDAP_GROUP_STUDENT_DN.lower() for d in dns)
-                        # If not found via memberOf, try memberUid
-                        if not new_val and user_uid:
-                            new_val = _check_ldap_group_membership_via_memberuid(LDAP_GROUP_STUDENT_DN, user_uid, ldap_conn)
-                        if getattr(user, 'is_student', False) != new_val:
-                            user.is_student = new_val
-                            dirty = True
-                    
-                    if dirty:
-                        try:
-                            update_fields = []
-                            if LDAP_GROUP_STAFF_DN:
-                                update_fields.append('is_staff')
-                            if LDAP_GROUP_SUPERUSER_DN:
-                                update_fields.append('is_superuser')
-                            if LDAP_GROUP_SUPERVISOR_DN:
-                                update_fields.append('is_supervisor')
-                            if LDAP_GROUP_STUDENT_DN:
-                                update_fields.append('is_student')
-                            if update_fields:
-                                user.save(update_fields=update_fields)
-                        except Exception:
-                            pass
-                except Exception:
-                    pass
-            populate_user.connect(_ldap_sync_custom_flags)
-except Exception:
-    pass
+from users.ldap_setup import configure_ldap_from_env
+configure_ldap_from_env(globals(), env)
 
 # ML Model Configuration for Exposure Type Classification
 ML_EXPOSURE_TYPE_MODEL_PATH = env('ML_EXPOSURE_TYPE_MODEL_PATH', default=None)

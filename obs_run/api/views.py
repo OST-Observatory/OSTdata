@@ -11,6 +11,7 @@ from .serializers import DataFileSerializer
 from .filter import DataFileFilter
 from utilities import annotate_effective_exposure_type
 from ostdata.custom_permissions import get_allowed_run_objects_to_view_for_user
+from obs_run.datafile_filters import apply_datafile_filters
 
 from django.http import HttpResponse
 from io import BytesIO
@@ -171,7 +172,7 @@ def get_datafile_thumbnail(request, pk):
             return HttpResponse(buf.getvalue(), content_type='image/png')
     except Exception as e:
         logger.exception("thumbnail generation failed for datafile %s: %s", pk, e)
-        return Response({"detail": str(e)}, status=400)
+        return Response({"detail": "Thumbnail generation failed"}, status=400)
 
 
 @extend_schema(summary='DataFile FITS header', parameters=[OpenApiParameter('pk', int, OpenApiParameter.PATH)])
@@ -211,7 +212,7 @@ def get_datafile_header(request, pk):
         return Response({"header": header}, status=200)
     except Exception as e:
         logger.exception("header read failed for datafile %s: %s", pk, e)
-        return Response({"detail": str(e)}, status=400)
+        return Response({"detail": "Failed to read FITS header"}, status=400)
 
 
 @extend_schema(summary='Download raw datafile', parameters=[OpenApiParameter('pk', int, OpenApiParameter.PATH)])
@@ -245,7 +246,7 @@ def download_datafile(request, pk):
         return resp
     except Exception as e:
         logger.exception("download failed for datafile %s: %s", pk, e)
-        return Response({"detail": str(e)}, status=400)
+        return Response({"detail": "Download failed"}, status=400)
 
 
 @api_view(['GET'])
@@ -259,8 +260,14 @@ def download_run_datafiles(request, run_pk):
     except ObservationRun.DoesNotExist:
         return Response({"detail": "Run not found"}, status=404)
 
-    if request.user.is_anonymous and not run.is_public:
-        return Response({"detail": "Not found"}, status=404)
+    if run and not run.is_public:
+        if request.user.is_anonymous:
+            return Response({"detail": "Not found"}, status=404)
+        try:
+            if not request.user.can_read(run):
+                return Response({"detail": "Not found"}, status=404)
+        except Exception:
+            return Response({"detail": "Not found"}, status=404)
 
     qs = DataFile.objects.filter(observation_run_id=run_pk)
     ids_param = request.query_params.get('ids')
@@ -272,49 +279,7 @@ def download_run_datafiles(request, run_pk):
         except Exception:
             pass
 
-    # Apply optional filter parameters (same as API list):
-    q_params = request.query_params
-    if q_params.get('file_type'):
-        qs = qs.filter(file_type__icontains=q_params.get('file_type'))
-    if q_params.get('main_target'):
-        # Reuse tokenized logic simply: require substring match; for stricter use same token split
-        from django.db.models import Q
-        val = q_params.get('main_target')
-        qs = qs.filter(Q(main_target__icontains=val) | Q(header_target_name__icontains=val))
-    if q_params.getlist('exposure_type'):
-        # Use effective exposure type for filtering
-        qs = annotate_effective_exposure_type(qs)
-        qs = qs.filter(annotated_effective_exposure_type__in=q_params.getlist('exposure_type'))
-    if q_params.get('spectroscopy') is not None:
-        val = q_params.get('spectroscopy')
-        if val.lower() in ('true', '1', 'yes'):
-            qs = qs.filter(spectroscopy=True)
-        if val.lower() in ('false', '0', 'no'):
-            qs = qs.filter(spectroscopy=False)
-    if q_params.get('exptime_min') is not None:
-        qs = qs.filter(exptime__gte=q_params.get('exptime_min'))
-    if q_params.get('exptime_max') is not None:
-        qs = qs.filter(exptime__lte=q_params.get('exptime_max'))
-    if q_params.get('file_name'):
-        qs = qs.filter(datafile__icontains=q_params.get('file_name'))
-    if q_params.get('instrument'):
-        qs = qs.filter(instrument__icontains=q_params.get('instrument'))
-    if q_params.get('obs_date_contains'):
-        qs = qs.filter(obs_date__icontains=q_params.get('obs_date_contains'))
-    if q_params.get('plate_solved') is not None:
-        val = q_params.get('plate_solved')
-        if str(val).lower() in ('true', '1', 'yes'):
-            qs = qs.filter(plate_solved=True)
-        elif str(val).lower() in ('false', '0', 'no'):
-            qs = qs.filter(plate_solved=False)
-    # Pixel count filtering
-    from django.db.models import F, FloatField, ExpressionWrapper
-    if q_params.get('pixel_count_min') is not None or q_params.get('pixel_count_max') is not None:
-        qs = qs.annotate(pixel_count=ExpressionWrapper(F('naxis1') * F('naxis2'), output_field=FloatField()))
-        if q_params.get('pixel_count_min') is not None:
-            qs = qs.filter(pixel_count__gte=q_params.get('pixel_count_min'))
-        if q_params.get('pixel_count_max') is not None:
-            qs = qs.filter(pixel_count__lte=q_params.get('pixel_count_max'))
+    qs = apply_datafile_filters(qs, request.query_params)
 
     files = list(qs)
     if not files:
@@ -340,7 +305,7 @@ def download_run_datafiles(request, run_pk):
         return resp
     except Exception as e:
         logger.exception("run ZIP creation failed for run %s: %s", run_pk, e)
-        return Response({"detail": str(e)}, status=400)
+        return Response({"detail": "ZIP creation failed"}, status=400)
 
 
 @api_view(['GET'])
@@ -366,41 +331,7 @@ def download_datafiles_bulk(request):
         except Exception:
             pass
 
-    # Apply optional filters
-    q_params = request.query_params
-    if q_params.get('file_type'):
-        qs = qs.filter(file_type__icontains=q_params.get('file_type'))
-    if q_params.get('main_target'):
-        from django.db.models import Q
-        val = q_params.get('main_target')
-        qs = qs.filter(Q(main_target__icontains=val) | Q(header_target_name__icontains=val))
-    if q_params.getlist('exposure_type'):
-        # Use effective exposure type for filtering
-        qs = annotate_effective_exposure_type(qs)
-        qs = qs.filter(annotated_effective_exposure_type__in=q_params.getlist('exposure_type'))
-    if q_params.get('spectroscopy') is not None:
-        val = q_params.get('spectroscopy')
-        if isinstance(val, str):
-            v = val.lower()
-            if v in ('true', '1', 'yes'):
-                qs = qs.filter(spectroscopy=True)
-            elif v in ('false', '0', 'no'):
-                qs = qs.filter(spectroscopy=False)
-    if q_params.get('exptime_min') is not None:
-        qs = qs.filter(exptime__gte=q_params.get('exptime_min'))
-    if q_params.get('exptime_max') is not None:
-        qs = qs.filter(exptime__lte=q_params.get('exptime_max'))
-    if q_params.get('file_name'):
-        qs = qs.filter(datafile__icontains=q_params.get('file_name'))
-    if q_params.get('instrument'):
-        qs = qs.filter(instrument__icontains=q_params.get('instrument'))
-    from django.db.models import F, FloatField, ExpressionWrapper
-    if q_params.get('pixel_count_min') is not None or q_params.get('pixel_count_max') is not None:
-        qs = qs.annotate(pixel_count=ExpressionWrapper(F('naxis1') * F('naxis2'), output_field=FloatField()))
-        if q_params.get('pixel_count_min') is not None:
-            qs = qs.filter(pixel_count__gte=q_params.get('pixel_count_min'))
-        if q_params.get('pixel_count_max') is not None:
-            qs = qs.filter(pixel_count__lte=q_params.get('pixel_count_max'))
+    qs = apply_datafile_filters(qs, request.query_params)
 
     files = list(qs)
     if not files:
@@ -425,7 +356,7 @@ def download_datafiles_bulk(request):
         return resp
     except Exception as e:
         logger.exception("bulk ZIP creation failed: %s", e)
-        return Response({"detail": str(e)}, status=400)
+        return Response({"detail": "Bulk ZIP creation failed"}, status=400)
 
 
 #
@@ -477,14 +408,14 @@ class DataFileViewSet(viewsets.ModelViewSet):
         if ordering and ordering.lstrip('-') in allowed_sort:
             queryset = queryset.order_by(ordering, 'pk')
 
-        # Server-side binning filter (derived from FITS header), applied before pagination
+        # Server-side binning filter (derived from FITS header); capped to limit DoS
         binning = request.query_params.get('binning')
+        BINNING_HEADER_SCAN_LIMIT = 200
         if binning:
             try:
                 target = str(binning).strip().lower()
                 ids = []
-                # Evaluate only ids to avoid loading large objects; iterate reasonably
-                for df in queryset.only('pk'):
+                for df in queryset.only('pk')[:BINNING_HEADER_SCAN_LIMIT]:
                     try:
                         header = df.get_fits_header()
                         bx = header.get('XBINNING') or header.get('XBIN') or header.get('BINX')

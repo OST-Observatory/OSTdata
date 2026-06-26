@@ -14,6 +14,7 @@ from datetime import timedelta
 import json
 
 from obs_run.models import DownloadJob, DataFile, ObservationRun
+from obs_run.datafile_filters import apply_datafile_filters
 from obs_run.utils import should_allow_auto_update
 from utilities import (
     add_new_data_file, get_effective_exposure_type_filter, annotate_effective_exposure_type,
@@ -149,30 +150,7 @@ def build_zip_task(self, job_id: int):
 
         # Apply filters
         f = job.filters or {}
-        if f.get('file_type'):
-            qs = qs.filter(file_type__icontains=f['file_type'])
-        if f.get('main_target'):
-            from django.db.models import Q
-            v = f['main_target']
-            qs = qs.filter(Q(main_target__icontains=v) | Q(header_target_name__icontains=v))
-        if f.get('exposure_type'):
-            # Use effective exposure type for filtering
-            qs = annotate_effective_exposure_type(qs)
-            qs = qs.filter(annotated_effective_exposure_type__in=f['exposure_type'])
-        if f.get('spectroscopy') is not None:
-            qs = qs.filter(spectroscopy=bool(f['spectroscopy']))
-        if f.get('exptime_min') is not None:
-            qs = qs.filter(exptime__gte=f['exptime_min'])
-        if f.get('exptime_max') is not None:
-            qs = qs.filter(exptime__lte=f['exptime_max'])
-        if f.get('file_name'):
-            qs = qs.filter(datafile__icontains=f['file_name'])
-        if f.get('instrument'):
-            qs = qs.filter(instrument__icontains=f['instrument'])
-        if f.get('obs_date_contains'):
-            qs = qs.filter(obs_date__icontains=f['obs_date_contains'])
-        if f.get('plate_solved') is not None:
-            qs = qs.filter(plate_solved=bool(f['plate_solved']))
+        qs = apply_datafile_filters(qs, f)
 
         files = list(qs)
         if not files:

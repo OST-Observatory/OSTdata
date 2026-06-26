@@ -46,6 +46,8 @@ class DownloadJobCreateResponseSerializer(serializers.Serializer):
 
 @extend_schema(
     summary='Create download job (bulk across runs)',
+    request=DownloadJobBulkRequestSerializer,
+    responses=DownloadJobCreateResponseSerializer,
     examples=[
         OpenApiExample(
             'Bulk IDs only',
@@ -86,10 +88,6 @@ def create_download_job_bulk(request):
 
 create_download_job_bulk.throttle_classes = [ScopedRateThrottle]
 create_download_job_bulk.throttle_scope = 'jobs'
-create_download_job_bulk.__dict__['extend_schema'] = extend_schema(
-    request=DownloadJobBulkRequestSerializer,
-    responses=DownloadJobCreateResponseSerializer,
-)(create_download_job_bulk)
 
 class RunDownloadJobRequestSerializer(serializers.Serializer):
     ids = serializers.ListField(
@@ -118,8 +116,14 @@ def create_download_job(request, run_pk):
         run = ObservationRun.objects.get(pk=run_pk)
     except ObservationRun.DoesNotExist:
         return Response({'detail': 'Run not found'}, status=404)
-    if request.user.is_anonymous and not run.is_public:
-        return Response({'detail': 'Not found'}, status=404)
+    if run and not run.is_public:
+        if request.user.is_anonymous:
+            return Response({'detail': 'Not found'}, status=404)
+        try:
+            if not request.user.can_read(run):
+                return Response({'detail': 'Not found'}, status=404)
+        except Exception:
+            return Response({'detail': 'Not found'}, status=404)
     payload = request.data if hasattr(request, 'data') else {}
     selected_ids = payload.get('ids') or []
     filters = payload.get('filters') or {}

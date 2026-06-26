@@ -376,7 +376,7 @@ def get_visibility_plot(request):
         return Response(json_item(fig))
     except Exception as e:
         logger.exception("visibility plot failed: %s", e)
-        return Response({'error': str(e)}, status=400)
+        return Response({'error': 'Plot generation failed'}, status=400)
 
 
 @extend_schema(summary='Observing conditions plot', description='Returns a Bokeh JSON item (Tabs) for observing conditions of a run.', tags=['Runs', 'Plots'])
@@ -388,7 +388,7 @@ def get_observing_conditions(request, run_pk):
         return Response(json_item(tabs))
     except Exception as e:
         logger.exception("observing conditions failed for run %s: %s", run_pk, e)
-        return Response({'error': str(e)}, status=400)
+        return Response({'error': 'Plot generation failed'}, status=400)
 
 
 @extend_schema(
@@ -422,7 +422,7 @@ def get_sky_fov(request):
         return Response(json_item(fig))
     except Exception as e:
         logger.exception("sky FOV failed: %s", e)
-        return Response({'error': str(e)}, status=400)
+        return Response({'error': 'Plot generation failed'}, status=400)
 
 
 @extend_schema(
@@ -449,7 +449,7 @@ def get_time_distribution(request):
         return Response(json_item(fig))
     except Exception as e:
         logger.exception("time distribution failed: %s", e)
-        return Response({'error': str(e)}, status=400)
+        return Response({'error': 'Plot generation failed'}, status=400)
 
 
 # Scoped throttling for plots
@@ -736,7 +736,7 @@ def dark_finder_search(request):
         
     except Exception as e:
         logger.exception("dark_finder_search failed: %s", e)
-        return Response({'error': str(e)}, status=400)
+        return Response({'error': 'Search failed'}, status=400)
 
 
 @extend_schema(
@@ -774,17 +774,10 @@ def parse_fits_header(request):
         if uploaded_file.size > MAX_FILE_SIZE:
             return Response({'error': f'File too large (max {MAX_FILE_SIZE} bytes)'}, status=400)
         
-        # Reset file pointer to beginning (in case it was already read)
+        # Read only the FITS header portion (2880-byte blocks), not the full file
         uploaded_file.seek(0)
-        
-        # For small files, read the entire file; for larger files, read only header
-        # This ensures astropy can properly parse the file structure
-        if uploaded_file.size <= MAX_FILE_SIZE:
-            # Read entire file if it's within size limit
-            file_bytes = uploaded_file.read()
-        else:
-            # For very large files, read only header portion
-            file_bytes = uploaded_file.read(MAX_HEADER_SIZE)
+        read_size = min(uploaded_file.size, MAX_HEADER_SIZE)
+        file_bytes = uploaded_file.read(read_size)
         
         if len(file_bytes) < 80:  # Minimum FITS header card size
             return Response({'error': 'File too small or invalid'}, status=400)
@@ -822,7 +815,6 @@ def parse_fits_header(request):
                 logger.debug("Successfully read FITS header from temp file")
             except Exception as header_error:
                 logger.exception("Failed to parse FITS header from temp file: %s", header_error)
-                error_msg = str(header_error)
                 # Clean up temp file before returning error
                 if tmp_path:
                     try:
@@ -830,7 +822,7 @@ def parse_fits_header(request):
                     except Exception:
                         pass
                 return Response({
-                    'error': f'Failed to parse FITS header: {error_msg}'
+                    'error': 'Failed to parse FITS header'
                 }, status=400)
             finally:
                 # Clean up temp file
@@ -904,13 +896,13 @@ def parse_fits_header(request):
         except Exception as extract_error:
             logger.exception("Failed to extract header info: %s", extract_error)
             return Response({
-                'error': f'Failed to extract header information: {str(extract_error)}'
+                'error': 'Failed to extract header information'
             }, status=400)
                 
     except Exception as e:
         logger.exception("parse_fits_header failed: %s", e)
         return Response({
-            'error': f'Upload failed: {str(e)}'
+            'error': 'Upload failed'
         }, status=400)
 
 
@@ -945,7 +937,7 @@ def get_instruments(request):
         
     except Exception as e:
         logger.exception("get_instruments failed: %s", e)
-        return Response({'error': str(e)}, status=400)
+        return Response({'error': 'Failed to load instruments'}, status=400)
 
 
 @extend_schema(
@@ -978,5 +970,5 @@ def get_instrument_catalog(request):
         
     except Exception as e:
         logger.exception("get_instrument_catalog failed: %s", e)
-        return Response({'error': str(e)}, status=400)
+        return Response({'error': 'Failed to load instrument catalog'}, status=400)
 
