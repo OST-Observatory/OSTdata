@@ -11,8 +11,6 @@ populate*.py
 __pycache__
 MANIFEST
 logs/
-*/migrations
-static/
 populate*
 observed_systems*
 upload_*

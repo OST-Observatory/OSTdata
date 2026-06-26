@@ -77,12 +77,17 @@ To run OSTdata locally, using the simple sqlite database and the included server
 
 ### 1. Setup the database
 
+Django migrations are **versioned in this repository** (under each app’s `migrations/` folder). After clone or pull, apply them:
+
 ```
-python manage.py makemigrations
 python manage.py migrate
 ```
 
-In case you want a fresh start, run:
+Run `python manage.py makemigrations` only when you change models locally; commit new migration files with your changes.
+
+For a **fresh local database** (empty schema), remove `db.sqlite3` (or drop the PostgreSQL database) and run `migrate` again. Do **not** delete migration files from the repo unless you are intentionally resetting migration history.
+
+In case you want a fresh start (legacy / advanced — usually unnecessary):
 
 ```
 find . -path "*/migrations/*.py" -not -name "__init__.py" -delete
@@ -198,6 +203,7 @@ DATABASE_PASSWORD=your_database_password
 DATABASE_HOST=localhost
 DATABASE_PORT=
 DEVICE=the_name_of_your_device_used_in_production
+DJANGO_ENV=production
 ALLOWED_HOSTS=server_url,server_ip,localhostlog
 DEFAULT_FROM_EMAIL=example@email.com
 # When running under a URL prefix (e.g. /data_archive), ensure STATIC_URL matches:
@@ -209,19 +215,16 @@ Instructions on how to generate a secret key can be found here: https://tech.ser
 
 ### 3. Setup the database
 
+Migrations are in the repository. On each deploy (or after pulling schema changes):
+
 ```
-python manage.py makemigrations
 python manage.py migrate
 ```
 
-In case you want a fresh start, run:
+Run `makemigrations` only on a development machine when models change; ship the new migration files with the release.
 
-```
-find . -path "*/migrations/*.py" -not -name "__init__.py" -delete
-find . -path "*/migrations/*.pyc"  -delete
-```
+For a **fresh production database**, create an empty PostgreSQL database and run `migrate` once. Do not delete tracked migration files on the server.
 
-and drop the database or remove the db.sqlite3 file.
 
 ### 4. Create a admin user
 
@@ -460,6 +463,29 @@ Notes:
 
 - We deploy the Vue SPA through Django’s static pipeline (`collectstatic`). No separate Apache alias for `frontend/dist` is needed.
 - Make sure `robots.txt` is available in `static/robots.txt` so it’s served at `/data_archive/robots.txt`.
+
+### Production deploy checklist
+
+After pulling a new release on the server (typical order):
+
+1. **Dependencies** — `pip install -r requirements.txt` (and rebuild frontend / `collectstatic` if the release includes UI changes).
+2. **Environment** — `DJANGO_ENV=production` in `ostdata/.env`; session cookies use `SESSION_COOKIE_PATH` / `CSRF_COOKIE_PATH` under `/data_archive` (see `.env.example`).
+3. **Database** — `python manage.py migrate` (applies all pending app migrations from the repo).
+4. **ACL permissions** — after releases that add new admin permissions:
+   ```
+   python manage.py sync_acl_staff
+   ```
+   This bootstraps ACL codenames and adds missing defaults to the `staff` group (non-destructive).
+5. **Re-login** — users should sign out and back in so the SPA picks up new permissions and the session-auth cookies (no API tokens).
+6. **Services** — restart Gunicorn/Celery/Apache as needed.
+
+**Symptom:** `relation "adminops_auditlogentry" does not exist` on `/api/admin/audit-log/` → run `python manage.py migrate adminops` (migration `adminops.0001_initial`).
+
+**Verify migrations:** `python manage.py showmigrations` — unapplied rows show `[ ]`.
+
+**Migration history:** App migrations in the repo match the production database history (exported 2026-06). New releases after that baseline add numbered migrations on top (e.g. `users.0003_drop_authtoken` for session-auth cleanup on databases that still have `authtoken_token`).
+
+**Note:** `objects.0007_identifer_name_index` keeps the historical typo in the migration name so production `django_migrations` rows stay aligned.
 
 ## Directory watcher (automatic ingest)
 
@@ -1067,6 +1093,7 @@ The project uses a lightweight ACL on top of Django auth to control access to ad
 - Permissions (subset):
   
   - Users: `users.acl_users_view`, `users.acl_users_edit_roles`, `users.acl_users_delete`
+  - Audit log: `users.acl_admin_audit_log_view` (Admin → Audit log; API `GET /api/admin/audit-log/`)
   - Objects: `users.acl_objects_view_private`, `users.acl_objects_edit`, `users.acl_objects_merge`, `users.acl_objects_delete`
   - Runs: `users.acl_runs_edit`, `users.acl_runs_publish`, `users.acl_runs_delete`
   - Tags: `users.acl_tags_manage`
@@ -1099,6 +1126,27 @@ Notes:
 - Backend endpoints enforce permissions regardless of UI state.
 - Superuser bypasses all ACL checks.
 - If you change Group memberships manually (e.g. via Django admin), the changes take effect immediately; on next login the role flags are synced.
+
+# Admin audit log
+
+The admin UI (**Admin → Audit log**) merges `django-simple-history` rows with dedicated `AuditLogEntry` records (ACL changes, banner, download jobs, user roles, etc.).
+
+**Access:** permission `users.acl_admin_audit_log_view` (included in default `staff` and `supervisor` ACL sets). Superusers bypass all checks.
+
+**First-time / upgrade deploy:**
+
+1. Apply migrations (creates `adminops_auditlogentry`):
+   ```
+   python manage.py migrate adminops
+   ```
+   (Included in a full `python manage.py migrate`.)
+2. Sync ACL codenames and staff defaults:
+   ```
+   python manage.py sync_acl_staff
+   ```
+3. **Re-login** — affected users must sign in again so the SPA receives `acl_admin_audit_log_view` in the session user payload.
+
+Grant access manually via Admin → Users → ACL matrix, or assign the user to a group that has `acl_admin_audit_log_view`.
 
 # Acknowledgements
 

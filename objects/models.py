@@ -177,3 +177,8 @@ class Identifier(models.Model):
     #   String representation of self
     def __str__(self):
         return "{} = {} ; {}".format(self.obj.name, self.name, self.href)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['name'], name='objects_identifier_name_idx'),
+        ]
