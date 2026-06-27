@@ -1,43 +1,43 @@
-wheel==0.46.3
-cython==3.2.4
-astropy==7.2.0
-astroplan==0.10.1
-astroquery==0.4.11
-bokeh==3.9.0
-certifi==2026.2.25
+# Django / API
 Django==6.0.5
 djangorestframework==3.17.1
-djangorestframework-datatables==0.7.2
 django-filter==25.2
-ephem==4.2
-h5py==3.15.1
-Jinja2==3.1.6
-MarkupSafe==3.0.3
-numpy==2.4.6
-pyparsing==3.3.2
-python-dateutil==2.9.0.post0
-pytz==2026.1.post1
-PyYAML==6.0.3
-requests==2.32.5
-scipy==1.17.1
-tornado==6.5.4
-pandas==3.0.3
-gunicorn==26.0.0
-psycopg2-binary==2.9.11
 django-environ==0.13.0
-specutils==1.21.0
-exifread==3.5.1
-opencv-python==4.13.0.92
-skyfield==1.54.0
-matplotlib==3.10.9
 django-simple-history==3.11.0
-watchdog==6.0.0
 django-cors-headers==4.9.0
-celery==5.6.3
-redis==8.0.0
 django-celery-results==2.6.0
-psutil==7.2.2
 drf-spectacular==0.29.0
 django-auth-ldap==5.3.0
 python-ldap==3.4.7
+
+# Task queue / cache
+celery==5.6.3
+redis==8.0.0
+
+# Database / deployment
+psycopg2-binary==2.9.12
+gunicorn==26.0.0
+
+# Astronomy / plotting
+astropy==7.2.0
+astroplan==0.10.1
+astroquery==0.4.11
+skyfield==1.54
+bokeh==3.9.0
+matplotlib==3.10.9
+numpy==2.4.6
+scipy==1.17.1
+pandas==3.0.3
+pytz==2026.2
+requests==2.34.2
+
+# File ingest / headers
+exifread==3.5.1
+opencv-python==4.13.0.92
+watchdog==6.0.0
+
+# System
+psutil==7.2.2
+
+# ML exposure-type classification (pulls tensorflow, keras, pillow, scikit-learn, …)
 git+https://github.com/OST-Observatory/ost_image_classification.git@4d081e5416434596089fc78245dc41d7f534f781
