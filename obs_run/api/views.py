@@ -12,6 +12,7 @@ from .filter import DataFileFilter
 from utilities import annotate_effective_exposure_type
 from ostdata.custom_permissions import get_allowed_run_objects_to_view_for_user
 from obs_run.datafile_filters import apply_datafile_filters
+from obs_run.ser_thumbnails import get_ser_thumbnail_png, is_ser_path
 
 from django.http import HttpResponse
 from io import BytesIO
@@ -79,7 +80,7 @@ def get_datafile_thumbnail(request, pk):
     """
     Return a PNG thumbnail for the given DataFile.
     FITS uses ZScale + asinh stretch; JPG/TIFF are thumbnailed directly.
-    Videos (SER/AVI/MOV) are not supported for thumbnail generation.
+    SER extracts a representative frame (cached on disk). AVI/MOV are not supported.
     Optional query params: w (int, default 512)
     """
     try:
@@ -116,10 +117,18 @@ def get_datafile_thumbnail(request, pk):
 
     # Determine FITS by type or extension (fallback)
     is_fits = (file_type == 'FITS') or (file_path.suffix.lower() in ['.fits', '.fit', '.fts'])
-    # Treat video-like types as unsupported for thumbnails
-    is_video = (file_type in ('SER', 'AVI', 'MOV')) or (file_path.suffix.lower() in ['.ser', '.avi', '.mov'])
+    is_ser = is_ser_path(file_type, file_path)
+    is_other_video = (file_type in ('AVI', 'MOV')) or (file_path.suffix.lower() in ['.avi', '.mov'])
 
     try:
+        if is_ser:
+            png = get_ser_thumbnail_png(
+                datafile_id=df.pk,
+                content_hash=df.content_hash or '',
+                file_path=file_path,
+                max_dim=w,
+            )
+            return HttpResponse(png, content_type='image/png')
         # FITS handling with zscale
         if is_fits:
             # Some FITS with BZERO/BSCALE/BLANK cannot be memory-mapped; disable memmap
@@ -158,7 +167,7 @@ def get_datafile_thumbnail(request, pk):
                 img.save(buf, format='PNG')
                 buf.seek(0)
                 return HttpResponse(buf.getvalue(), content_type='image/png')
-        elif is_video:
+        elif is_other_video:
             return Response({"detail": "Preview not supported for video files"}, status=400)
         else:
             # Non-FITS: try PIL thumbnail

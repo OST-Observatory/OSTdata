@@ -26,6 +26,54 @@ import struct
 import datetime
 import numpy as np
 
+SER_HEADER_SIZE = 178
+VALID_SER_FILE_IDS = frozenset({'LUCAM-RECORDER', 'INDI-RECORDER'})
+
+
+def _normalize_file_id(raw) -> str:
+    if isinstance(raw, bytes):
+        raw = raw.decode('latin1', errors='replace')
+    return raw.split('\x00', 1)[0].strip()
+
+
+def _ser_pixel_endian(file_id: str, little_endian: int) -> str:
+    """Return numpy byte order for 16-bit SER pixel data."""
+    if little_endian:
+        return '<'
+    # INDI writes big-endian 16-bit frames when LittleEndian is 0.
+    if file_id == 'INDI-RECORDER':
+        return '>'
+    # FireCapture historically left LittleEndian at 0 while storing LE data.
+    return '<'
+
+
+def infer_frame_count_from_size(ser_file, frame_size: int) -> int:
+    """
+    Infer frame count from file size when the header FrameCount is missing or zero.
+    Accounts for the optional 8-byte-per-frame UTC timestamp trailer.
+    """
+    if frame_size <= 0:
+        return 0
+    try:
+        payload = os.path.getsize(ser_file) - SER_HEADER_SIZE
+    except OSError:
+        return 0
+    if payload < frame_size:
+        return 0
+
+    max_frames = payload // frame_size
+    if max_frames <= 0:
+        return 0
+
+    # Prefer exact fit (no trailer or standard 8-byte UTC trailer per frame).
+    for frame_count in range(max_frames, 0, -1):
+        remainder = payload - frame_count * frame_size
+        if remainder == 0 or remainder == frame_count * 8:
+            return frame_count
+
+    # Some writers append non-standard footer data after the image block.
+    return max_frames
+
 
 class SERParser(object):
 
@@ -53,11 +101,17 @@ class SERParser(object):
 
         self.header = self.read_header()
 
-        self.frame_count = self.header['FrameCount']
-
         self.frame_size = self.header['ImageWidth'] * \
                           self.header['ImageHeight'] * \
                           self.header['BytesPerPixel']
+
+        self.frame_count = self.header['FrameCount']
+        if self.frame_count <= 0:
+            inferred = infer_frame_count_from_size(ser_file, self.frame_size)
+            if inferred > 0:
+                self.frame_count = inferred
+                self.header['FrameCount'] = inferred
+                self.header['FrameCountInferred'] = True
 
         # This parameter is the number of unused bits in pixel values. It will be determined
         # experimentally later, based on a sample of frames. This is necessary because SER headers
@@ -68,9 +122,9 @@ class SERParser(object):
         if self.header['PixelDepthPerPlane'] <= 8:
             self.PixelDepthPerPlane = np.dtype(np.uint8)
         else:
-            # FireCapture uses "LittleEndian".
-            # Until FireCatpure 2.7 this flag was not set properly.
-            self.PixelDepthPerPlane = np.dtype(np.uint16).newbyteorder('<')
+            file_id = _normalize_file_id(self.header['FileId'])
+            endian = _ser_pixel_endian(file_id, self.header['LittleEndian'])
+            self.PixelDepthPerPlane = np.dtype(np.uint16).newbyteorder(endian)
 
             # Test how many of the 16 bits are not used. Set the parameter which is used from now
             # on to shift pixel values such that the full 16bit range is used.
@@ -88,9 +142,13 @@ class SERParser(object):
             raise IOError("File is empty")
         else:
             with open(ser_file, 'rb') as fid:
-                HEADER = fid.read(14).decode()
-            if HEADER != 'LUCAM-RECORDER':
-                warn_message = "File does not conform to SER format, first 14 characters of header are: '" + HEADER + "'"
+                file_id = _normalize_file_id(fid.read(14))
+            if file_id not in VALID_SER_FILE_IDS:
+                warn_message = (
+                    "File does not conform to SER format, first 14 characters of header are: '"
+                    + file_id
+                    + "'"
+                )
         return warn_message
 
     def open_file(self, ser_file):
@@ -122,7 +180,9 @@ class SERParser(object):
 
         header = {key: value.decode('latin1') if isinstance(value, bytes) else
                   value for (key, value) in zip(KEYS, struct.unpack(
-                          '<14s 7i 40s 40s 40s 2q', self.fid.read(178)))}
+                          '<14s 7i 40s 40s 40s 2q', self.fid.read(SER_HEADER_SIZE)))}
+
+        header['FileId'] = _normalize_file_id(header['FileId'])
 
         if header['ColorID'] == 8:
             header['DebayerPattern'] = cv2.COLOR_BayerRG2BGR
@@ -195,9 +255,9 @@ class SERParser(object):
         if 0 <= frame_number < self.frame_count:
             if frame_number != self.frame_number + 1:
                 if frame_number == 0:
-                    self.fid.seek(178)
+                    self.fid.seek(SER_HEADER_SIZE)
                 else:
-                    self.fid.seek(178 + frame_number * self.frame_size)
+                    self.fid.seek(SER_HEADER_SIZE + frame_number * self.frame_size)
         else:
             raise IOError('Error in reading SER frame, index: {0} is out of bounds'.format(frame_number))
 
@@ -239,9 +299,9 @@ class SERParser(object):
         if 0 <= frame_number < self.frame_count:
             if frame_number != self.frame_number + 1:
                 if frame_number == 0:
-                    self.fid.seek(178)
+                    self.fid.seek(SER_HEADER_SIZE)
                 else:
-                    self.fid.seek(178 + frame_number * self.frame_size)
+                    self.fid.seek(SER_HEADER_SIZE + frame_number * self.frame_size)
         else:
             raise IOError('Error in reading SER frame, index: {0} is out of bounds'.format(frame_number))
 
@@ -318,7 +378,7 @@ class SERParser(object):
                                         time stamps in UTC. Otherwise "None"
         """
 
-        self.fid.seek(178 + self.frame_count * self.frame_size)
+        self.fid.seek(SER_HEADER_SIZE + self.frame_count * self.frame_size)
 
         content = self.fid.read()
 

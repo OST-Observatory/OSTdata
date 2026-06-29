@@ -41,3 +41,7 @@ logs/**/*.csv
 # Solar-system object preview images (uploaded via admin; keep directory only)
 data/solar_system_images/*
 !data/solar_system_images/.gitkeep
+
+# Generated SER thumbnail cache
+data/ser_thumbnails/*
+!data/ser_thumbnails/.gitkeep

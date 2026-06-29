@@ -782,7 +782,7 @@
               </template>
               <template v-slot:item.tools="{ item }">
                 <div class="d-flex justify-end">
-                  <v-tooltip v-if="!isSer(item)" text="Preview thumbnail" location="top">
+                  <v-tooltip text="Preview thumbnail" location="top">
                     <template #activator="{ props }">
                       <v-btn
                         v-bind="props"
@@ -1616,13 +1616,6 @@ const getObjectIdByTargetName = (name) => {
 const isLight = (df) => {
   const code = (df?.effective_exposure_type || df?.exposure_type || '').toUpperCase()
   return code === 'LI' || df?.exposure_type_display === 'Light'
-}
-
-const isSer = (df) => {
-  const name = String(df?.file_name || '')
-  const extMatch = /\.ser$/i.test(name)
-  const typeMatch = String(df?.file_type || '').toUpperCase() === 'SER'
-  return extMatch || typeMatch
 }
 
 const fetchRunDataFiles = async () => {

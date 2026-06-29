@@ -1160,7 +1160,7 @@
                   </template>
                   <template v-slot:item.tools="{ item }">
                     <div class="d-flex justify-end" style="gap: 4px">
-                      <v-tooltip v-if="String(item.file_type || '').toUpperCase() !== 'SER'" text="Preview thumbnail" location="top">
+                      <v-tooltip text="Preview thumbnail" location="top">
                         <template #activator="{ props }">
                           <v-btn
                             v-bind="props"

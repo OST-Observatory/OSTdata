@@ -176,6 +176,12 @@ SOLAR_SYSTEM_OBJECT_IMAGES_DIR = env.path(
     default=BASE_DIR / 'data' / 'solar_system_images',
 )
 
+# Cached PNG thumbnails for SER data files (see obs_run.ser_thumbnails)
+SER_THUMBNAIL_CACHE_DIR = env.path(
+    'SER_THUMBNAIL_CACHE_DIR',
+    default=BASE_DIR / 'data' / 'ser_thumbnails',
+)
+
 # Celery
 from celery.schedules import crontab
 CELERY_TASK_ALWAYS_EAGER = env.bool('CELERY_TASK_ALWAYS_EAGER', default=False)
