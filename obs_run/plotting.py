@@ -28,6 +28,7 @@ import io
 import base64
 
 from .models import ObservationRun, DataFile
+from .wcs_utils import build_wcs_from_datafile
 try:
     from django.conf import settings as django_settings
 except Exception:
@@ -359,36 +360,29 @@ def plot_field_of_view(data_file_pk):
     """
     #   Get DataFile
     datafile = DataFile.objects.get(pk=data_file_pk)
-    NAXIS1 = datafile.naxis1
-    NAXIS2 = datafile.naxis2
+    NAXIS1 = int(datafile.naxis1)
+    NAXIS2 = int(datafile.naxis2)
 
-    #   Generate WCS
-    w = wcs.WCS(header={
-        # Width of the output fits/image
-        'NAXIS1': NAXIS1,
-        # Height of the output fits/image
-        'NAXIS2': NAXIS2,
-        # Number of coordinate axes
-        'WCSAXES': 2,
-        # Pixel coordinate of reference point
-        'CRPIX1': int(datafile.naxis1 / 2),
-        # Pixel coordinate of reference point
-        'CRPIX2': int(datafile.naxis2 / 2),
-        # [deg] Coordinate increment at reference point
-        'CDELT1': datafile.fov_x / datafile.naxis1,
-        # [deg] Coordinate increment at reference point
-        'CDELT2': datafile.fov_y / datafile.naxis2,
-        # Units of coordinate increment and value
-        'CUNIT1': 'deg',
-        # Units of coordinate increment and value
-        'CUNIT2': 'deg',
-        'CTYPE1': 'RA---SIN',
-        'CTYPE2': 'DEC--SIN',
-        # [deg] Coordinate value at reference point
-        'CRVAL1': datafile.ra,
-        # [deg] Coordinate value at reference point
-        'CRVAL2': datafile.dec,
-    })
+    built = build_wcs_from_datafile(datafile)
+    if built is not None:
+        w, NAXIS1, NAXIS2 = built
+    else:
+        # Fallback when chip dimensions or astrometry are missing
+        w = wcs.WCS(header={
+            'NAXIS1': NAXIS1,
+            'NAXIS2': NAXIS2,
+            'WCSAXES': 2,
+            'CRPIX1': int(datafile.naxis1 / 2),
+            'CRPIX2': int(datafile.naxis2 / 2),
+            'CDELT1': datafile.fov_x / datafile.naxis1,
+            'CDELT2': datafile.fov_y / datafile.naxis2,
+            'CUNIT1': 'deg',
+            'CUNIT2': 'deg',
+            'CTYPE1': 'RA---SIN',
+            'CTYPE2': 'DEC--SIN',
+            'CRVAL1': datafile.ra,
+            'CRVAL2': datafile.dec,
+        })
 
     #   Draw star positions
     with load.open(hipparcos.URL) as f:
@@ -405,10 +399,14 @@ def plot_field_of_view(data_file_pk):
     magnitude_threshold = 18.5
 
     #   Restrict stars to field of view and magnitude threshold
-    mask = (stars_loc_x > -NAXIS1) & (stars_loc_x < NAXIS1) & \
-           (stars_loc_y > -NAXIS2) & (stars_loc_y < NAXIS2) & \
-           (stars["magnitude"] < magnitude_threshold)
+    mask = (
+        (stars_loc_x >= 0) & (stars_loc_x < NAXIS1)
+        & (stars_loc_y >= 0) & (stars_loc_y < NAXIS2)
+        & (stars["magnitude"] < magnitude_threshold)
+    )
     stars = stars[mask]
+    stars_loc_x = stars_loc_x[mask]
+    stars_loc_y = stars_loc_y[mask]
 
     mag_min = stars["magnitude"].min()
     mag_max = stars["magnitude"].max()
@@ -437,8 +435,8 @@ def plot_field_of_view(data_file_pk):
     ax = fig.add_subplot(projection=w)
 
     scatter = ax.scatter(
-        stars_loc_x[mask],
-        stars_loc_y[mask],
+        stars_loc_x,
+        stars_loc_y,
         s=mag2size(stars["magnitude"]),
         color="k",
     )

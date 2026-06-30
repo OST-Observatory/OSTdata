@@ -83,6 +83,27 @@ class ObservationRun(models.Model):
     note_override = models.BooleanField(default=False)
     mid_observation_jd_override = models.BooleanField(default=False)
 
+    #   SIMBAD auxiliary objects in the field (computed on demand, cached on run)
+    AUX_STATUS_PENDING = 'pending'
+    AUX_STATUS_READY = 'ready'
+    AUX_STATUS_ERROR = 'error'
+    AUX_STATUS_CHOICES = (
+        (AUX_STATUS_PENDING, 'Pending'),
+        (AUX_STATUS_READY, 'Ready'),
+        (AUX_STATUS_ERROR, 'Error'),
+    )
+    aux_objects = models.JSONField(default=list, blank=True)
+    aux_objects_meta = models.JSONField(default=dict, blank=True)
+    aux_objects_status = models.CharField(
+        max_length=16,
+        choices=AUX_STATUS_CHOICES,
+        blank=True,
+        default='',
+    )
+    aux_objects_error = models.TextField(blank=True, default='')
+    aux_objects_computed_at = models.DateTimeField(null=True, blank=True)
+    aux_objects_started_at = models.DateTimeField(null=True, blank=True)
+
     #   Bookkeeping
     history = HistoricalRecords()
 

@@ -586,24 +586,83 @@
       <v-row v-if="run?.photometry">
         <v-col cols="12">
           <v-card class="mb-4">
-            <v-card-title>Auxiliary Objects</v-card-title>
-            <v-card-text class="px-4">
-              <v-skeleton-loader v-if="loadingObjects" type="chip"></v-skeleton-loader>
+            <v-card-title class="d-flex align-center justify-space-between flex-wrap gap-2">
+              <span>Auxiliary Objects</span>
+              <div class="d-flex align-center flex-wrap aux-objects-header-actions">
+                <span v-if="auxObjectsComputedAt" class="text-caption text-secondary aux-objects-updated">
+                  Updated {{ formatAuxComputedAt(auxObjectsComputedAt) }}
+                </span>
+                <v-btn
+                  size="small"
+                  variant="tonal"
+                  color="primary"
+                  :loading="computingAuxObjects || auxObjectsStatus === 'pending'"
+                  :disabled="loadingAuxObjects"
+                  @click="refreshAuxObjects"
+                >
+                  Query SIMBAD
+                </v-btn>
+              </div>
+            </v-card-title>
+            <v-card-text class="px-4 aux-objects-body">
+              <v-skeleton-loader v-if="loadingAuxObjects" type="chip"></v-skeleton-loader>
               <template v-else>
-                <div v-if="auxObjects && auxObjects.length" class="d-flex flex-wrap gap-2">
-                  <v-chip
-                    v-for="obj in auxObjects"
-                    :key="obj.pk || obj.id"
-                    variant="outlined"
-                    size="small"
-                    color="primary"
-                    :to="`/objects/${obj.pk || obj.id}`"
-                    link
-                  >
-                    {{ obj.name }}
-                  </v-chip>
+                <v-alert
+                  v-if="auxObjectsStatus === 'error' && auxObjectsError"
+                  type="warning"
+                  variant="tonal"
+                  density="compact"
+                  class="mb-3"
+                >
+                  {{ auxObjectsError }}
+                </v-alert>
+                <div v-if="auxObjectsMetaFields.length" class="text-caption text-medium-emphasis mb-2">
+                  <template v-if="auxObjectsMetaFields.length === 1">
+                    FOV from {{ auxObjectsMetaFields[0].source_file_name }}
+                    <span v-if="auxObjectsMetaFields[0].fov_x && auxObjectsMetaFields[0].fov_y">
+                      ({{ Number(auxObjectsMetaFields[0].fov_x).toFixed(3) }}° × {{ Number(auxObjectsMetaFields[0].fov_y).toFixed(3) }}°)
+                    </span>
+                    <span v-if="auxObjectsMetaFields[0].light_file_count > 1">
+                      · {{ auxObjectsMetaFields[0].light_file_count }} LIGHT frames
+                    </span>
+                  </template>
+                  <template v-else>
+                    {{ auxObjectsMetaFields.length }} pointings detected
+                    <span v-for="field in auxObjectsMetaFields" :key="field.cluster_id" class="ml-2">
+                      · Field {{ field.cluster_id + 1 }}: {{ field.source_file_name }}
+                      ({{ field.light_file_count }} frame{{ field.light_file_count === 1 ? '' : 's' }})
+                    </span>
+                  </template>
                 </div>
-                <div v-else class="text-caption text-secondary">No auxiliary objects.</div>
+                <div v-if="auxObjects && auxObjects.length" class="aux-objects-chips">
+                  <v-tooltip
+                    v-for="obj in auxObjects"
+                    :key="`${obj.name}-${obj.ra}-${obj.dec}`"
+                    :text="auxObjectTooltip(obj)"
+                    location="top"
+                  >
+                    <template #activator="{ props }">
+                      <v-chip
+                        v-bind="props"
+                        variant="outlined"
+                        size="small"
+                        color="primary"
+                        :href="simbadUrl(obj.name)"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        link
+                      >
+                        {{ obj.name }}
+                      </v-chip>
+                    </template>
+                  </v-tooltip>
+                </div>
+                <div v-else-if="auxObjectsStatus === 'ready'" class="text-caption text-secondary">
+                  No auxiliary objects found in the field.
+                </div>
+                <div v-else class="text-caption text-secondary">
+                  Click “Query SIMBAD” to search for objects in the field of view.
+                </div>
               </template>
             </v-card-text>
           </v-card>
@@ -1069,6 +1128,12 @@ const objects = ref([])
 const loadingObjects = ref(false)
 const mainObjectsDetails = ref([])
 const auxObjects = ref([])
+const auxObjectsMeta = ref({})
+const auxObjectsStatus = ref(null)
+const auxObjectsError = ref(null)
+const auxObjectsComputedAt = ref(null)
+const loadingAuxObjects = ref(false)
+const computingAuxObjects = ref(false)
 const dataFiles = ref([])
 const loadingDataFiles = ref(false)
 const dataFilesPage = ref(1)
@@ -1534,6 +1599,9 @@ const fetchRun = async () => {
     error.value = null
     const data = await api.getObservationRun(runId)
     run.value = data
+    if (data?.photometry) {
+      fetchAuxObjects()
+    }
   } catch (e) {
     console.error('Error fetching run:', e)
     error.value = 'Failed to load observation run.'
@@ -1549,8 +1617,6 @@ const fetchObjects = async () => {
     const response = await api.getObjectsVuetify({ page: 1, itemsPerPage: -1, observation_run: runId })
     const all = response.results || response.items || response || []
     objects.value = all
-    // Split into aux and main
-    auxObjects.value = all.filter(o => o.is_main === false)
     const mains = all.filter(o => o.is_main)
     // For each main object, find run-specific metrics in observation_run array
     mainObjectsDetails.value = mains.map(o => {
@@ -1583,11 +1649,84 @@ const fetchObjects = async () => {
   } catch (e) {
     console.error('Error fetching objects for run:', e)
     objects.value = []
-    auxObjects.value = []
     mainObjectsDetails.value = []
   } finally {
     loadingObjects.value = false
   }
+}
+
+const formatAuxComputedAt = (iso) => {
+  if (!iso) return ''
+  try {
+    return new Date(iso).toLocaleString()
+  } catch {
+    return iso
+  }
+}
+
+const auxObjectTooltip = (obj) => {
+  const parts = [obj.object_type_display || obj.object_type || 'Object']
+  if (obj.separation_arcmin != null) parts.push(`${obj.separation_arcmin}' from field center`)
+  if (obj.v_mag != null) parts.push(`V=${obj.v_mag}`)
+  const clusterIds = obj.cluster_ids || (obj.cluster_id != null ? [obj.cluster_id] : [])
+  if (clusterIds.length > 1) {
+    parts.push(`seen in fields ${clusterIds.map((id) => id + 1).join(', ')}`)
+  } else if (clusterIds.length === 1) {
+    parts.push(`field ${clusterIds[0] + 1}`)
+  }
+  return parts.join(' · ')
+}
+
+const auxObjectsMetaFields = computed(() => {
+  const meta = auxObjectsMeta.value || {}
+  if (Array.isArray(meta.fields) && meta.fields.length) return meta.fields
+  if (meta.source_file_name) {
+    return [{
+      cluster_id: 0,
+      source_file_name: meta.source_file_name,
+      fov_x: meta.fov_x,
+      fov_y: meta.fov_y,
+      light_file_count: meta.light_file_count || 1,
+    }]
+  }
+  return []
+})
+
+const simbadUrl = (name) => {
+  const ident = encodeURIComponent(name || '')
+  return `https://simbad.cds.unistra.fr/simbad/sim-id?Ident=${ident}`
+}
+
+const fetchAuxObjects = async ({ refresh = false } = {}) => {
+  if (!run.value?.photometry) return
+  const maxPolls = 30
+  let polls = 0
+  try {
+    if (polls === 0) loadingAuxObjects.value = true
+    while (polls < maxPolls) {
+      const data = await api.getRunAuxObjects(runId, { refresh: refresh && polls === 0 })
+      auxObjects.value = data?.objects || []
+      auxObjectsMeta.value = data?.meta || {}
+      auxObjectsStatus.value = data?.status || null
+      auxObjectsError.value = data?.error || null
+      auxObjectsComputedAt.value = data?.computed_at || null
+      if (data?.status !== 'pending') break
+      polls += 1
+      await new Promise((resolve) => setTimeout(resolve, 2000))
+    }
+  } catch (e) {
+    console.error('Error fetching auxiliary objects:', e)
+    auxObjectsError.value = 'Failed to load auxiliary objects from SIMBAD.'
+    auxObjects.value = []
+  } finally {
+    loadingAuxObjects.value = false
+    computingAuxObjects.value = false
+  }
+}
+
+const refreshAuxObjects = async () => {
+  computingAuxObjects.value = true
+  await fetchAuxObjects({ refresh: true })
 }
 
 // Provide quick lookups from target name -> object id for linking in files table
@@ -2190,6 +2329,25 @@ const binningOptions = computed(() => {
 .uniform-height .v-card-text {
   flex: 1;
   overflow-y: auto;
+}
+
+.aux-objects-header-actions {
+  gap: 8px 20px;
+}
+
+.aux-objects-updated {
+  margin-right: 4px;
+}
+
+.aux-objects-body {
+  max-height: 155px;
+  overflow-y: auto;
+}
+
+.aux-objects-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .preview-container {

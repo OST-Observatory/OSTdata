@@ -7,9 +7,9 @@ import os
 import tempfile
 import zipfile
 
-from django.db import connection
+from django.db import connection, transaction
 from django.utils.http import http_date
-from django.utils.timezone import make_aware
+from django.utils.timezone import make_aware, now as timezone_now
 from rest_framework import viewsets
 from rest_framework.decorators import api_view, permission_classes, parser_classes
 from rest_framework.filters import OrderingFilter
@@ -971,4 +971,102 @@ def get_instrument_catalog(request):
     except Exception as e:
         logger.exception("get_instrument_catalog failed: %s", e)
         return Response({'error': 'Failed to load instrument catalog'}, status=400)
+
+
+def _get_run_for_aux_objects(request, pk: int) -> ObservationRun | None:
+    try:
+        run = ObservationRun.objects.get(pk=pk)
+    except ObservationRun.DoesNotExist:
+        return None
+
+    if request.user.is_anonymous:
+        if not run.is_public:
+            return None
+    elif not run.is_public:
+        try:
+            if not request.user.can_read(run):
+                return None
+        except Exception:
+            return None
+    return run
+
+
+@extend_schema(
+    summary='SIMBAD auxiliary objects for observation run',
+    description=(
+        'Return cached auxiliary objects in the field or compute them on demand. '
+        'Use ?refresh=1 to force a new SIMBAD lookup.'
+    ),
+    tags=['Runs'],
+    parameters=[
+        OpenApiParameter('pk', int, OpenApiParameter.PATH),
+        OpenApiParameter('refresh', bool, OpenApiParameter.QUERY, description='Force recompute'),
+    ],
+)
+@api_view(['GET'])
+def get_run_aux_objects(request, pk):
+    from obs_run.aux_objects import (
+        build_aux_objects_payload,
+        compute_aux_objects,
+        pending_is_stale,
+        save_aux_objects_result,
+    )
+
+    run = _get_run_for_aux_objects(request, pk)
+    if run is None:
+        return Response({'detail': 'Not found'}, status=404)
+
+    if not run.photometry:
+        return Response({'detail': 'Auxiliary objects are only available for photometry runs'}, status=400)
+
+    force = str(request.query_params.get('refresh', '')).lower() in ('1', 'true', 'yes')
+
+    if (
+        not force
+        and run.aux_objects_status == ObservationRun.AUX_STATUS_READY
+        and run.aux_objects_computed_at
+    ):
+        return Response(build_aux_objects_payload(run))
+
+    if run.aux_objects_status == ObservationRun.AUX_STATUS_PENDING and not pending_is_stale(run):
+        return Response(build_aux_objects_payload(run))
+
+    with transaction.atomic():
+        run = ObservationRun.objects.select_for_update().get(pk=pk)
+        if (
+            not force
+            and run.aux_objects_status == ObservationRun.AUX_STATUS_READY
+            and run.aux_objects_computed_at
+        ):
+            return Response(build_aux_objects_payload(run))
+        if run.aux_objects_status == ObservationRun.AUX_STATUS_PENDING and not pending_is_stale(run):
+            return Response(build_aux_objects_payload(run))
+
+        run.aux_objects_status = ObservationRun.AUX_STATUS_PENDING
+        run.aux_objects_error = ''
+        run.aux_objects_started_at = timezone_now()
+        run.save(update_fields=['aux_objects_status', 'aux_objects_error', 'aux_objects_started_at'])
+
+    try:
+        result = compute_aux_objects(run)
+        save_aux_objects_result(
+            run,
+            objects=result['objects'],
+            meta=result['meta'],
+            status=ObservationRun.AUX_STATUS_READY,
+        )
+        run.refresh_from_db()
+        return Response(build_aux_objects_payload(run))
+    except Exception as exc:
+        logger.exception('aux objects compute failed for run %s: %s', pk, exc)
+        save_aux_objects_result(
+            run,
+            objects=[],
+            meta={},
+            status=ObservationRun.AUX_STATUS_ERROR,
+            error=str(exc),
+        )
+        run.refresh_from_db()
+        payload = build_aux_objects_payload(run)
+        return Response(payload, status=400)
 

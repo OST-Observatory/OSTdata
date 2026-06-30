@@ -86,3 +86,40 @@
     0 0 0 2px rgba(var(--v-theme-on-secondary), 0.25),
     0 2px 8px rgba(0, 0, 0, 0.35) !important;
 }
+
+/**
+ * Muted / de-emphasized text in dark mode (main content only).
+ *
+ * Vuetify generates .text-secondary from the theme "secondary" palette (#2f4f73)
+ * — intended for chrome (app bar), not captions or table cells on dark surfaces.
+ * .text-grey is a fixed Material grey (#9e9e9e), also too dim on slate cards.
+ * .text-medium-emphasis uses on-background, which can read too dim on surface cards.
+ *
+ * Scoped to .v-main so secondary-colored buttons/chips keep their brand styling.
+ * !important is required to override Vuetify's runtime utility classes.
+ */
+.v-theme--dark .v-main .text-secondary:not(.v-btn):not(.v-chip):not(.v-tab):not(.v-icon) {
+  color: rgba(var(--v-theme-on-surface), 0.85) !important;
+  opacity: 1 !important;
+}
+
+.v-theme--dark .v-main .v-list-item.text-secondary .v-list-item-title,
+.v-theme--dark .v-main .v-list-item.text-secondary .v-list-item-subtitle {
+  color: rgba(var(--v-theme-on-surface), 0.85) !important;
+  opacity: 1 !important;
+}
+
+.v-theme--dark .v-main .text-grey:not(.v-btn):not(.v-chip):not(.v-tab):not(.v-icon) {
+  color: rgba(var(--v-theme-on-surface), 0.85) !important;
+  opacity: 1 !important;
+}
+
+.v-theme--dark .v-main .text-medium-emphasis {
+  color: rgba(var(--v-theme-on-surface), 0.85) !important;
+  opacity: 1 !important;
+}
+
+.v-theme--dark .v-main .v-card-subtitle {
+  color: rgba(var(--v-theme-on-surface), 0.85) !important;
+  opacity: 1 !important;
+}

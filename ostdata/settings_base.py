@@ -182,6 +182,13 @@ SER_THUMBNAIL_CACHE_DIR = env.path(
     default=BASE_DIR / 'data' / 'ser_thumbnails',
 )
 
+# SIMBAD auxiliary objects for observation runs (see obs_run.aux_objects)
+AUX_OBJECTS_PENDING_STALE_SECONDS = env.int('AUX_OBJECTS_PENDING_STALE_SECONDS', default=120)
+AUX_OBJECTS_ROW_LIMIT = env.int('AUX_OBJECTS_ROW_LIMIT', default=100)
+AUX_OBJECTS_CLUSTER_SEPARATION_DEG = env.float('AUX_OBJECTS_CLUSTER_SEPARATION_DEG', default=1.0)
+AUX_OBJECTS_CLUSTER_FOV_FRACTION = env.float('AUX_OBJECTS_CLUSTER_FOV_FRACTION', default=0.5)
+AUX_OBJECTS_CLUSTER_MIN_ARCMIN = env.float('AUX_OBJECTS_CLUSTER_MIN_ARCMIN', default=2.0)
+
 # Celery
 from celery.schedules import crontab
 CELERY_TASK_ALWAYS_EAGER = env.bool('CELERY_TASK_ALWAYS_EAGER', default=False)

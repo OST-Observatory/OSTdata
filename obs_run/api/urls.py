@@ -13,6 +13,7 @@ from .runs import (
     parse_fits_header,
     get_instruments,
     get_instrument_catalog,
+    get_run_aux_objects,
 )
 from .views import (
     DataFileViewSet,
@@ -48,6 +49,11 @@ urlpatterns = [
         'runs/<int:run_pk>/conditions/',
         get_observing_conditions,
         name='observation_run_conditions',
+    ),
+    path(
+        'runs/<int:pk>/aux-objects/',
+        get_run_aux_objects,
+        name='observation_run_aux_objects',
     ),
     path('visibility/', get_visibility_plot, name='visibility_plot'),
     path('fov/', get_sky_fov, name='sky_fov'),
