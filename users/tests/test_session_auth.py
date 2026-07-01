@@ -60,7 +60,14 @@ class SessionAuthTest(APITestCase):
         self.assertEqual(logout_resp.status_code, status.HTTP_200_OK)
 
         user_resp = self.client.get(self.user_url)
-        self.assertEqual(user_resp.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(user_resp.status_code, status.HTTP_200_OK)
+        self.assertFalse(user_resp.data.get('authenticated'))
+        self.assertNotIn('username', user_resp.data)
+
+    def test_anonymous_user_info(self):
+        resp = self.client.get(self.user_url)
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertFalse(resp.data.get('authenticated'))
 
     def test_unsafe_request_without_csrf_rejected(self):
         client = APIClient(enforce_csrf_checks=True)
@@ -92,7 +99,8 @@ class SessionAuthTest(APITestCase):
         self.assertTrue(resp.data.get('relogin_required'))
 
         user_resp = self.client.get(self.user_url)
-        self.assertEqual(user_resp.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(user_resp.status_code, status.HTTP_200_OK)
+        self.assertFalse(user_resp.data.get('authenticated'))
 
         login_resp = self.client.post(
             self.login_url,

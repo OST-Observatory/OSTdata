@@ -118,9 +118,11 @@ def logout(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([AllowAny])
 def user_info(request):
-    """Get current user information from session."""
+    """Get current user information from session (200 + authenticated:false when anonymous)."""
+    if not request.user.is_authenticated:
+        return Response({'authenticated': False})
     return Response(_user_payload(request.user))
 
 

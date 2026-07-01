@@ -98,16 +98,18 @@ export const useAuthStore = defineStore('auth', () => {
       const response = await fetch(`${API_BASE_URL}/users/auth/user/`, {
         credentials: 'include',
       })
+      const data = await response.json().catch(() => null)
 
-      if (!response.ok) {
-        throw new Error('Auth check failed')
+      if (response.ok && data?.username) {
+        user.value = data
+        await refreshCsrfToken()
+        return true
       }
 
-      user.value = await response.json()
-      await refreshCsrfToken()
-      return true
-    } catch (error) {
-      console.error('Auth check error:', error)
+      user.value = null
+      clearCsrfToken()
+      return false
+    } catch {
       user.value = null
       clearCsrfToken()
       return false
