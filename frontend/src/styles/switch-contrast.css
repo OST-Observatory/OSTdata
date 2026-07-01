@@ -1,4 +1,6 @@
-/* Higher-contrast v-switch OFF state (especially light theme). */
+/* Higher-contrast v-switch OFF/ON states (global via VSwitch defaults in vuetify.ts). */
+
+/* --- Light theme: OFF --- */
 .hi-contrast-switch:not(.v-selection-control--dirty) .v-switch__track {
   background-color: rgba(var(--v-theme-on-surface), 0.2) !important;
   border: 1px solid rgba(var(--v-theme-on-surface), 0.35) !important;
@@ -10,6 +12,7 @@
   border: 2px solid rgba(var(--v-theme-on-surface), 0.55) !important;
 }
 
+/* --- Light theme: ON --- */
 .hi-contrast-switch.v-selection-control--dirty .v-switch__track,
 .hi-contrast-switch .v-switch__track.bg-primary {
   background-color: rgb(var(--v-theme-primary)) !important;
@@ -34,13 +37,49 @@
   font-weight: 500;
 }
 
-/* Dark: OFF track uses primary tint to match observatory palette */
+/*
+ * Dark theme: OFF = neutral slate track + light thumb;
+ * ON = bright primary track with glow + white thumb.
+ * Strong separation so on/off is obvious on dark cards.
+ */
 .v-theme--dark .hi-contrast-switch:not(.v-selection-control--dirty) .v-switch__track {
-  background-color: rgba(var(--v-theme-primary), 0.22) !important;
-  border-color: rgba(var(--v-theme-primary), 0.38) !important;
+  background-color: rgba(var(--v-theme-on-surface), 0.1) !important;
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.42) !important;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.4) !important;
+  opacity: 1 !important;
 }
 
 .v-theme--dark .hi-contrast-switch:not(.v-selection-control--dirty) .v-switch__thumb {
-  background-color: rgb(var(--v-theme-surface-bright)) !important;
-  border-color: rgba(var(--v-theme-primary-light), 0.9) !important;
+  background-color: rgba(var(--v-theme-on-surface), 0.92) !important;
+  border: 2px solid rgba(var(--v-theme-on-surface), 0.55) !important;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5) !important;
+}
+
+.v-theme--dark .hi-contrast-switch.v-selection-control--dirty .v-switch__track,
+.v-theme--dark .hi-contrast-switch .v-switch__track.bg-primary,
+.v-theme--dark .hi-contrast-switch input:checked ~ .v-selection-control__wrapper .v-switch__track {
+  background-color: rgb(var(--v-theme-primary)) !important;
+  border: 1px solid rgb(var(--v-theme-primary-light)) !important;
+  box-shadow:
+    0 0 0 1px rgba(var(--v-theme-primary-light), 0.35),
+    0 0 12px rgba(var(--v-theme-primary), 0.55) !important;
+  opacity: 1 !important;
+}
+
+.v-theme--dark .hi-contrast-switch.v-selection-control--dirty .v-switch__thumb,
+.v-theme--dark .hi-contrast-switch input:checked ~ .v-selection-control__wrapper .v-switch__thumb {
+  background-color: #ffffff !important;
+  border: 2px solid rgb(var(--v-theme-primary-dark)) !important;
+  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.45) !important;
+}
+
+/* Inset switches: slightly thicker track reads better on dark surfaces */
+.v-theme--dark .hi-contrast-switch.v-switch--inset:not(.v-selection-control--dirty) .v-switch__track {
+  background-color: rgba(0, 0, 0, 0.28) !important;
+  border-color: rgba(var(--v-theme-on-surface), 0.38) !important;
+}
+
+.v-theme--dark .hi-contrast-switch.v-switch--inset.v-selection-control--dirty .v-switch__track,
+.v-theme--dark .hi-contrast-switch.v-switch--inset input:checked ~ .v-selection-control__wrapper .v-switch__track {
+  background-color: rgb(var(--v-theme-primary)) !important;
 }
