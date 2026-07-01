@@ -1,26 +1,16 @@
 import { useAuthStore } from '@/store/auth'
 import router from '@/router'
 import { useNotifyStore } from '@/store/notify'
-import { withCsrfIfNeeded, getCsrfToken } from '@/utils/csrf'
+import { withCsrfIfNeeded, refreshCsrfToken, isUnsafeMethod } from '@/utils/csrf'
 
 const API_BASE_URL = import.meta.env?.VITE_API_BASE || '/api'
-
-const UNSAFE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
-
-async function ensureCsrfCookieIfNeeded(method) {
-  if (!UNSAFE_METHODS.has((method || 'GET').toUpperCase())) {
-    return
-  }
-  if (getCsrfToken()) {
-    return
-  }
-  await fetch(`${API_BASE_URL}/users/auth/csrf/`, { credentials: 'include' })
-}
 
 async function fetchWithAuth(url, options = {}, retriedCsrf = false) {
   const authStore = useAuthStore()
   const method = (options.method || 'GET').toUpperCase()
-  await ensureCsrfCookieIfNeeded(method)
+  if (isUnsafeMethod(method)) {
+    await refreshCsrfToken()
+  }
   const headers = withCsrfIfNeeded(method, {
     ...options.headers,
   })
@@ -95,13 +85,20 @@ async function fetchWithAuth(url, options = {}, retriedCsrf = false) {
 
   const acceptable = Array.isArray(options.acceptableStatus) ? options.acceptableStatus : []
   if (!response.ok && !acceptable.includes(response.status)) {
+    let errorDetail = ''
+    try {
+      const preview = await response.clone().json()
+      errorDetail = String(preview?.detail || preview?.error || '')
+    } catch {
+      // non-JSON body
+    }
     if (
       response.status === 403
-      && UNSAFE_METHODS.has(method)
+      && isUnsafeMethod(method)
       && !retriedCsrf
-      && !getCsrfToken()
+      && /csrf/i.test(errorDetail)
     ) {
-      await fetch(`${API_BASE_URL}/users/auth/csrf/`, { credentials: 'include' })
+      await refreshCsrfToken()
       return fetchWithAuth(url, options, true)
     }
     const error = new Error(`API error: ${response.status}`)

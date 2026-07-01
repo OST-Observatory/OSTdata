@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import router from '@/router'
 import { ADMIN_NAV_PERMS } from '@/constants/acl'
-import { csrfHeaders } from '@/utils/csrf'
+import { csrfHeaders, refreshCsrfToken, clearCsrfToken } from '@/utils/csrf'
 
 export const useAuthStore = defineStore('auth', () => {
   const user = ref(null)
@@ -37,16 +37,11 @@ export const useAuthStore = defineStore('auth', () => {
     } catch { /* ignore */ }
   }
 
-  async function ensureCsrfCookie() {
-    await fetch(`${API_BASE_URL}/users/auth/csrf/`, {
-      credentials: 'include',
-    })
-  }
-
   async function login(credentials) {
     try {
       _clearLegacyToken()
-      await ensureCsrfCookie()
+      clearCsrfToken()
+      await refreshCsrfToken()
 
       const response = await fetch(`${API_BASE_URL}/users/auth/login/`, {
         method: 'POST',
@@ -64,6 +59,8 @@ export const useAuthStore = defineStore('auth', () => {
 
       const data = await response.json()
       user.value = data.user
+      // Login rotates the session; CSRF must match the new session.
+      await refreshCsrfToken()
 
       const next = router.currentRoute.value.query?.next
       if (typeof next === 'string' && next) {
@@ -77,7 +74,7 @@ export const useAuthStore = defineStore('auth', () => {
 
   async function logout() {
     try {
-      await ensureCsrfCookie()
+      await refreshCsrfToken()
       await fetch(`${API_BASE_URL}/users/auth/logout/`, {
         method: 'POST',
         headers: {
@@ -90,6 +87,7 @@ export const useAuthStore = defineStore('auth', () => {
     } finally {
       user.value = null
       _clearLegacyToken()
+      clearCsrfToken()
     }
   }
 
@@ -106,16 +104,18 @@ export const useAuthStore = defineStore('auth', () => {
       }
 
       user.value = await response.json()
+      await refreshCsrfToken()
       return true
     } catch (error) {
       console.error('Auth check error:', error)
       user.value = null
+      clearCsrfToken()
       return false
     }
   }
 
   async function changePassword(payload) {
-    await ensureCsrfCookie()
+    await refreshCsrfToken()
     const response = await fetch(`${API_BASE_URL}/users/auth/change-password/`, {
       method: 'POST',
       headers: {
@@ -135,6 +135,7 @@ export const useAuthStore = defineStore('auth', () => {
 
     user.value = null
     _clearLegacyToken()
+    clearCsrfToken()
     return data
   }
 

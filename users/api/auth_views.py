@@ -2,7 +2,8 @@ import logging
 
 from django.contrib.auth import authenticate, login as django_login, logout as django_logout
 from django.contrib.auth.models import Group
-from django.views.decorators.csrf import ensure_csrf_cookie
+from django.conf import settings
+from django.middleware.csrf import get_token
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -48,10 +49,24 @@ def _sync_role_groups(user):
 
 @api_view(['GET'])
 @permission_classes([AllowAny])
-@ensure_csrf_cookie
 def csrf_cookie(request):
     """Set CSRF cookie for SPA clients before login or unsafe API calls."""
-    return Response({'authenticated': bool(request.user.is_authenticated)})
+    token = get_token(request)
+    response = Response({
+        'authenticated': bool(request.user.is_authenticated),
+        'csrfToken': token,
+    })
+    response.set_cookie(
+        settings.CSRF_COOKIE_NAME,
+        token,
+        max_age=settings.CSRF_COOKIE_AGE,
+        domain=settings.CSRF_COOKIE_DOMAIN,
+        path=settings.CSRF_COOKIE_PATH or '/',
+        secure=settings.CSRF_COOKIE_SECURE,
+        httponly=settings.CSRF_COOKIE_HTTPONLY,
+        samesite=settings.CSRF_COOKIE_SAMESITE,
+    )
+    return response
 
 
 @api_view(['POST'])

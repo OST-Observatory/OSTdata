@@ -26,6 +26,8 @@ class SessionAuthTest(APITestCase):
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
         self.assertIn('csrftoken', self.client.cookies)
         self.assertFalse(resp.data['authenticated'])
+        self.assertIn('csrfToken', resp.data)
+        self.assertTrue(resp.data['csrfToken'])
 
     def test_login_sets_session_without_token_field(self):
         resp = self.client.post(
