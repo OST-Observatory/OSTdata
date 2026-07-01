@@ -193,7 +193,7 @@ const runQueueNow = async () => {
     success.value = 'Queue processor enqueued.'
     await refresh()
   } catch (e) {
-    error.value = 'Failed to enqueue queue processor.'
+    error.value = apiErrorMessage(e, 'Failed to enqueue queue processor.')
     console.error(e)
   } finally {
     queueLoading.value = false

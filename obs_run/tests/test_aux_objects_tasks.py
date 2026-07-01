@@ -93,6 +93,14 @@ class AuxObjectsAdminApiTest(APITestCase):
         self.assertEqual(response.data['enqueued'], 1)
         enqueue_mock.assert_called_once()
 
+    @patch('adminops.api.views.process_aux_objects_queue')
+    def test_admin_trigger_queue(self, queue_mock):
+        queue_mock.delay.return_value = type('R', (), {'id': 'task-1'})()
+        response = self.client.post('/api/admin/runs/aux-objects/queue/', {}, format='json')
+        self.assertEqual(response.status_code, status.HTTP_202_ACCEPTED)
+        self.assertTrue(response.data.get('enqueued'))
+        queue_mock.delay.assert_called_once()
+
 
 @override_settings(AUX_OBJECTS_ENABLED=False, CELERY_TASK_ALWAYS_EAGER=True)
 class AuxObjectsAdminDisabledTest(APITestCase):
@@ -113,3 +121,15 @@ class AuxObjectsAdminDisabledTest(APITestCase):
         )
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn('AUX_OBJECTS_ENABLED', response.data.get('detail', ''))
+
+
+@override_settings(AUX_OBJECTS_ENABLED=False, CELERY_TASK_ALWAYS_EAGER=True)
+class AuxObjectsAdminNoPermTest(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username='auxnoperm', password='x', is_staff=True)
+        self.client.force_authenticate(user=self.user)
+
+    def test_admin_queue_forbidden_without_acl(self):
+        response = self.client.post('/api/admin/runs/aux-objects/queue/', {}, format='json')
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertIn('acl_runs_aux_objects_admin', response.data.get('detail', ''))

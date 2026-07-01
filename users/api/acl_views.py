@@ -169,6 +169,7 @@ def _sync_missing_acl_to_staff():
 def _build_acl_payload():
     """Build ACL matrix dict (groups, permissions, matrix, defaults)."""
     _ensure_acl_registry()
+    _sync_missing_acl_to_staff()
     ct = ContentType.objects.get_for_model(User)
     perms = list(
         Permission.objects.filter(

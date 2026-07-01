@@ -18,6 +18,26 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def _aux_objects_admin_denied_response(request):
+    """403 when user lacks acl_runs_aux_objects_admin (superuser bypasses)."""
+    if user_has_acl(request.user, 'acl_runs_aux_objects_admin'):
+        return None
+    return Response(
+        {'detail': 'Missing permission users.acl_runs_aux_objects_admin'},
+        status=403,
+    )
+
+
+def _ensure_aux_objects_acl_for_staff():
+    """Non-destructive: register new ACL codenames and grant staff group any missing defaults."""
+    try:
+        from users.api.acl_views import _ensure_acl_registry, _sync_missing_acl_to_staff
+        _ensure_acl_registry()
+        _sync_missing_acl_to_staff()
+    except Exception:
+        logger.warning('ACL staff sync failed for auxiliary objects admin', exc_info=True)
+
+
 def _acl_for_override_model(model_type: str) -> str:
     mt = (model_type or '').lower()
     if mt == 'datafile':
@@ -1955,8 +1975,12 @@ def admin_unlink_datafiles_from_objects(request):
 
 @extend_schema(summary='Auxiliary objects statistics', tags=['Admin'])
 @api_view(['GET'])
-@permission_classes([IsAuthenticated, HasPerm('acl_runs_aux_objects_admin')])
+@permission_classes([IsAuthenticated])
 def admin_aux_objects_stats(request):
+    _ensure_aux_objects_acl_for_staff()
+    denied = _aux_objects_admin_denied_response(request)
+    if denied:
+        return denied
     from obs_run.aux_objects import _light_fits_filter_q
 
     photometry_qs = ObservationRun.objects.filter(photometry=True)
@@ -1979,7 +2003,7 @@ def admin_aux_objects_stats(request):
 
 @extend_schema(summary='Trigger auxiliary-object SIMBAD lookups', tags=['Admin'])
 @api_view(['POST'])
-@permission_classes([IsAuthenticated, HasPerm('acl_runs_aux_objects_admin')])
+@permission_classes([IsAuthenticated])
 def admin_trigger_aux_objects(request):
     """
     Enqueue auxiliary-object computation for observation runs.
@@ -1990,6 +2014,10 @@ def admin_trigger_aux_objects(request):
       require_wcs: bool (default true)
       run_ids: list[int] (required for mode=selected)
     """
+    _ensure_aux_objects_acl_for_staff()
+    denied = _aux_objects_admin_denied_response(request)
+    if denied:
+        return denied
     from obs_run.aux_objects import query_runs_for_aux_objects
 
     if not getattr(settings, 'AUX_OBJECTS_ENABLED', False):
@@ -2034,8 +2062,12 @@ def admin_trigger_aux_objects(request):
 
 @extend_schema(summary='Trigger auxiliary-objects queue processor', tags=['Admin'])
 @api_view(['POST'])
-@permission_classes([IsAuthenticated, HasPerm('acl_runs_aux_objects_admin')])
+@permission_classes([IsAuthenticated])
 def admin_trigger_aux_objects_queue(request):
+    _ensure_aux_objects_acl_for_staff()
+    denied = _aux_objects_admin_denied_response(request)
+    if denied:
+        return denied
     try:
         res = process_aux_objects_queue.delay()
         return Response({'enqueued': True, 'task_id': getattr(res, 'id', None)}, status=202)
@@ -2046,8 +2078,11 @@ def admin_trigger_aux_objects_queue(request):
 
 @extend_schema(summary='Get auxiliary-objects beat task enabled status', tags=['Admin'])
 @api_view(['GET'])
-@permission_classes([IsAuthenticated, HasPerm('acl_runs_aux_objects_admin')])
+@permission_classes([IsAuthenticated])
 def admin_get_aux_objects_task_enabled(request):
+    denied = _aux_objects_admin_denied_response(request)
+    if denied:
+        return denied
     redis_value = _aux_objects_task_enabled_get()
     enabled = redis_value if redis_value is not None else getattr(settings, 'AUX_OBJECTS_ENABLED', False)
     return Response({
@@ -2058,8 +2093,12 @@ def admin_get_aux_objects_task_enabled(request):
 
 @extend_schema(summary='Set auxiliary-objects beat task enabled status', tags=['Admin'])
 @api_view(['POST'])
-@permission_classes([IsAuthenticated, HasPerm('acl_runs_aux_objects_admin')])
+@permission_classes([IsAuthenticated])
 def admin_set_aux_objects_task_enabled(request):
+    _ensure_aux_objects_acl_for_staff()
+    denied = _aux_objects_admin_denied_response(request)
+    if denied:
+        return denied
     enabled = request.data.get('enabled', False)
     if not isinstance(enabled, bool):
         return Response({'detail': 'enabled must be a boolean'}, status=400)

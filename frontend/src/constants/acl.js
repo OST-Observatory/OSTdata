@@ -18,4 +18,5 @@ export const ADMIN_NAV_PERMS = [
   'users.acl_datafiles_link_object', 'acl_datafiles_link_object',
   'users.acl_datafiles_unlink_object', 'acl_datafiles_unlink_object',
   'users.acl_admin_audit_log_view', 'acl_admin_audit_log_view',
+  'users.acl_runs_aux_objects_admin', 'acl_runs_aux_objects_admin',
 ]
