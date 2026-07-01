@@ -502,4 +502,15 @@ export const api = {
     body: JSON.stringify({ enabled }),
   }),
   getObservationRunsForPlateSolving: () => fetchWithAuth('/admin/datafiles/plate-solving/observation-runs/'),
+  getAuxObjectsStats: () => fetchWithAuth('/admin/runs/aux-objects/stats/'),
+  triggerAuxObjects: (payload) => fetchWithAuth('/admin/runs/aux-objects/trigger/', {
+    method: 'POST',
+    body: JSON.stringify(payload || {}),
+  }),
+  triggerAuxObjectsQueue: () => fetchWithAuth('/admin/runs/aux-objects/queue/', { method: 'POST' }),
+  getAuxObjectsTaskEnabled: () => fetchWithAuth('/admin/runs/aux-objects/task-enabled/'),
+  setAuxObjectsTaskEnabled: (enabled) => fetchWithAuth('/admin/runs/aux-objects/task-enabled/set/', {
+    method: 'POST',
+    body: JSON.stringify({ enabled: !!enabled }),
+  }),
 }

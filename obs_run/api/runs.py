@@ -8,6 +8,7 @@ import tempfile
 import zipfile
 
 from django.db import connection, transaction
+from django.conf import settings
 from django.utils.http import http_date
 from django.utils.timezone import make_aware, now as timezone_now
 from rest_framework import viewsets
@@ -19,7 +20,7 @@ from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.parsers import MultiPartParser, FormParser
 from django_filters.rest_framework import DjangoFilterBackend
-from django.db.models import Count, Sum, Q
+from django.db.models import Count, Sum, Q, Max
 from drf_spectacular.utils import extend_schema, OpenApiParameter, extend_schema_view, OpenApiExample
 import logging
 logger = logging.getLogger(__name__)
@@ -237,6 +238,14 @@ class RunViewSet(viewsets.ModelViewSet):
 
     # (replaced by the combined get_queryset above)
 
+    def get_serializer_context(self):
+        ctx = super().get_serializer_context()
+        aux_object = self.request.query_params.get('aux_object')
+        if aux_object:
+            from objects.search import normalize_search_term
+            ctx['aux_object'] = normalize_search_term(str(aux_object))
+        return ctx
+
     def get_serializer_class(self):
         return RunSerializer
 
@@ -248,6 +257,7 @@ class RunViewSet(viewsets.ModelViewSet):
             OpenApiParameter(name='limit', description='Items per page', required=False, type=int),
             OpenApiParameter(name='ordering', description='name|mid_observation_jd|reduction_status (prefix with - for desc)', required=False, type=str),
             OpenApiParameter(name='status', description='Filter by reduction status (NE|PR|FR|ER)', required=False, type=str),
+            OpenApiParameter(name='aux_object', description='Filter runs whose cached SIMBAD auxiliary objects match this name', required=False, type=str),
         ],
     )
     def list(self, request, *args, **kwargs):
@@ -269,7 +279,6 @@ class RunViewSet(viewsets.ModelViewSet):
                 queryset = queryset.order_by('mid_observation_jd')
         try:
             from obs_run.models import ObservationRun, DataFile  # local import safe
-            from django.db.models import Max
             latest_run_hist = ObservationRun.history.aggregate(m=Max('history_date'))['m']
             latest_df_hist = DataFile.history.aggregate(m=Max('history_date'))['m']
             count = queryset.count()
@@ -303,7 +312,6 @@ class RunViewSet(viewsets.ModelViewSet):
                 resp['ETag'] = etag
             # Prefer the latest of run/file histories if available
             try:
-                from django.db.models import Max
                 from obs_run.models import ObservationRun, DataFile
                 latest_run_hist = ObservationRun.history.aggregate(m=Max('history_date'))['m']
                 latest_df_hist = DataFile.history.aggregate(m=Max('history_date'))['m']
@@ -324,7 +332,6 @@ class RunViewSet(viewsets.ModelViewSet):
         try:
             hist = instance.history.order_by('-history_date').values_list('history_date', flat=True).first()
             # Also include latest change of any related DataFile to avoid stale detail responses
-            from django.db.models import Max
             from obs_run.models import DataFile
             df_hist = DataFile.history.filter(observation_run=instance).aggregate(m=Max('history_date'))['m']
             latest_any = max([d for d in [hist, df_hist] if d is not None], default=None)
@@ -796,7 +803,6 @@ def parse_fits_header(request):
         header = None
         # Try to use BytesIO first (more efficient, no temp file)
         try:
-            from io import BytesIO
             file_obj = BytesIO(file_bytes)
             # Read header directly from BytesIO
             header = fits.getheader(file_obj, 0, ignore_missing_simple=True)
@@ -804,7 +810,6 @@ def parse_fits_header(request):
         except Exception as bytesio_error:
             # Fallback to temporary file if BytesIO doesn't work
             logger.warning("BytesIO approach failed, using temp file: %s", bytesio_error)
-            import tempfile
             with tempfile.NamedTemporaryFile(delete=False, suffix='.fits', mode='wb') as tmp_file:
                 tmp_file.write(file_bytes)
                 tmp_path = tmp_file.name
@@ -1031,6 +1036,13 @@ def get_run_aux_objects(request, pk):
     if run.aux_objects_status == ObservationRun.AUX_STATUS_PENDING and not pending_is_stale(run):
         return Response(build_aux_objects_payload(run))
 
+    if getattr(settings, 'AUX_OBJECTS_ENABLED', False):
+        from obs_run.tasks import enqueue_aux_objects_for_run
+        enqueued = enqueue_aux_objects_for_run(run.pk, force=force)
+        if enqueued:
+            run.refresh_from_db()
+            return Response(build_aux_objects_payload(run))
+
     with transaction.atomic():
         run = ObservationRun.objects.select_for_update().get(pk=pk)
         if (
@@ -1042,10 +1054,8 @@ def get_run_aux_objects(request, pk):
         if run.aux_objects_status == ObservationRun.AUX_STATUS_PENDING and not pending_is_stale(run):
             return Response(build_aux_objects_payload(run))
 
-        run.aux_objects_status = ObservationRun.AUX_STATUS_PENDING
-        run.aux_objects_error = ''
-        run.aux_objects_started_at = timezone_now()
-        run.save(update_fields=['aux_objects_status', 'aux_objects_error', 'aux_objects_started_at'])
+        from obs_run.aux_objects import mark_aux_objects_pending
+        mark_aux_objects_pending(run)
 
     try:
         result = compute_aux_objects(run)

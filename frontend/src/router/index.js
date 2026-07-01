@@ -127,6 +127,12 @@ const routes = [
     meta: { requiresAuth: true, requiresAnyPerms: ['users.acl_datafiles_plate_solve','acl_datafiles_plate_solve'], title: 'Admin – Plate Solving', description: 'Manage plate solving for data files.' }
   },
   {
+    path: '/admin/aux-objects',
+    name: 'admin-aux-objects',
+    component: () => import('@/views/admin/AdminAuxObjects.vue'),
+    meta: { requiresAuth: true, requiresAnyPerms: ['users.acl_runs_aux_objects_admin','acl_runs_aux_objects_admin'], title: 'Admin – Auxiliary Objects', description: 'Bulk SIMBAD auxiliary object lookups for observation runs.' }
+  },
+  {
     path: '/admin/objects',
     name: 'admin-objects',
     component: () => import('@/views/admin/AdminObjects.vue'),

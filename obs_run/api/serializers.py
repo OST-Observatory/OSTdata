@@ -11,6 +11,7 @@ from rest_framework.serializers import (
 from pathlib import Path
 
 from obs_run.models import ObservationRun, DataFile
+from obs_run.search import find_aux_object_search_match
 from tags.models import Tag
 from tags.api.serializers import TagSerializer
 from objects.api.simple_serializers import ObjectSimpleSerializer
@@ -53,6 +54,7 @@ class RunSerializer(ModelSerializer):
     start_time = SerializerMethodField()
     end_time = SerializerMethodField()
     objects = SerializerMethodField()
+    search_match_via_aux = SerializerMethodField()
 
     owner = ReadOnlyField(source='added_by.username')
 
@@ -82,6 +84,7 @@ class RunSerializer(ModelSerializer):
             'start_time',
             'end_time',
             'objects',
+            'search_match_via_aux',
             'mid_observation_jd',
             'is_public',
             # Override flags (read-only for normal users, editable for admins)
@@ -268,6 +271,12 @@ class RunSerializer(ModelSerializer):
     def get_objects(self, obj):
         objects = ObjectSimpleSerializer(obj.object_set.all(), many=True).data
         return objects
+
+    def get_search_match_via_aux(self, obj):
+        aux_search = self.context.get('aux_object')
+        if not aux_search:
+            return None
+        return find_aux_object_search_match(obj, aux_search)
 
 
 ################################################################################

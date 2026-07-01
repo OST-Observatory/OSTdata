@@ -24,6 +24,7 @@ from django.db.models import F, ExpressionWrapper, DecimalField, FloatField, Cas
 os.environ["DJANGO_SETTINGS_MODULE"] = "ostdata.settings"
 django.setup()
 
+from django.conf import settings
 from objects.models import Object
 from obs_run.models import ObservationRun, DataFile
 from obs_run.utils import should_allow_auto_update, object_has_any_override
@@ -465,8 +466,6 @@ def get_observatory_location(data_file):
     EarthLocation or None
         EarthLocation object if valid coordinates found, None otherwise
     """
-    from django.conf import settings
-    
     latitude = None
     longitude = None
     elevation = 0.0
@@ -1308,7 +1307,6 @@ def add_new_data_file(path_to_file, observation_run, print_to_terminal=False):
     #   ML-based exposure type classification (if enabled) - run before evaluate_data_file
     #   so effective_exposure_type can consider ML result for object association
     try:
-        from django.conf import settings
         if getattr(settings, 'ML_EXPOSURE_TYPE_ENABLED', False):
             from obs_run.ml_classification import ExposureTypeClassifier
             classifier = ExposureTypeClassifier()

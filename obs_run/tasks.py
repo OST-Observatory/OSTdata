@@ -1071,7 +1071,6 @@ def plate_solve_pending_files(self):
     """
     from django.db.models import Q, Case, When, Value, F
     from django.db.models import CharField
-    from pathlib import Path
     
     try:
         from adminops.redis_helpers import plate_solving_task_enabled_get
@@ -1251,5 +1250,158 @@ def re_evaluate_plate_solved_files(self):
     _health_set('re_evaluate_plate_solved_files', result)
     if evaluated or errors:
         logger.info(f"Re-evaluation of plate-solved files: {result}")
+    return result
+
+
+def _aux_objects_task_enabled() -> bool:
+    try:
+        from adminops.redis_helpers import aux_objects_task_enabled_get
+        redis_enabled = aux_objects_task_enabled_get()
+        if redis_enabled is not None:
+            return bool(redis_enabled)
+    except Exception:
+        pass
+    return bool(getattr(settings, 'AUX_OBJECTS_ENABLED', False))
+
+
+def _run_aux_objects_compute(run_id: int, *, force: bool = False) -> dict:
+    from obs_run.aux_objects import (
+        compute_aux_objects,
+        save_aux_objects_result,
+    )
+
+    try:
+        run = ObservationRun.objects.get(pk=run_id)
+    except ObservationRun.DoesNotExist:
+        return {'run_id': run_id, 'skipped': True, 'reason': 'not_found'}
+
+    if not run.photometry:
+        return {'run_id': run_id, 'skipped': True, 'reason': 'not_photometry'}
+
+    if not force and run.aux_objects_status == ObservationRun.AUX_STATUS_READY and run.aux_objects_computed_at:
+        return {'run_id': run_id, 'skipped': True, 'reason': 'already_ready'}
+
+    try:
+        result = compute_aux_objects(run)
+        save_aux_objects_result(
+            run,
+            objects=result['objects'],
+            meta=result['meta'],
+            status=ObservationRun.AUX_STATUS_READY,
+        )
+        return {
+            'run_id': run_id,
+            'ok': True,
+            'object_count': len(result.get('objects') or []),
+            'simbad_query_count': (result.get('meta') or {}).get('simbad_query_count', 0),
+        }
+    except Exception as exc:
+        logger.exception('aux objects compute failed for run %s: %s', run_id, exc)
+        save_aux_objects_result(
+            run,
+            objects=[],
+            meta={},
+            status=ObservationRun.AUX_STATUS_ERROR,
+            error=str(exc),
+        )
+        return {'run_id': run_id, 'ok': False, 'error': str(exc)}
+
+
+@shared_task(bind=True, max_retries=1, default_retry_delay=120)
+def compute_aux_objects_for_run(self, run_id: int, force: bool = False):
+    """Compute and cache SIMBAD auxiliary objects for a single observation run."""
+    try:
+        result = _run_aux_objects_compute(run_id, force=force)
+        if not result.get('ok') and not result.get('skipped'):
+            raise RuntimeError(result.get('error') or 'aux objects compute failed')
+        _health_set('compute_aux_objects_for_run', result)
+        return result
+    except Exception as exc:
+        _health_error('compute_aux_objects_for_run', exc)
+        raise
+
+
+def enqueue_aux_objects_for_run(run_id: int, *, force: bool = False) -> bool:
+    """Mark run pending and enqueue Celery task. Returns True when enqueued."""
+    from django.db import transaction
+    from obs_run.aux_objects import mark_aux_objects_pending, should_enqueue_aux_objects_for_run
+
+    if not getattr(settings, 'AUX_OBJECTS_ENABLED', False):
+        return False
+
+    try:
+        run = ObservationRun.objects.get(pk=run_id)
+    except ObservationRun.DoesNotExist:
+        return False
+
+    if not should_enqueue_aux_objects_for_run(run, force=force):
+        return False
+
+    with transaction.atomic():
+        run = ObservationRun.objects.select_for_update().get(pk=run_id)
+        if not should_enqueue_aux_objects_for_run(run, force=force):
+            return False
+        mark_aux_objects_pending(run)
+
+    if getattr(settings, 'CELERY_TASK_ALWAYS_EAGER', False):
+        compute_aux_objects_for_run(run_id, force=force)
+    else:
+        compute_aux_objects_for_run.delay(run_id, force=force)
+    return True
+
+
+@shared_task(bind=True, max_retries=2, default_retry_delay=60)
+def process_aux_objects_queue(self):
+    """
+    Periodic task: enqueue auxiliary-object SIMBAD lookups for runs that need them.
+
+    Includes runs without cached aux objects and runs whose WCS was updated after
+    the last aux-objects computation.
+    """
+    if not _aux_objects_task_enabled():
+        return {'skipped': True, 'reason': 'disabled'}
+
+    from obs_run.aux_objects import query_runs_for_aux_objects, query_runs_with_outdated_aux_after_wcs
+
+    batch_size = int(getattr(settings, 'AUX_OBJECTS_BATCH_SIZE', 5))
+    require_wcs = True
+
+    missing_ids = list(
+        query_runs_for_aux_objects(mode='missing', require_wcs=require_wcs, force=False)
+        .values_list('pk', flat=True)[:batch_size]
+    )
+    remaining = max(0, batch_size - len(missing_ids))
+    outdated_ids = []
+    if remaining:
+        outdated_ids = list(
+            query_runs_with_outdated_aux_after_wcs().values_list('pk', flat=True)[:remaining]
+        )
+
+    run_ids = []
+    seen = set()
+    for pk in list(missing_ids) + list(outdated_ids):
+        if pk not in seen:
+            seen.add(pk)
+            run_ids.append(pk)
+
+    enqueued = 0
+    skipped = 0
+    for run_id in run_ids:
+        force = run_id in outdated_ids
+        if enqueue_aux_objects_for_run(run_id, force=force):
+            enqueued += 1
+        else:
+            skipped += 1
+
+    result = {
+        'candidates': len(run_ids),
+        'enqueued': enqueued,
+        'skipped': skipped,
+        'missing_count': len(missing_ids),
+        'outdated_wcs_count': len(outdated_ids),
+    }
+    _health_set('process_aux_objects_queue', result)
+    if enqueued:
+        logger.info('Aux objects queue: %s', result)
     return result
 

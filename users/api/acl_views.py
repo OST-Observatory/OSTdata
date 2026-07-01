@@ -47,6 +47,7 @@ ACL_PERMISSIONS = [
     ('acl_datafiles_link_object', 'Data files: link to object'),
     ('acl_datafiles_unlink_object', 'Data files: unlink from objects'),
     ('acl_run_datafiles_bulk_admin', 'Runs: re-evaluate all datafiles'),
+    ('acl_runs_aux_objects_admin', 'Runs: auxiliary SIMBAD objects (admin)'),
     # Observation run detail page
     ('acl_run_detail_clear_overrides', 'Runs Detail: clear run override flags'),
     ('acl_run_detail_edit_obs_type', 'Runs Detail: edit observation type'),
@@ -68,6 +69,7 @@ _NEW_STAFF_DATAFILE_TOOLS = {
     'acl_datafiles_plate_solve', 'acl_datafiles_reevaluate', 'acl_datafiles_clear_overrides',
     'acl_datafiles_exposure_type_user', 'acl_datafiles_spectrograph', 'acl_datafiles_link_object',
     'acl_datafiles_unlink_object', 'acl_run_datafiles_bulk_admin',
+    'acl_runs_aux_objects_admin',
     'acl_run_detail_clear_overrides', 'acl_run_detail_edit_obs_type',
     'acl_run_detail_edit_notes', 'acl_run_detail_edit_tags',
     'acl_object_detail_edit_basic', 'acl_object_detail_edit_notes', 'acl_object_detail_edit_tags',

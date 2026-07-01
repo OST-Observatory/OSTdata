@@ -1,12 +1,13 @@
 from django.core.management.base import BaseCommand, CommandError
 import logging
 
+logger = logging.getLogger(__name__)
+
 
 class Command(BaseCommand):
     help = "Start the filesystem watcher to ingest observation data."
 
     def handle(self, *args, **options):
-        logger = logging.getLogger(__name__)
         try:
             try:
                 # Prefer local module path when running from project root

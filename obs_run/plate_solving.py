@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Dict, Optional, List
 
 from django.conf import settings
+from django.utils import timezone
 
 logger = logging.getLogger(__name__)
 
@@ -469,6 +470,28 @@ class PlateSolvingService:
         return min_radius, max_radius
 
 
+def _maybe_enqueue_aux_objects_after_wcs(datafile) -> None:
+    """Schedule aux-object SIMBAD lookup when a new plate solution was saved."""
+    if not getattr(settings, 'AUX_OBJECTS_AUTO_ON_WCS', True):
+        return
+    if not getattr(settings, 'AUX_OBJECTS_ENABLED', False):
+        return
+
+    run = getattr(datafile, 'observation_run', None)
+    if not run or not run.photometry:
+        return
+
+    try:
+        from obs_run.tasks import enqueue_aux_objects_for_run
+        enqueue_aux_objects_for_run(run.pk, force=True)
+    except Exception as exc:
+        logger.warning(
+            'Failed to enqueue aux objects for run %s after WCS update: %s',
+            run.pk,
+            exc,
+        )
+
+
 def solve_and_update_datafile(datafile, service=None, save=True):
     """
     Attempt to plate solve a DataFile and update it with the solution.
@@ -490,12 +513,6 @@ def solve_and_update_datafile(datafile, service=None, save=True):
             - 'error': str or None - Error message if failed
             - 'tool': str or None - Tool name if succeeded
     """
-    from pathlib import Path
-    from django.utils import timezone
-    import logging
-    
-    logger = logging.getLogger(__name__)
-    
     if service is None:
         service = PlateSolvingService()
     
@@ -580,7 +597,8 @@ def solve_and_update_datafile(datafile, service=None, save=True):
             if save:
                 from ostdata.history_reason import REASON_TASK_PLATE_SOLVE, save_with_reason
                 save_with_reason(datafile, REASON_TASK_PLATE_SOLVE)
-            
+                _maybe_enqueue_aux_objects_after_wcs(datafile)
+
             return {
                 'success': True,
                 'error': None,

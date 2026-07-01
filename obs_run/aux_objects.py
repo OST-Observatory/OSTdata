@@ -11,11 +11,13 @@ import numpy as np
 from astropy.coordinates import SkyCoord
 from astropy.coordinates.angles import Angle
 from django.conf import settings
+from django.db.models import F, Q
 from django.utils import timezone
 
 from objects.models import Object
 from obs_run.models import DataFile, ObservationRun
 from obs_run.wcs_utils import build_wcs_from_datafile, filter_table_to_footprint
+from obs_run.simbad_rate_limit import wait_for_aux_simbad_query_slot
 from utilities import (
     _query_region_safe,
     _radius_str_from_arcmin,
@@ -50,6 +52,74 @@ def _cluster_min_separation_deg() -> float:
     """Minimum threshold (deg) so dithered frames within one field still cluster."""
     arcmin = float(getattr(settings, 'AUX_OBJECTS_CLUSTER_MIN_ARCMIN', 2.0))
     return arcmin / 60.0
+
+
+def _light_fits_filter_q(*, require_plate_solved: bool):
+    q = Q(datafile__file_type='FITS') & get_effective_exposure_type_filter('LI', 'datafile__')
+    if require_plate_solved:
+        return q & Q(
+            datafile__plate_solved=True,
+            datafile__wcs_ra__isnull=False,
+        ) & ~Q(datafile__wcs_ra=-1)
+    return q & (
+        Q(datafile__plate_solved=True, datafile__wcs_ra__isnull=False)
+        | Q(datafile__ra__isnull=False)
+    ) & ~Q(datafile__ra=-1)
+
+
+def mark_aux_objects_pending(run: ObservationRun) -> None:
+    run.aux_objects_status = ObservationRun.AUX_STATUS_PENDING
+    run.aux_objects_error = ''
+    run.aux_objects_started_at = timezone.now()
+    run.save(update_fields=['aux_objects_status', 'aux_objects_error', 'aux_objects_started_at'])
+
+
+def query_runs_for_aux_objects(
+    *,
+    mode: str = 'missing',
+    require_wcs: bool = True,
+    force: bool = False,
+    run_ids: list[int] | None = None,
+):
+    """
+    Return observation runs eligible for auxiliary-object SIMBAD lookup.
+
+    mode: 'missing' (no successful cache), 'all', or 'selected' (requires run_ids).
+    """
+    qs = ObservationRun.objects.filter(photometry=True)
+    qs = qs.filter(_light_fits_filter_q(require_plate_solved=require_wcs)).distinct()
+
+    if run_ids is not None:
+        qs = qs.filter(pk__in=run_ids)
+
+    if mode == 'missing' or (mode == 'all' and not force):
+        qs = qs.exclude(
+            aux_objects_status=ObservationRun.AUX_STATUS_READY,
+            aux_objects_computed_at__isnull=False,
+        )
+    return qs.order_by('pk')
+
+
+def query_runs_with_outdated_aux_after_wcs():
+    """Runs whose plate-solved WCS is newer than the last aux-objects computation."""
+    qs = ObservationRun.objects.filter(photometry=True)
+    qs = qs.filter(_light_fits_filter_q(require_plate_solved=True)).distinct()
+    qs = qs.filter(aux_objects_computed_at__isnull=False)
+    qs = qs.filter(
+        datafile__plate_solved=True,
+        datafile__plate_solve_attempted_at__gt=F('aux_objects_computed_at'),
+    )
+    return qs.distinct().order_by('pk')
+
+
+def should_enqueue_aux_objects_for_run(run: ObservationRun, *, force: bool = False) -> bool:
+    if not run.photometry:
+        return False
+    if not force and run.aux_objects_status == ObservationRun.AUX_STATUS_READY and run.aux_objects_computed_at:
+        return False
+    if run.aux_objects_status == ObservationRun.AUX_STATUS_PENDING and not pending_is_stale(run):
+        return False
+    return True
 
 
 def _light_fits_queryset(run: ObservationRun):
@@ -453,6 +523,7 @@ def compute_aux_objects(run: ObservationRun) -> dict[str, Any]:
 
         center_ra, center_dec, fov_x, fov_y, radius_deg = get_lookup_center_and_fov(rep)
         simbad_radius_str = _radius_str_from_arcmin(radius_deg * 60.0)
+        wait_for_aux_simbad_query_slot()
         result_table = _query_region_safe(
             center_ra,
             center_dec,

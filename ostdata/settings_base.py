@@ -188,6 +188,10 @@ AUX_OBJECTS_ROW_LIMIT = env.int('AUX_OBJECTS_ROW_LIMIT', default=100)
 AUX_OBJECTS_CLUSTER_SEPARATION_DEG = env.float('AUX_OBJECTS_CLUSTER_SEPARATION_DEG', default=1.0)
 AUX_OBJECTS_CLUSTER_FOV_FRACTION = env.float('AUX_OBJECTS_CLUSTER_FOV_FRACTION', default=0.5)
 AUX_OBJECTS_CLUSTER_MIN_ARCMIN = env.float('AUX_OBJECTS_CLUSTER_MIN_ARCMIN', default=2.0)
+AUX_OBJECTS_ENABLED = env.bool('AUX_OBJECTS_ENABLED', default=False)
+AUX_OBJECTS_SIMBAD_MIN_INTERVAL_SECONDS = env.float('AUX_OBJECTS_SIMBAD_MIN_INTERVAL_SECONDS', default=10.0)
+AUX_OBJECTS_BATCH_SIZE = env.int('AUX_OBJECTS_BATCH_SIZE', default=5)
+AUX_OBJECTS_AUTO_ON_WCS = env.bool('AUX_OBJECTS_AUTO_ON_WCS', default=True)
 
 # Celery
 from celery.schedules import crontab
@@ -263,6 +267,13 @@ if PLATE_SOLVING_ENABLED:
     CELERY_BEAT_SCHEDULE['re_evaluate_plate_solved_files'] = {
         'task': 'obs_run.tasks.re_evaluate_plate_solved_files',
         'schedule': crontab(minute=0, hour='*/2'),  # Every 2 hours
+        'args': (),
+    }
+
+if AUX_OBJECTS_ENABLED:
+    CELERY_BEAT_SCHEDULE['process_aux_objects_queue'] = {
+        'task': 'obs_run.tasks.process_aux_objects_queue',
+        'schedule': crontab(minute='*/15'),
         'args': (),
     }
 

@@ -167,6 +167,17 @@ const adminTiles = [
     ariaLabel: 'Open Plate Solving',
     featured: true,
   },
+  {
+    title: 'Auxiliary Objects',
+    description: 'Bulk SIMBAD field lookups and background queue for observation runs.',
+    icon: 'mdi-star-circle-outline',
+    avatarColor: 'deep-orange',
+    to: '/admin/aux-objects',
+    actionLabel: 'Open Auxiliary Objects',
+    actionIcon: 'mdi-arrow-right',
+    ariaLabel: 'Open Auxiliary Objects admin',
+    featured: true,
+  },
 ]
 </script>
 

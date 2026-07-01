@@ -5,6 +5,7 @@ import sys
 import time as _time
 
 from django.db import connection, transaction
+from django.conf import settings
 from django.utils import timezone
 from django.utils.http import http_date
 from rest_framework.decorators import api_view, permission_classes
@@ -77,6 +78,8 @@ from obs_run.tasks import (
     unlink_non_light_datafiles_from_objects,
     plate_solve_pending_files,
     re_evaluate_plate_solved_files,
+    process_aux_objects_queue,
+    enqueue_aux_objects_for_run,
 )
 from ostdata.services.health import gather_admin_health
 from obs_run.models import ObservationRun, DataFile
@@ -103,7 +106,6 @@ _BANNER_REDIS_KEY = 'site:banner'
 
 def _get_redis_from_broker():
     try:
-        from django.conf import settings
         broker = getattr(settings, 'CELERY_BROKER_URL', '')
         if broker.startswith('redis') and _redis:
             from urllib.parse import urlparse
@@ -158,6 +160,8 @@ def _banner_clear():
 from adminops.redis_helpers import (
     plate_solving_task_enabled_get as _plate_solving_task_enabled_get,
     plate_solving_task_enabled_set as _plate_solving_task_enabled_set,
+    aux_objects_task_enabled_get as _aux_objects_task_enabled_get,
+    aux_objects_task_enabled_set as _aux_objects_task_enabled_set,
 )
 
 
@@ -1654,7 +1658,6 @@ def admin_plate_solve_stats(request):
 @permission_classes([IsAuthenticated])
 def admin_get_plate_solving_task_enabled(request):
     """Get plate solving task enabled status. Redis override takes precedence over settings."""
-    from django.conf import settings
     redis_value = _plate_solving_task_enabled_get()
     enabled = redis_value if redis_value is not None else getattr(settings, 'PLATE_SOLVING_ENABLED', False)
     return Response({
@@ -1728,7 +1731,6 @@ def _do_re_evaluate_datafiles(queryset):
     """
     from astropy.coordinates import SkyCoord
     import astropy.units as u
-    from django.conf import settings
 
     threshold_arcmin = getattr(settings, 'PLATE_SOLVING_RE_EVAL_COORD_THRESHOLD_ARCMIN', 5.0)
     evaluated = 0
@@ -1950,4 +1952,119 @@ def admin_unlink_datafiles_from_objects(request):
         'runs_updated': len(runs_updated),
     })
 
+
+@extend_schema(summary='Auxiliary objects statistics', tags=['Admin'])
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, HasPerm('acl_runs_aux_objects_admin')])
+def admin_aux_objects_stats(request):
+    from obs_run.aux_objects import _light_fits_filter_q
+
+    photometry_qs = ObservationRun.objects.filter(photometry=True)
+    with_wcs_qs = photometry_qs.filter(_light_fits_filter_q(require_plate_solved=True)).distinct()
+    eligible_qs = with_wcs_qs
+    stats = {
+        'enabled': bool(getattr(settings, 'AUX_OBJECTS_ENABLED', False)),
+        'photometry_runs': photometry_qs.count(),
+        'with_wcs': with_wcs_qs.count(),
+        'ready': eligible_qs.filter(aux_objects_status=ObservationRun.AUX_STATUS_READY).count(),
+        'pending': eligible_qs.filter(aux_objects_status=ObservationRun.AUX_STATUS_PENDING).count(),
+        'error': eligible_qs.filter(aux_objects_status=ObservationRun.AUX_STATUS_ERROR).count(),
+        'missing': eligible_qs.exclude(
+            aux_objects_status=ObservationRun.AUX_STATUS_READY,
+            aux_objects_computed_at__isnull=False,
+        ).count(),
+    }
+    return Response(stats)
+
+
+@extend_schema(summary='Trigger auxiliary-object SIMBAD lookups', tags=['Admin'])
+@api_view(['POST'])
+@permission_classes([IsAuthenticated, HasPerm('acl_runs_aux_objects_admin')])
+def admin_trigger_aux_objects(request):
+    """
+    Enqueue auxiliary-object computation for observation runs.
+
+    Body:
+      mode: missing | all | selected
+      force: bool (refresh existing results when mode=all)
+      require_wcs: bool (default true)
+      run_ids: list[int] (required for mode=selected)
+    """
+    from obs_run.aux_objects import query_runs_for_aux_objects
+
+    if not getattr(settings, 'AUX_OBJECTS_ENABLED', False):
+        return Response({'detail': 'AUX_OBJECTS_ENABLED is false in settings'}, status=400)
+
+    mode = str(request.data.get('mode') or 'missing').strip().lower()
+    force = bool(request.data.get('force', False))
+    require_wcs = bool(request.data.get('require_wcs', True))
+    run_ids = request.data.get('run_ids')
+
+    if mode == 'selected':
+        if not run_ids or not isinstance(run_ids, list):
+            return Response({'detail': 'run_ids must be a non-empty list for mode=selected'}, status=400)
+        qs = query_runs_for_aux_objects(
+            mode='selected',
+            require_wcs=require_wcs,
+            force=force,
+            run_ids=[int(x) for x in run_ids],
+        )
+    elif mode in ('missing', 'all'):
+        qs = query_runs_for_aux_objects(mode=mode, require_wcs=require_wcs, force=force)
+    else:
+        return Response({'detail': 'mode must be missing, all, or selected'}, status=400)
+
+    enqueued = 0
+    skipped = 0
+    for run in qs.iterator(chunk_size=200):
+        if enqueue_aux_objects_for_run(run.pk, force=force or mode == 'all'):
+            enqueued += 1
+        else:
+            skipped += 1
+
+    return Response({
+        'mode': mode,
+        'force': force,
+        'require_wcs': require_wcs,
+        'candidates': enqueued + skipped,
+        'enqueued': enqueued,
+        'skipped': skipped,
+    }, status=202)
+
+
+@extend_schema(summary='Trigger auxiliary-objects queue processor', tags=['Admin'])
+@api_view(['POST'])
+@permission_classes([IsAuthenticated, HasPerm('acl_runs_aux_objects_admin')])
+def admin_trigger_aux_objects_queue(request):
+    try:
+        res = process_aux_objects_queue.delay()
+        return Response({'enqueued': True, 'task_id': getattr(res, 'id', None)}, status=202)
+    except Exception as e:
+        logger.exception('admin_trigger_aux_objects_queue failed: %s', e)
+        return Response({'enqueued': False, 'error': str(e)}, status=400)
+
+
+@extend_schema(summary='Get auxiliary-objects beat task enabled status', tags=['Admin'])
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, HasPerm('acl_runs_aux_objects_admin')])
+def admin_get_aux_objects_task_enabled(request):
+    redis_value = _aux_objects_task_enabled_get()
+    enabled = redis_value if redis_value is not None else getattr(settings, 'AUX_OBJECTS_ENABLED', False)
+    return Response({
+        'enabled': enabled,
+        'source': 'redis' if redis_value is not None else 'settings',
+    })
+
+
+@extend_schema(summary='Set auxiliary-objects beat task enabled status', tags=['Admin'])
+@api_view(['POST'])
+@permission_classes([IsAuthenticated, HasPerm('acl_runs_aux_objects_admin')])
+def admin_set_aux_objects_task_enabled(request):
+    enabled = request.data.get('enabled', False)
+    if not isinstance(enabled, bool):
+        return Response({'detail': 'enabled must be a boolean'}, status=400)
+    success = _aux_objects_task_enabled_set(enabled)
+    if success:
+        return Response({'enabled': enabled, 'message': 'Auxiliary objects task status updated'})
+    return Response({'detail': 'Failed to update (Redis unavailable)'}, status=500)
 

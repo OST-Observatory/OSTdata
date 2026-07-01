@@ -1,5 +1,8 @@
 from django.apps import AppConfig
 from django.db.models.signals import post_delete, m2m_changed
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class RunConfig(AppConfig):
@@ -37,8 +40,6 @@ class RunConfig(AppConfig):
                         # Object might have been deleted, skip
                         pass
             except Exception as e:
-                import logging
-                logger = logging.getLogger(__name__)
                 logger.warning(f'Error updating photometry/spectroscopy after DataFile deletion: {e}', exc_info=True)
         
         # Signal handler for M2M changes (when DataFile is added/removed from Object)
@@ -71,8 +72,6 @@ class RunConfig(AppConfig):
                         except DataFile.DoesNotExist:
                             pass
             except Exception as e:
-                import logging
-                logger = logging.getLogger(__name__)
                 logger.warning(f'Error updating photometry/spectroscopy after Object-DataFile M2M change: {e}', exc_info=True)
         
         # Register signals

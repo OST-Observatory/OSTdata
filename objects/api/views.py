@@ -1,4 +1,6 @@
 from rest_framework import viewsets, status
+from rest_framework.exceptions import ValidationError
+from typing import cast
 from rest_framework.permissions import IsAuthenticatedOrReadOnly, IsAuthenticated
 from ostdata.permissions import IsAdminOrSuperuser as IsAdminUser
 from rest_framework.response import Response
@@ -9,10 +11,11 @@ from django_filters.rest_framework import DjangoFilterBackend
 
 from objects.models import Object, Identifier
 from django.db import models
-from django.db.models import Count, Q
+from django.db.models import Count, Q, QuerySet
 from rest_framework.decorators import action
 from drf_spectacular.utils import extend_schema, OpenApiParameter
 from django.utils.http import http_date
+from django.shortcuts import get_object_or_404
 
 from .serializers import ObjectListSerializer
 from objects.search import (
@@ -63,6 +66,21 @@ def _perms_required_for_object_patch(data_keys):
     return required
 
 
+class ObjectLookupMixin:
+    """Typed object lookup for DRF viewsets (avoids pyright Never on get_object())."""
+
+    def _fetch_object(self) -> Object:
+        queryset = cast(
+            QuerySet[Object],
+            self.filter_queryset(self.get_queryset()),
+        )
+        lookup_url_kwarg = self.lookup_url_kwarg or self.lookup_field
+        filter_kwargs = {self.lookup_field: self.kwargs[lookup_url_kwarg]}
+        obj = get_object_or_404(queryset, **filter_kwargs)
+        self.check_object_permissions(self.request, obj)
+        return obj
+
+
 class StandardResultsSetPagination(PageNumberPagination):
     page_size = 10
     page_size_query_param = 'limit'
@@ -86,7 +104,7 @@ class StandardResultsSetPagination(PageNumberPagination):
     def get_paginated_response(self, data):
         return super().get_paginated_response(data)
 
-class ObjectViewSet(viewsets.ModelViewSet):
+class ObjectViewSet(ObjectLookupMixin, viewsets.ModelViewSet):
     """
         Returns a list of all objects in the database
     """
@@ -118,11 +136,11 @@ class ObjectViewSet(viewsets.ModelViewSet):
         return True
 
     def get_queryset(self):
-        queryset = super().get_queryset().prefetch_related('tags', 'observation_run', 'datafiles')
-        ordering = self.request.query_params.get('ordering', '')
-        
+        queryset = self.queryset.all().prefetch_related('tags', 'observation_run', 'datafiles')
+        ordering_param = (self.request.query_params.get('ordering') or '').strip()
+
         # Handle last_modified sorting using history
-        if ordering == 'last_modified':
+        if ordering_param == 'last_modified':
             return queryset.annotate(
                 last_modified=models.Subquery(
                     Object.history.filter(
@@ -130,7 +148,7 @@ class ObjectViewSet(viewsets.ModelViewSet):
                     ).order_by('-history_date').values('history_date')[:1]
                 )
             ).order_by('last_modified')
-        elif ordering == '-last_modified':
+        if ordering_param == '-last_modified':
             return queryset.annotate(
                 last_modified=models.Subquery(
                     Object.history.filter(
@@ -138,7 +156,7 @@ class ObjectViewSet(viewsets.ModelViewSet):
                     ).order_by('-history_date').values('history_date')[:1]
                 )
             ).order_by('-last_modified')
-        
+
         # Public-only for anonymous users; for authenticated users without explicit permission, hide private
         user = self.request.user
         if user.is_anonymous:
@@ -213,9 +231,15 @@ class ObjectViewSet(viewsets.ModelViewSet):
         apply_history_reason(instance, REASON_API_OBJECT_CREATE)
 
     def update(self, request, *args, **kwargs):
-        instance = self.get_object()
-        serializer = self.get_serializer(instance, data=request.data)
-        serializer.is_valid(raise_exception=True)
+        instance = self._fetch_object()
+        serializer = ObjectListSerializer(
+            instance,
+            data=request.data,
+            context=self.get_serializer_context(),
+        )
+        serializer.is_valid()
+        if serializer.errors:
+            raise ValidationError(serializer.errors)
         if not self._check_object_patch_permissions(request.user, serializer.validated_data):
             return Response({'detail': 'Forbidden'}, status=status.HTTP_403_FORBIDDEN)
         
@@ -244,9 +268,16 @@ class ObjectViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
 
     def partial_update(self, request, *args, **kwargs):
-        instance = self.get_object()
-        serializer = self.get_serializer(instance, data=request.data, partial=True)
-        serializer.is_valid(raise_exception=True)
+        instance = self._fetch_object()
+        serializer = ObjectListSerializer(
+            instance,
+            data=request.data,
+            partial=True,
+            context=self.get_serializer_context(),
+        )
+        serializer.is_valid()
+        if serializer.errors:
+            raise ValidationError(serializer.errors)
         if not self._check_object_patch_permissions(request.user, serializer.validated_data):
             return Response({'detail': 'Forbidden'}, status=status.HTTP_403_FORBIDDEN)
         
@@ -482,7 +513,7 @@ class VuetifyDataTablePagination(PageNumberPagination):
             'itemsPerPage': self.page_size
         })
 
-class ObjectVuetifyViewSet(viewsets.ModelViewSet):
+class ObjectVuetifyViewSet(ObjectLookupMixin, viewsets.ModelViewSet):
     """
     ViewSet specifically designed for v-data-table integration
     """
@@ -502,7 +533,7 @@ class ObjectVuetifyViewSet(viewsets.ModelViewSet):
             return False
 
     def get_queryset(self):
-        queryset = super().get_queryset().prefetch_related('tags', 'observation_run', 'datafiles')
+        queryset = self.queryset.all().prefetch_related('tags', 'observation_run', 'datafiles')
         
         # Handle search parameter (object name + identifier aliases)
         search = self.request.query_params.get('search', None)
@@ -624,7 +655,7 @@ class ObjectVuetifyViewSet(viewsets.ModelViewSet):
     @extend_schema(summary='Retrieve object', description='Get an object by ID.')
     def retrieve(self, request, *args, **kwargs):
         """Detail with conditional GET headers."""
-        instance = self.get_object()
+        instance = self._fetch_object()
         try:
             hist = instance.history.order_by('-history_date').values_list('history_date', flat=True).first()
         except Exception:

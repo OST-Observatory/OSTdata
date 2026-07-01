@@ -4,7 +4,7 @@
       <v-col cols="12" class="mb-4">
         <h1 class="text-h4 mb-2">Overwhelmingly Small Telescope Data Archive</h1>
         <p class="text-body-1 mb-2">
-          Explore the plethora of observations made with the telescopes of the Overwhelmingly Small Telescope (OST) Observatory at the University of Potsdam. Search by object name, alias (identifier), or sky coordinates to quickly jump into details.
+          Explore the plethora of observations made with the telescopes of the Overwhelmingly Small Telescope (OST) Observatory at the University of Potsdam. Search by object name, alias, or sky coordinates to quickly jump into details.
         </p>
       </v-col>
     </v-row>
@@ -113,9 +113,14 @@
               class="custom-table"
             >
               <template #item.name="{ item }">
-                <router-link :to="`/observation-runs/${item.pk || item.id}`" class="text-decoration-none text-primary table-link cell-truncate">
-                  {{ item.name }}
-                </router-link>
+                <div>
+                  <router-link :to="`/observation-runs/${item.pk || item.id}`" class="text-decoration-none text-primary table-link cell-truncate">
+                    {{ item.name }}
+                  </router-link>
+                  <div v-if="item.search_match_via_aux" class="text-caption text-medium-emphasis">
+                    via auxiliary object {{ item.search_match_via_aux }}
+                  </div>
+                </div>
               </template>
               <template #item.date="{ item }">
                 <template v-if="item.mid_observation_jd && item.mid_observation_jd > 0">
@@ -228,6 +233,28 @@ const runHeaders = [
   { title: 'Status', key: 'status' },
 ]
 
+const extractRunList = (value) => {
+  if (Array.isArray(value?.results)) return value.results
+  if (Array.isArray(value?.items)) return value.items
+  if (Array.isArray(value)) return value
+  return []
+}
+
+const mergeRunsById = (...groups) => {
+  const merged = []
+  const seen = new Set()
+  for (const group of groups) {
+    for (const x of group || []) {
+      const id = x?.pk || x?.id
+      if (id && !seen.has(id)) {
+        seen.add(id)
+        merged.push(x)
+      }
+    }
+  }
+  return merged
+}
+
 const doSearch = async () => {
   error.value = ''
   searching.value = true
@@ -240,12 +267,20 @@ const doSearch = async () => {
       const { raDeg, decDeg, radiusArcsec } = parsed
       const res = await api.getObjectsVuetify({ page: 1, itemsPerPage: 50, ra: raDeg, dec: decDeg, radius: radiusArcsec })
       objects.value = res.items || []
-      await fetchRunsForObjects(objects.value)
+      runs.value = await fetchRunsForObjects(objects.value)
     } else {
       const search = String(query.value || '').trim()
-      const res = await api.getObjectsVuetify({ page: 1, itemsPerPage: 50, search })
+      const requests = [
+        api.getObjectsVuetify({ page: 1, itemsPerPage: 50, search }),
+      ]
+      if (search) {
+        requests.push(api.getObservationRuns({ page: 1, limit: 200, aux_object: search }))
+      }
+      const [res, auxRunsRes] = await Promise.all(requests)
       objects.value = res.items || []
-      await fetchRunsForObjects(objects.value)
+      const auxRuns = auxRunsRes ? extractRunList(auxRunsRes) : []
+      const targetRuns = await fetchRunsForObjects(objects.value)
+      runs.value = mergeRunsById(targetRuns, auxRuns)
     }
   } catch (e) {
     error.value = 'Search failed.'
@@ -261,7 +296,7 @@ const fetchRunsForObjects = async (objs) => {
     const names = Array.from(new Set(
       (objs || []).flatMap(o => [o?.name, o?.search_match_via].filter(Boolean)),
     ))
-    if (names.length === 0) { runs.value = []; return }
+    if (names.length === 0) { return [] }
     // Fetch in batches to avoid too many requests
     const take = names.slice(0, 10)
     const promises = take.map(n => api.getObservationRuns({ page: 1, limit: 200, target: n }))
@@ -270,17 +305,16 @@ const fetchRunsForObjects = async (objs) => {
     const seen = new Set()
     for (const r of results) {
       if (r.status === 'fulfilled') {
-        const arr = Array.isArray(r.value?.results) ? r.value.results : (Array.isArray(r.value?.items) ? r.value.items : (Array.isArray(r.value) ? r.value : []))
-        for (const x of arr) {
+        for (const x of extractRunList(r.value)) {
           const id = x?.pk || x?.id
           if (id && !seen.has(id)) { seen.add(id); merged.push(x) }
         }
       }
     }
-    runs.value = merged
+    return merged
   } catch (e) {
     console.error(e)
-    runs.value = []
+    return []
   } finally {
     searchingRuns.value = false
   }

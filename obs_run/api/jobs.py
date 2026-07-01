@@ -1,5 +1,7 @@
 import os
+from datetime import timedelta
 from pathlib import Path
+from django.conf import settings
 from django.utils import timezone
 from django.db import transaction
 from rest_framework.decorators import api_view, permission_classes
@@ -241,8 +243,6 @@ def cancel_download_job(request, job_id):
         actor = 'administrator' if can_cancel_any else 'user'
         msg = f'Cancelled by {actor}'
         try:
-            from datetime import timedelta
-            from django.conf import settings
             ttl_hours = int(getattr(settings, 'DOWNLOAD_JOB_TTL_HOURS', 72))
         except Exception:
             ttl_hours = 72
@@ -306,8 +306,6 @@ def batch_cancel_download_jobs(request):
         job.status = 'cancelled'
         job.finished_at = now
         try:
-            from datetime import timedelta
-            from django.conf import settings
             ttl_hours = int(getattr(settings, 'DOWNLOAD_JOB_TTL_HOURS', 72))
         except Exception:
             ttl_hours = 72

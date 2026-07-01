@@ -5,6 +5,7 @@ Supports rate limiting to avoid overloading the server.
 """
 
 from django.core.management.base import BaseCommand
+from django.conf import settings
 from django.db.models import Q
 from django.utils import timezone
 from pathlib import Path
@@ -58,7 +59,6 @@ class Command(BaseCommand):
         # Calculate delay between files (seconds)
         delay_seconds = 60.0 / rate
 
-        from django.conf import settings
         if not getattr(settings, 'PLATE_SOLVING_ENABLED', False):
             self.stdout.write(self.style.WARNING('Plate solving is disabled in settings'))
             return

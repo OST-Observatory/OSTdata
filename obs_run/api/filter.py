@@ -4,6 +4,7 @@ from django.db.models import Count, F, FloatField, ExpressionWrapper, Q
 import re
 
 from obs_run.models import ObservationRun, DataFile
+from obs_run.search import build_run_aux_objects_search_q, find_aux_object_search_match
 from tags.models import Tag
 from utilities import annotate_effective_exposure_type
 
@@ -44,6 +45,11 @@ class RunFilter(filters.FilterSet):
         lookup_expr='icontains',
     )
 
+    #   Auxiliary SIMBAD object name (cached on run)
+    aux_object = filters.CharFilter(
+        method='filter_aux_object',
+    )
+
     #   Observation type filter
     # obs_type = filters.BooleanFilter(
     #     # field_name="photometry",
@@ -78,6 +84,19 @@ class RunFilter(filters.FilterSet):
     #   Target method
     def target_name_icontains(self, queryset, name, value):
         return queryset.filter(object__name__icontains=value)
+
+    def filter_aux_object(self, queryset, name, value):
+        s = (value or '').strip()
+        if not s:
+            return queryset
+        qs = queryset.filter(build_run_aux_objects_search_q(s))
+        matching_pks = []
+        for run in qs.only('pk', 'aux_objects', 'aux_objects_status'):
+            if find_aux_object_search_match(run, s):
+                matching_pks.append(run.pk)
+        if not matching_pks:
+            return queryset.none()
+        return queryset.filter(pk__in=matching_pks)
 
     # #   Observation type method
     # def obs_type_isnull(self, queryset, name, value):

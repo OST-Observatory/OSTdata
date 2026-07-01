@@ -2340,7 +2340,7 @@ const binningOptions = computed(() => {
 }
 
 .aux-objects-body {
-  max-height: 155px;
+  max-height: 138px;
   overflow-y: auto;
 }
 

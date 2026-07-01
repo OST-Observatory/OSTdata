@@ -38,6 +38,11 @@ from .views import (
     admin_get_plate_solving_task_enabled,
     admin_set_plate_solving_task_enabled,
     admin_get_observation_runs_for_plate_solving,
+    admin_aux_objects_stats,
+    admin_trigger_aux_objects,
+    admin_trigger_aux_objects_queue,
+    admin_get_aux_objects_task_enabled,
+    admin_set_aux_objects_task_enabled,
 )
 from objects.api.solar_image_views import (
     admin_delete_solar_system_image,
@@ -93,6 +98,11 @@ urlpatterns = [
     path('datafiles/plate-solving/task-enabled/', admin_get_plate_solving_task_enabled, name='plate_solving_task_enabled'),
     path('datafiles/plate-solving/task-enabled/set/', admin_set_plate_solving_task_enabled, name='set_plate_solving_task_enabled'),
     path('datafiles/plate-solving/observation-runs/', admin_get_observation_runs_for_plate_solving, name='observation_runs_for_plate_solving'),
+    path('runs/aux-objects/stats/', admin_aux_objects_stats, name='aux_objects_stats'),
+    path('runs/aux-objects/trigger/', admin_trigger_aux_objects, name='trigger_aux_objects'),
+    path('runs/aux-objects/queue/', admin_trigger_aux_objects_queue, name='trigger_aux_objects_queue'),
+    path('runs/aux-objects/task-enabled/', admin_get_aux_objects_task_enabled, name='aux_objects_task_enabled'),
+    path('runs/aux-objects/task-enabled/set/', admin_set_aux_objects_task_enabled, name='set_aux_objects_task_enabled'),
 ]
 
 
