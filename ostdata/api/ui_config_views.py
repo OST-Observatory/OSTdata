@@ -22,5 +22,7 @@ def ui_public_config(request):
         {
             'download_job_poll_interval_ms': int(getattr(settings, 'DOWNLOAD_JOB_POLL_INTERVAL_MS', 2000)),
             'download_job_max_wait_ms': int(getattr(settings, 'DOWNLOAD_JOB_MAX_WAIT_MS', 45 * 60 * 1000)),
+            'download_job_max_files': int(getattr(settings, 'DOWNLOAD_JOB_MAX_FILES', 500)),
+            'download_job_max_bytes': int(getattr(settings, 'DOWNLOAD_JOB_MAX_BYTES', 10 * 1024 ** 3)),
         }
     )

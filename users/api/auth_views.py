@@ -130,6 +130,9 @@ def user_info(request):
 @permission_classes([IsAuthenticated])
 def change_password(request):
     """Change password and invalidate the current session (re-login required)."""
+    from django.contrib.auth.password_validation import validate_password
+    from django.core.exceptions import ValidationError as DjangoValidationError
+
     old_password = request.data.get('old_password')
     new_password1 = request.data.get('new_password1')
     new_password2 = request.data.get('new_password2')
@@ -152,9 +155,11 @@ def change_password(request):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    if len(new_password1) < 8:
+    try:
+        validate_password(new_password1, user=request.user)
+    except DjangoValidationError as e:
         return Response(
-            {'error': 'New password must be at least 8 characters long'},
+            {'error': ' '.join(e.messages)},
             status=status.HTTP_400_BAD_REQUEST,
         )
 
@@ -172,3 +177,7 @@ def change_password(request):
             {'error': 'Failed to change password'},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
+
+
+change_password.throttle_classes = [ScopedRateThrottle]
+change_password.throttle_scope = 'password_change'

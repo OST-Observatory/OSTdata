@@ -745,8 +745,9 @@ const downloadFiles = async (ids) => {
     } catch {}
     const job = await api.createBulkDownloadJob(ids, {})
     if (!job?.job_id) throw new Error('Job not created')
-    await pollDownloadJobUntilReady(job.job_id)
-    await api.downloadJobFile(job.job_id)
+    const jobToken = job.job_token || null
+    await pollDownloadJobUntilReady(job.job_id, { jobToken })
+    await api.downloadJobFile(job.job_id, jobToken)
     notify.success('Download started')
   } catch (e) {
     notify.error(e?.message || 'Download failed')

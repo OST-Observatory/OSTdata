@@ -13,7 +13,6 @@ from objects.solar_system_images import (
     ALLOWED_UPLOAD_CONTENT_TYPES,
     delete_image_for_object,
     find_image_path_for_object,
-    get_images_directory,
     image_info_for_object,
     save_image_for_object,
     sanitize_object_image_stem,
@@ -60,7 +59,6 @@ def admin_list_solar_system_images(request):
             'image_url': url,
         })
     return Response({
-        'directory': str(get_images_directory()),
         'items': items,
     })
 
@@ -85,7 +83,14 @@ def admin_upload_solar_system_image(request):
     content_type = (getattr(uploaded, 'content_type', '') or '').lower()
     if content_type and content_type not in ALLOWED_UPLOAD_CONTENT_TYPES:
         return Response({'detail': f'Unsupported image type: {content_type}'}, status=400)
-    path = save_image_for_object(obj, uploaded)
+    try:
+        path = save_image_for_object(obj, uploaded)
+    except Exception as e:
+        from django.core.exceptions import ValidationError
+        if isinstance(e, ValidationError):
+            msg = e.messages[0] if getattr(e, 'messages', None) else str(e)
+            return Response({'detail': msg}, status=400)
+        return Response({'detail': 'Upload failed'}, status=400)
     has_image, url, stem = image_info_for_object(obj, request)
     try:
         from adminops.audit_events import log_audit_event

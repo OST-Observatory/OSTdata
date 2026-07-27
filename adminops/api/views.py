@@ -811,14 +811,12 @@ def admin_trigger_refresh_dashboard_stats(request):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, HasPerm('acl_datafiles_plate_solve')])
 @extend_schema(summary='Trigger plate solving', responses={'202': {'type': 'object'}}, tags=['Admin'])
 def admin_trigger_plate_solve_task(request):
     """
     Manually trigger plate solving for pending files.
     """
-    if not (request.user.is_superuser or request.user.has_perm('users.acl_maintenance_reconcile')):
-        return Response({'detail': 'Forbidden'}, status=403)
     try:
         res = plate_solve_pending_files.delay()
         return Response({'enqueued': True, 'task_id': getattr(res, 'id', None)}, status=202)
@@ -828,7 +826,7 @@ def admin_trigger_plate_solve_task(request):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, HasPerm('acl_datafiles_reevaluate')])
 @extend_schema(
     summary='Re-evaluate plate-solved files',
     description='Re-run object association for plate-solved files where header had no coords or WCS differs from header by > threshold.',
@@ -839,8 +837,6 @@ def admin_trigger_re_evaluate_plate_solved(request):
     """
     Manually trigger re-evaluation of plate-solved files (evaluate_data_file).
     """
-    if not (request.user.is_superuser or request.user.has_perm('users.acl_maintenance_reconcile')):
-        return Response({'detail': 'Forbidden'}, status=403)
     try:
         res = re_evaluate_plate_solved_files.delay()
         return Response({'enqueued': True, 'task_id': getattr(res, 'id', None)}, status=202)
@@ -1557,7 +1553,7 @@ def admin_get_unsolved_plate_files(request):
     parameters=[],
 )
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, HasPerm('acl_datafiles_plate_solve')])
 def admin_get_observation_runs_for_plate_solving(request):
     """
     Get list of observation runs that have Light frames (for plate solving filter dropdown).
@@ -1641,7 +1637,7 @@ def admin_trigger_plate_solve(request):
     parameters=[],
 )
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, HasPerm('acl_datafiles_plate_solve')])
 def admin_plate_solve_stats(request):
     """
     Get plate solving statistics.
@@ -1675,7 +1671,7 @@ def admin_plate_solve_stats(request):
     parameters=[],
 )
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, HasPerm('acl_datafiles_plate_solve')])
 def admin_get_plate_solving_task_enabled(request):
     """Get plate solving task enabled status. Redis override takes precedence over settings."""
     redis_value = _plate_solving_task_enabled_get()
@@ -1691,7 +1687,7 @@ def admin_get_plate_solving_task_enabled(request):
     parameters=[],
 )
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, HasPerm('acl_datafiles_plate_solve')])
 def admin_set_plate_solving_task_enabled(request):
     """Set plate solving task enabled status in Redis. Admins can toggle without restart."""
     enabled = request.data.get('enabled', False)

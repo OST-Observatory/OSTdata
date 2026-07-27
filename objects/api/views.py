@@ -31,13 +31,16 @@ from obs_run.api.serializers import RunSerializer, DataFileSerializer
 from .filter import ObjectFilter
 from utilities import annotate_effective_exposure_type, get_effective_exposure_type_filter
 
-from django.contrib.gis.db.models.functions import Distance
-from django.contrib.gis.geos import Point
-from django.contrib.gis.measure import D
+from ostdata.custom_permissions import (
+    get_allowed_runs_to_view_for_user,
+    get_allowed_run_objects_to_view_for_user,
+    get_object_for_user_or_404,
+)
 from django.db.models import Count, Sum, Q
 
 from astropy.coordinates import SkyCoord
 import astropy.units as u
+
 
 # ===============================================================
 #   OBJECTS
@@ -141,15 +144,15 @@ class ObjectViewSet(ObjectLookupMixin, viewsets.ModelViewSet):
 
         # Handle last_modified sorting using history
         if ordering_param == 'last_modified':
-            return queryset.annotate(
+            queryset = queryset.annotate(
                 last_modified=models.Subquery(
                     Object.history.filter(
                         id=models.OuterRef('id')
                     ).order_by('-history_date').values('history_date')[:1]
                 )
             ).order_by('last_modified')
-        if ordering_param == '-last_modified':
-            return queryset.annotate(
+        elif ordering_param == '-last_modified':
+            queryset = queryset.annotate(
                 last_modified=models.Subquery(
                     Object.history.filter(
                         id=models.OuterRef('id')
@@ -157,13 +160,8 @@ class ObjectViewSet(ObjectLookupMixin, viewsets.ModelViewSet):
                 )
             ).order_by('-last_modified')
 
-        # Public-only for anonymous users; for authenticated users without explicit permission, hide private
-        user = self.request.user
-        if user.is_anonymous:
-            return queryset.filter(is_public=True)
-        if not self._has(user, 'acl_objects_view_private'):
-            return queryset.filter(is_public=True)
-        return queryset
+        from ostdata.custom_permissions import get_allowed_objects_to_view_for_user
+        return get_allowed_objects_to_view_for_user(queryset, self.request.user)
 
     @extend_schema(
         summary='List objects',
@@ -414,8 +412,9 @@ class getObjectRunViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticatedOrReadOnly]
 
     def list(self, request, object_pk):
-        obj = Object.objects.get(pk=object_pk)
-        if request.user.is_anonymous and not obj.is_public:
+        try:
+            obj = get_object_for_user_or_404(request.user, object_pk)
+        except Exception:
             return Response({"detail": "Not found"}, status=404)
         # Annotate counts and totals to match RunListSerializer fields
         queryset = (
@@ -434,6 +433,7 @@ class getObjectRunViewSet(viewsets.ModelViewSet):
                 n_datafiles=Count('datafile'),
             )
         )
+        queryset = get_allowed_runs_to_view_for_user(queryset, request.user)
         serializer = RunSerializer(queryset, many=True)
         return Response(serializer.data)
 
@@ -447,10 +447,14 @@ class getObjectDatafileViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticatedOrReadOnly]
 
     def list(self, request, object_pk):
-        obj = Object.objects.get(pk=object_pk)
-        if request.user.is_anonymous and not obj.is_public:
+        try:
+            obj = get_object_for_user_or_404(request.user, object_pk)
+        except Exception:
             return Response({"detail": "Not found"}, status=404)
-        queryset = obj.datafiles.prefetch_related('object_set').all()
+        queryset = get_allowed_run_objects_to_view_for_user(
+            obj.datafiles.prefetch_related('object_set').all(),
+            request.user,
+        )
         # Optional server-side binning filter from FITS headers
         binning = request.query_params.get('binning')
         if binning:
@@ -627,11 +631,8 @@ class ObjectVuetifyViewSet(ObjectLookupMixin, viewsets.ModelViewSet):
             queryset = queryset.order_by(sort_field)
         
         # Public-only for anonymous; for authenticated without permission, hide private
-        user = self.request.user
-        if user.is_anonymous:
-            queryset = queryset.filter(is_public=True)
-        elif not self._has(user, 'acl_objects_view_private'):
-            queryset = queryset.filter(is_public=True)
+        from ostdata.custom_permissions import get_allowed_objects_to_view_for_user
+        queryset = get_allowed_objects_to_view_for_user(queryset, self.request.user)
 
         return queryset.distinct()  # Ensure we don't get duplicate objects
 

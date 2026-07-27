@@ -117,6 +117,8 @@ REST_FRAMEWORK = {
         'stats': '12/min',
         'jobs': '30/min',
         'login': '10/min',
+        'password_change': '5/min',
+        'thumbnails': '30/min',
     },
     'DATETIME_FORMAT': 'iso-8601',
     'EXCEPTION_HANDLER': 'ostdata.exception_handlers.custom_exception_handler',
@@ -132,10 +134,29 @@ SPECTACULAR_SETTINGS = {
     'COMPONENT_SPLIT_REQUEST': True,
 }
 
+# Canonical archive filesystem root (path jail for downloads/thumbnails/tasks)
+DATA_DIRECTORY = env.path('DATA_DIRECTORY', default=BASE_DIR / 'data' / 'archive')
+
 # Public SPA configuration (exposed via GET /api/ui-config/)
 # Override in .env, e.g. DOWNLOAD_JOB_MAX_WAIT_MS=2700000 (45 min default)
 DOWNLOAD_JOB_POLL_INTERVAL_MS = env.int('DOWNLOAD_JOB_POLL_INTERVAL_MS', default=2000)
 DOWNLOAD_JOB_MAX_WAIT_MS = env.int('DOWNLOAD_JOB_MAX_WAIT_MS', default=45 * 60 * 1000)
+DOWNLOAD_JOB_MAX_FILES = env.int('DOWNLOAD_JOB_MAX_FILES', default=500)
+DOWNLOAD_JOB_MAX_BYTES = env.int('DOWNLOAD_JOB_MAX_BYTES', default=10 * 1024 * 1024 * 1024)  # 10 GiB
+DOWNLOAD_JOB_MAX_CONCURRENT_ANON = env.int('DOWNLOAD_JOB_MAX_CONCURRENT_ANON', default=2)
+DOWNLOAD_JOB_MAX_CONCURRENT_USER = env.int('DOWNLOAD_JOB_MAX_CONCURRENT_USER', default=5)
+DOWNLOAD_JOB_MAX_CONCURRENT_GLOBAL = env.int('DOWNLOAD_JOB_MAX_CONCURRENT_GLOBAL', default=20)
+DOWNLOAD_JOB_MAX_CREATES_PER_HOUR_ANON = env.int('DOWNLOAD_JOB_MAX_CREATES_PER_HOUR_ANON', default=10)
+DOWNLOAD_JOB_MAX_CREATES_PER_HOUR_USER = env.int('DOWNLOAD_JOB_MAX_CREATES_PER_HOUR_USER', default=30)
+DOWNLOAD_JOB_TMP_DIR = env.path(
+    'DOWNLOAD_JOB_TMP_DIR',
+    default=BASE_DIR / 'data' / 'download_jobs',
+)
+
+# Thumbnail / image processing limits
+THUMBNAIL_MAX_SOURCE_BYTES = env.int('THUMBNAIL_MAX_SOURCE_BYTES', default=500 * 1024 * 1024)  # 500 MiB
+THUMBNAIL_MAX_PIXELS = env.int('THUMBNAIL_MAX_PIXELS', default=50_000_000)
+SOLAR_IMAGE_MAX_UPLOAD_BYTES = env.int('SOLAR_IMAGE_MAX_UPLOAD_BYTES', default=10 * 1024 * 1024)  # 10 MiB
 
 LOGIN_URL = '/login'
 LOGIN_REDIRECT_URL = '/'
@@ -302,16 +323,19 @@ CORS_ALLOWED_ORIGINS = [
     "http://127.0.0.1:5173",
 ]
 CORS_ALLOW_CREDENTIALS = True
-CORS_ALLOWED_HEADERS = [
-    'accept', 'accept-encoding', 'authorization', 'content-type', 'dnt',
-    'origin', 'user-agent', 'x-csrftoken', 'x-requested-with',
-]
 
 # Session / CSRF cookies (SECURE flags overridden per environment)
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = 'Lax'
 CSRF_COOKIE_SAMESITE = 'Lax'
+CSRF_COOKIE_HTTPONLY = False  # SPA reads csrfToken from cookie in development; production overrides to True
 SESSION_COOKIE_AGE = env.int('SESSION_COOKIE_AGE', default=1209600)  # 14 days
+
+# CORS: allow download job token header from SPA
+CORS_ALLOWED_HEADERS = [
+    'accept', 'accept-encoding', 'authorization', 'content-type', 'dnt',
+    'origin', 'user-agent', 'x-csrftoken', 'x-requested-with', 'x-download-token',
+]
 
 # Optional LDAP scaffolding
 AUTH_LDAP_SERVER_URI = env.str('LDAP_SERVER_URI', default='')

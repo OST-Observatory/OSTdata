@@ -1,9 +1,11 @@
-
-from django.shortcuts import redirect
 from django.contrib import messages
+from django.http import Http404
+from django.shortcuts import redirect
 from rest_framework import permissions
 
 from obs_run.models import ObservationRun
+from objects.models import Object
+from ostdata.permissions import user_has_acl
 
 
 class IsAllowedOnRun(permissions.BasePermission):
@@ -38,103 +40,109 @@ class IsAllowedOnRun(permissions.BasePermission):
         if (request.method in ['PUT', 'PATCH', 'DELETE'] and not request.user.is_anonymous):
             return request.user.can_edit(subject)
 
-
         return False
 
 
 def get_allowed_run_objects_to_view_for_user(qs, user):
     """
-    Function that will limit the provided queryset to the objects that
-    the provided user can see.
-
-    This filtering is based on the observation runs that the object belongs too.
-    An anonymous user can see objects from all public runs. A logged
-    in user can also see private runs that he/she has viewing rights
-    for.
-
-    (for some reason qs1.union(qs2) can not be used here instead of
-    using th | operator!!!)
+    Limit a DataFile queryset to files the user may see (via run visibility).
     """
-
-    #   Check if the observation run is public
     public = qs.filter(observation_run__is_public__exact=True)
-
-    #   Check if user is logged in ...
     if user.is_anonymous:
-        #   ... return the "public" queryset if not
         return public
-    else:
-        restricted = qs.filter(
-            observation_run__pk__in=user.get_read_model(ObservationRun).values('pk')
-        )
-        if restricted.exists():
-            return public | restricted
-        return public
-#
-#
-# def get_allowed_runs_to_view_for_user(qs, user):
-#     """
-#     Function that will limit the provided queryset to observation runs that
-#     the provided user can see.
-#
-#     An anonymous user can see objects from all public runs. A logged
-#     in user can also see private runs that he/she has viewing rights
-#     for.
-#     """
-#
-#     #   Check if the observation run is public
-#     public = qs.filter(is_public__exact=True)
-#
-#     #   Check if user is logged in ...
-#     if user.is_anonymous:
-#         #   ... return the "public" queryset if not
-#         return public
-#     else:
-#         #   Check if user is allowed to view the observation run ...
-#         restricted = qs.filter(
-#             pk__in=user.get_read_runs().values('pk')
-#             )
-#         if len(restricted) > 0:
-#             #   ... if this is the case return the specific queryset ...
-#             return restricted
-#         else:
-#             #   ... if not, return the public queryset
-#             return public
+    restricted = qs.filter(
+        observation_run__pk__in=user.get_read_model(ObservationRun).values('pk')
+    )
+    if restricted.exists():
+        return public | restricted
+    return public
 
+
+def get_allowed_runs_to_view_for_user(qs, user):
+    """Limit an ObservationRun queryset to runs the user may see."""
+    return get_allowed_model_to_view_for_user(qs, user, ObservationRun)
+
+
+def get_allowed_objects_to_view_for_user(qs, user):
+    """
+    Limit an Object queryset.
+    Anonymous / users without acl_objects_view_private: public only.
+    Users with acl_objects_view_private: all objects.
+    """
+    if getattr(user, 'is_anonymous', True):
+        return qs.filter(is_public=True)
+    if user_has_acl(user, 'acl_objects_view_private'):
+        return qs
+    return qs.filter(is_public=True)
 
 
 def get_allowed_model_to_view_for_user(qs, user, model):
     """
-    Function that will limit the provided queryset to objects that
-    the provided user can see.
-
-    An anonymous user can see objects from all public runs. A logged
-    in user can also see private runs that he/she has viewing rights
-    for.
+    Limit a queryset of models with is_public + per-user read membership
+    (ObservationRun and similar).
     """
-
-    #   Check if the object is public
     public = qs.filter(is_public__exact=True)
-
-    #   Check if user is logged in ...
     if user.is_anonymous:
-        #   ... return the "public" queryset if not
         return public
-    else:
-        restricted = qs.filter(
-            pk__in=user.get_read_model(model).values('pk')
-        )
-        if restricted.exists():
-            return public | restricted
-        return public
+    restricted = qs.filter(
+        pk__in=user.get_read_model(model).values('pk')
+    )
+    if restricted.exists():
+        return public | restricted
+    return public
+
+
+def user_can_view_run(user, run) -> bool:
+    if run is None:
+        return False
+    if getattr(run, 'is_public', False):
+        return True
+    if getattr(user, 'is_anonymous', True):
+        return False
+    try:
+        return bool(user.can_read(run))
+    except Exception:
+        return False
+
+
+def user_can_view_object(user, obj) -> bool:
+    if obj is None:
+        return False
+    if getattr(obj, 'is_public', False):
+        return True
+    if getattr(user, 'is_anonymous', True):
+        return False
+    return user_has_acl(user, 'acl_objects_view_private')
+
+
+def get_run_for_user_or_404(user, pk):
+    """Load ObservationRun by pk if visible; else raise Http404."""
+    try:
+        run = ObservationRun.objects.get(pk=pk)
+    except ObservationRun.DoesNotExist:
+        raise Http404
+    if not user_can_view_run(user, run):
+        raise Http404
+    return run
+
+
+def get_object_for_user_or_404(user, pk):
+    """Load Object by pk if visible; else raise Http404."""
+    try:
+        obj = Object.objects.get(pk=pk)
+    except Object.DoesNotExist:
+        raise Http404
+    if not user_can_view_object(user, obj):
+        raise Http404
+    return obj
+
 
 def check_user_can_view_run(function):
     """
-        Decorator that loads the function if the user is allowed to see the
-        observation run, redirects to login page otherwise.
+    Decorator that loads the function if the user is allowed to see the
+    observation run, redirects to login page otherwise.
     """
     def wrapper(request, *args, **kwargs):
-        user = request.user
         try:
             run = ObservationRun.objects.get(pk=kwargs['run_id'])
         except Exception:

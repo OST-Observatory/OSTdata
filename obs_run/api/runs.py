@@ -9,6 +9,7 @@ import zipfile
 
 from django.db import connection, transaction
 from django.conf import settings
+from django.http import Http404
 from django.utils.http import http_date
 from django.utils.timezone import make_aware, now as timezone_now
 from rest_framework import viewsets
@@ -36,6 +37,13 @@ from obs_run.utils import (
     count_history_created_since,
 )
 from .serializers import RunSerializer
+from ostdata.custom_permissions import (
+    get_allowed_runs_to_view_for_user,
+    get_allowed_objects_to_view_for_user,
+    get_allowed_run_objects_to_view_for_user,
+    get_run_for_user_or_404,
+)
+from ostdata.permissions import user_has_acl
 
 # PATCH fields on ObservationRun -> ACL codename(s) required (superuser bypasses; acl_runs_edit grants all)
 RUN_PATCH_FIELD_PERMS = {
@@ -139,13 +147,12 @@ class RunViewSet(viewsets.ModelViewSet):
             ),
             n_datafiles=Count('datafile'),
         )
-        # Anonymous users only see public runs
-        try:
-            if not getattr(self.request, 'user', None) or self.request.user.is_anonymous:
-                qs = qs.filter(is_public=True)
-        except Exception:
-            pass
-        return qs
+        return get_allowed_runs_to_view_for_user(qs, self.request.user)
+
+    def create(self, request, *args, **kwargs):
+        if not self._has(request.user, 'acl_runs_edit'):
+            return Response({'detail': 'Forbidden'}, status=403)
+        return super().create(request, *args, **kwargs)
 
     def _has(self, user, codename: str) -> bool:
         try:
@@ -390,9 +397,12 @@ def get_visibility_plot(request):
 @api_view(['GET'])
 def get_observing_conditions(request, run_pk):
     try:
+        get_run_for_user_or_404(request.user, run_pk)
         tabs = plot_observation_conditions(run_pk)
         from bokeh.embed import json_item
         return Response(json_item(tabs))
+    except Http404:
+        return Response({'detail': 'Not found'}, status=404)
     except Exception as e:
         logger.exception("observing conditions failed for run %s: %s", run_pk, e)
         return Response({'error': 'Plot generation failed'}, status=400)
@@ -448,10 +458,13 @@ def get_time_distribution(request):
         label = request.query_params.get('label') or ('Runs' if model == 'run' else 'Objects')
         months_param = (request.query_params.get('months') or 'all').lower()
         months = None if months_param in ('all', '') else int(months_param)
+        # Public aggregates only (shared cache-safe plot data)
         if model == 'run':
-            fig = time_distribution_model(ObservationRun, label, months=months)
+            qs = ObservationRun.objects.filter(is_public=True)
+            fig = time_distribution_model(ObservationRun, label, months=months, queryset=qs)
         else:
-            fig = time_distribution_model(Object, label, months=months)
+            qs = Object.objects.filter(is_public=True)
+            fig = time_distribution_model(Object, label, months=months, queryset=qs)
         from bokeh.embed import json_item
         return Response(json_item(fig))
     except Exception as e:
@@ -480,9 +493,10 @@ def getDashboardStats(request):
     """
     from django.core.cache import cache
     
-    # Try to return cached stats (v3: 7d counts use history_type='+' only)
+    # Public-only aggregates for shared cache (no private inventory leakage)
+    cache_key = 'dashboard_stats_v4_public'
     try:
-        cached = cache.get('dashboard_stats_v3')
+        cached = cache.get(cache_key)
         if cached:
             return Response(cached)
     except Exception:
@@ -490,10 +504,14 @@ def getDashboardStats(request):
     
     dtime_naive = datetime.now() - timedelta(days=7)
     aware_datetime = make_aware(dtime_naive)
+
+    public_files = DataFile.objects.filter(observation_run__is_public=True)
+    public_objects = Object.objects.filter(is_public=True)
+    public_runs = ObservationRun.objects.filter(is_public=True)
     
     # === FILES: Single aggregated query ===
     # Annotate with effective_exposure_type for spectra counting
-    datafiles_annotated = annotate_effective_exposure_type(DataFile.objects.all())
+    datafiles_annotated = annotate_effective_exposure_type(public_files)
     file_stats = datafiles_annotated.aggregate(
         total=Count('pk'),
         # Exposure types (using effective exposure type)
@@ -511,10 +529,13 @@ def getDashboardStats(request):
         tiff=Count('pk', filter=Q(file_type='TIFF')),
         ser=Count('pk', filter=Q(file_type='SER')),
     )
-    files_7d_count = count_history_created_since(DataFile.history, aware_datetime)
+    files_7d_count = count_history_created_since(
+        DataFile.history.filter(observation_run__is_public=True),
+        aware_datetime,
+    )
     
     # === OBJECTS: Single aggregated query ===
-    object_stats = Object.objects.aggregate(
+    object_stats = public_objects.aggregate(
         total=Count('pk'),
         galaxies=Count('pk', filter=Q(object_type='GA')),
         star_clusters=Count('pk', filter=Q(object_type='SC')),
@@ -524,17 +545,23 @@ def getDashboardStats(request):
         other=Count('pk', filter=Q(object_type='OT')),
         unknown=Count('pk', filter=Q(object_type='UK')),
     )
-    objects_7d_count = count_history_created_since(Object.history, aware_datetime)
+    objects_7d_count = count_history_created_since(
+        Object.history.filter(is_public=True),
+        aware_datetime,
+    )
     
     # === RUNS: Single aggregated query ===
-    run_stats = ObservationRun.objects.aggregate(
+    run_stats = public_runs.aggregate(
         total=Count('pk'),
         partly_reduced=Count('pk', filter=Q(reduction_status='PR')),
         fully_reduced=Count('pk', filter=Q(reduction_status='FR')),
         reduction_error=Count('pk', filter=Q(reduction_status='ER')),
         not_reduced=Count('pk', filter=Q(reduction_status='NE')),
     )
-    runs_7d_count = count_history_created_since(ObservationRun.history, aware_datetime)
+    runs_7d_count = count_history_created_since(
+        ObservationRun.history.filter(is_public=True),
+        aware_datetime,
+    )
     
     # === STORAGE SIZE: Cached separately (expensive filesystem operation) ===
     storage_size = None
@@ -598,7 +625,7 @@ def getDashboardStats(request):
     
     # Cache stats for 30 minutes
     try:
-        cache.set('dashboard_stats_v3', stats, timeout=1800)
+        cache.set(cache_key, stats, timeout=1800)
     except Exception:
         pass
     
@@ -980,20 +1007,9 @@ def get_instrument_catalog(request):
 
 def _get_run_for_aux_objects(request, pk: int) -> ObservationRun | None:
     try:
-        run = ObservationRun.objects.get(pk=pk)
-    except ObservationRun.DoesNotExist:
+        return get_run_for_user_or_404(request.user, pk)
+    except Http404:
         return None
-
-    if request.user.is_anonymous:
-        if not run.is_public:
-            return None
-    elif not run.is_public:
-        try:
-            if not request.user.can_read(run):
-                return None
-        except Exception:
-            return None
-    return run
 
 
 @extend_schema(

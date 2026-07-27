@@ -211,14 +211,20 @@ export const api = {
       body: JSON.stringify({ ids, filters })
     })
   },
-  getDownloadJobStatus: (jobId) => fetchWithAuth(`/runs/jobs/${jobId}/status`),
+  getDownloadJobStatus: (jobId, jobToken = null) => {
+    const headers = {}
+    if (jobToken) headers['X-Download-Token'] = jobToken
+    return fetchWithAuth(`/runs/jobs/${jobId}/status`, { headers })
+  },
   getDownloadJobDownloadUrl: (jobId) => {
     const base = API_BASE_URL
     return `${base}/runs/jobs/${encodeURIComponent(jobId)}/download`
   },
-  downloadJobFile: async (jobId) => {
+  downloadJobFile: async (jobId, jobToken = null) => {
     const url = `${API_BASE_URL}/runs/jobs/${encodeURIComponent(jobId)}/download`
-    const resp = await fetch(url, { credentials: 'include' })
+    const headers = {}
+    if (jobToken) headers['X-Download-Token'] = jobToken
+    const resp = await fetch(url, { credentials: 'include', headers })
     if (!resp.ok) {
       let msg = `Download failed (${resp.status})`
       try {
@@ -248,6 +254,7 @@ export const api = {
     }, 0)
   },
   getDataFilesZipUrl: (ids = [], filters) => {
+    // Deprecated sync ZIP helper kept for compatibility; prefer createBulkDownloadJob
     const base = API_BASE_URL
     const params = new URLSearchParams()
     if (ids && ids.length) params.set('ids', ids.join(','))
@@ -272,6 +279,11 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ ids, filters })
     })
+  },
+  cancelDownloadJob: (jobId, jobToken = null) => {
+    const headers = {}
+    if (jobToken) headers['X-Download-Token'] = jobToken
+    return fetchWithAuth(`/runs/jobs/${jobId}/cancel`, { method: 'POST', headers })
   },
 
   // Objects

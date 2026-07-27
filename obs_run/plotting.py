@@ -558,7 +558,7 @@ def plot_field_of_view(data_file_pk):
 ############################################################################
 
 
-def time_distribution_model(model, yaxis_label, months=None):
+def time_distribution_model(model, yaxis_label, months=None, queryset=None):
     """
         Plots the time distribution of the 'model' (yearly binned)
         Two Plots - First: bar plot; Second: cumulative plot
@@ -567,6 +567,7 @@ def time_distribution_model(model, yaxis_label, months=None):
         ----------
         model           : `django.db.models.Model` object
             Model to be graphically represented
+        queryset        : optional queryset restricting which rows are plotted
 
         yaxis_label     : `string`
             Label for the Y axis
@@ -584,7 +585,8 @@ def time_distribution_model(model, yaxis_label, months=None):
         term_hjd = 'mid_observation_jd'
     else:
         term_hjd = 'hjd'
-    jds = np.array(model.objects.all().values_list(
+    base_qs = queryset if queryset is not None else model.objects.all()
+    jds = np.array(base_qs.values_list(
         term_hjd,
         flat=True
     )

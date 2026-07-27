@@ -1,4 +1,6 @@
 """Session-based authentication tests (hard-cut from DRF tokens)."""
+from typing import ClassVar
+
 from django.contrib.auth import get_user_model
 from rest_framework import status
 from rest_framework.test import APIClient, APITestCase
@@ -7,13 +9,15 @@ User = get_user_model()
 
 
 class SessionAuthTest(APITestCase):
-    def setUp(self):
+    login_url: ClassVar[str] = '/api/users/auth/login/'
+    logout_url: ClassVar[str] = '/api/users/auth/logout/'
+    user_url: ClassVar[str] = '/api/users/auth/user/'
+    csrf_url: ClassVar[str] = '/api/users/auth/csrf/'
+    change_password_url: ClassVar[str] = '/api/users/auth/change-password/'
+
+    def setUp(self) -> None:
+        super().setUp()
         self.user = User.objects.create_user(username='alice', password='alice-pass')
-        self.login_url = '/api/users/auth/login/'
-        self.logout_url = '/api/users/auth/logout/'
-        self.user_url = '/api/users/auth/user/'
-        self.csrf_url = '/api/users/auth/csrf/'
-        self.change_password_url = '/api/users/auth/change-password/'
 
     def _csrf_header(self):
         self.client.get(self.csrf_url)

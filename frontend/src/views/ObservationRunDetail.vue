@@ -123,7 +123,7 @@
             <v-card-text>
               <v-alert v-if="error" type="error" variant="tonal" class="mb-2">{{ error }}</v-alert>
               <v-skeleton-loader v-if="loading" type="article"></v-skeleton-loader>
-              <div v-else v-html="run?.note || '<span class=\'text-grey\'>No notes available</span>'"></div>
+              <div v-else class="notes-text">{{ run?.note || 'No notes available' }}</div>
             </v-card-text>
           </v-card>
         </v-col>
@@ -2178,18 +2178,11 @@ watch(dataFiles, () => {
   selectedIds.value = []
 })
 const downloadAll = async () => {
-  try {
-    downloadingAll.value = true
-    const url = api.getRunDataFilesZipUrl(runId)
-    window.location.href = url
-  } finally {
-    downloadingAll.value = false
-  }
+  await triggerAsyncDownload([], {})
 }
-const downloadSelected = () => {
+const downloadSelected = async () => {
   if (!selectedIds.value.length) return
-  const url = api.getRunDataFilesZipUrl(runId, selectedIds.value)
-  window.location.href = url
+  await triggerAsyncDownload(selectedIds.value, {})
 }
 
 
@@ -2206,9 +2199,8 @@ const buildCurrentFilters = () => ({
   plate_solved: dfFilterPlateSolved.value != null && dfFilterPlateSolved.value !== '' ? dfFilterPlateSolved.value : undefined,
 })
 
-const downloadFiltered = () => {
-  const url = api.getRunDataFilesZipUrl(runId, [], buildCurrentFilters())
-  window.location.href = url
+const downloadFiltered = async () => {
+  await triggerAsyncDownload([], buildCurrentFilters())
 }
 
 // Async job helpers
@@ -2228,10 +2220,11 @@ const triggerAsyncDownload = async (ids = [], filters = {}) => {
     } catch {}
     const res = await api.createRunDownloadJob(runId, ids, filters)
     const jobId = res?.job_id
+    const jobToken = res?.job_token || null
     if (!jobId) throw new Error('Job not created')
     try {
-      await pollDownloadJobUntilReady(jobId)
-      await api.downloadJobFile(jobId)
+      await pollDownloadJobUntilReady(jobId, { jobToken })
+      await api.downloadJobFile(jobId, jobToken)
       try { notify.success('Download started') } catch {}
     } catch (e) {
       // Show a clearer message to the user (e.g., cancelled by admin) rather than a generic uncaught error
@@ -2244,20 +2237,11 @@ const triggerAsyncDownload = async (ids = [], filters = {}) => {
 }
 
 const handleDownloadAll = async () => {
-  // If many files, prefer async job
-  if ((dataFilesTotal.value || 0) > 5) {
-    await triggerAsyncDownload([], {})
-  } else {
-    await downloadAll()
-  }
+  await triggerAsyncDownload([], {})
 }
 
 const handleDownloadFiltered = async () => {
-  if ((dataFilesTotal.value || 0) > 5) {
-    await triggerAsyncDownload([], buildCurrentFilters())
-  } else {
-    downloadFiltered()
-  }
+  await triggerAsyncDownload([], buildCurrentFilters())
 }
 
 const handlePreviewError = (e) => {
@@ -2273,6 +2257,10 @@ const binningOptions = computed(() => {
 <style scoped>
 .run-detail {
   padding: 20px 0;
+}
+.notes-text {
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 /* Link styling similar to Dashboard tables */

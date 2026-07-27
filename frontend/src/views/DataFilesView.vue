@@ -828,12 +828,13 @@ async function bulkDownloadSelected() {
     } catch {}
     const res = await api.createBulkDownloadJob(ids, {})
     const jobId = res?.job_id
+    const jobToken = res?.job_token || null
     if (!jobId) {
       notify.error('Failed to create download job')
       return
     }
-    await pollDownloadJobUntilReady(jobId)
-    await api.downloadJobFile(jobId)
+    await pollDownloadJobUntilReady(jobId, { jobToken })
+    await api.downloadJobFile(jobId, jobToken)
     notify.success('Download started')
   } catch (e) {
     notify.error(e?.message || 'Download failed')

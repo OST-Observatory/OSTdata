@@ -1,4 +1,4 @@
-"""Tests for run download authorization (audit remediation)."""
+"""Authorization tests for sync ZIP (gone) and async download jobs."""
 import tempfile
 from pathlib import Path
 from unittest.mock import patch
@@ -14,48 +14,50 @@ User = get_user_model()
 
 class RunDownloadAuthorizationTest(APITestCase):
     def setUp(self):
+        self.tmp = tempfile.mkdtemp()
         self.public_run = ObservationRun.objects.create(name='Public Run', is_public=True)
         self.private_run = ObservationRun.objects.create(name='Private Run', is_public=False)
         self.authorized = User.objects.create_user(username='reader', password='reader-pass')
         self.other = User.objects.create_user(username='other', password='other-pass')
         self.private_run.readonly_users.add(self.authorized)
+        path = Path(self.tmp) / 'f.fits'
+        path.write_bytes(b'SIMPLE  ')
+        self.df = DataFile.objects.create(
+            observation_run=self.private_run,
+            datafile=str(path),
+            file_type='FITS',
+            file_size=8,
+        )
         self.public_url = f'/api/runs/runs/{self.public_run.pk}/download/'
         self.private_url = f'/api/runs/runs/{self.private_run.pk}/download/'
         self.public_job_url = f'/api/runs/runs/{self.public_run.pk}/download-jobs/'
         self.private_job_url = f'/api/runs/runs/{self.private_run.pk}/download-jobs/'
+        self.client.get('/api/users/auth/csrf/')
 
     def _auth(self, user):
         self.client.force_login(user)
 
-    def test_anonymous_private_run_download_denied(self):
-        resp = self.client.get(self.private_url)
-        self.assertEqual(resp.status_code, status.HTTP_404_NOT_FOUND)
+    def _csrf(self):
+        token = self.client.cookies.get('csrftoken')
+        return {'HTTP_X_CSRFTOKEN': token.value} if token else {}
 
-    def test_anonymous_public_run_download_allowed_without_files(self):
-        resp = self.client.get(self.public_url)
-        self.assertIn(resp.status_code, (status.HTTP_400_BAD_REQUEST, status.HTTP_200_OK))
-
-    def test_unauthorized_user_private_run_download_denied(self):
-        self._auth(self.other)
+    def test_sync_zip_is_gone(self):
         resp = self.client.get(self.private_url)
-        self.assertEqual(resp.status_code, status.HTTP_404_NOT_FOUND)
-
-    def test_authorized_user_private_run_download_not_denied(self):
-        self._auth(self.authorized)
-        resp = self.client.get(self.private_url)
-        self.assertNotEqual(resp.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertEqual(resp.status_code, status.HTTP_410_GONE)
+        resp2 = self.client.get(self.public_url)
+        self.assertEqual(resp2.status_code, status.HTTP_410_GONE)
 
     @patch('obs_run.services.downloads.build_zip_task.delay')
     def test_unauthorized_user_private_download_job_denied(self, _delay):
         self._auth(self.other)
-        resp = self.client.post(self.private_job_url, {'ids': []}, format='json')
+        resp = self.client.post(self.private_job_url, {'ids': [self.df.pk]}, format='json', **self._csrf())
         self.assertEqual(resp.status_code, status.HTTP_404_NOT_FOUND)
         _delay.assert_not_called()
 
     @patch('obs_run.services.downloads.build_zip_task.delay')
     def test_authorized_user_private_download_job_allowed(self, delay):
         self._auth(self.authorized)
-        resp = self.client.post(self.private_job_url, {'ids': []}, format='json')
+        resp = self.client.post(self.private_job_url, {'ids': [self.df.pk]}, format='json', **self._csrf())
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
         delay.assert_called_once()
 

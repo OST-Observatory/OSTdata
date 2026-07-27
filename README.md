@@ -395,6 +395,8 @@ SSLProxyVerify none
 SSLProxyCheckPeerCN off
 SSLProxyCheckPeerName off
 ProxyPreserveHost On
+# Tell Django the original client scheme (required before enabling SECURE_SSL_REDIRECT / HSTS)
+RequestHeader set X-Forwarded-Proto "https"
 
 ProxyPass /data_archive/static/ !
 
@@ -949,14 +951,20 @@ Frontend behavior (Data Files tables):
 - Security:
   
   - Keep Redis bound to `127.0.0.1` unless you explicitly need remote access; otherwise firewall the port.
-  - The API enforces ownership/visibility: ZIPs can only be downloaded by the user who created the job (or for public runs when anonymous).
+  - Prefer Redis AUTH (`requirepass`) and use `redis://:password@127.0.0.1:6379/0` for Celery broker/result URLs.
+  - Anonymous ZIP jobs require `X-Download-Token` (returned once at job creation; never logged). Authenticated jobs are bound to the owning user (admins with job ACLs can override).
+  - Synchronous ZIP URLs return `410 Gone`; use the async download-jobs API only.
+  - Production OpenAPI/Swagger/ReDoc require staff/superuser; JSON-only API responses (no browsable API).
+  - Behind Apache/nginx, forward HTTPS correctly (`RequestHeader set X-Forwarded-Proto "https"` or equivalent) before enabling `SECURE_SSL_REDIRECT` / HSTS, to avoid redirect loops.
+  - Enable HSTS (`SECURE_HSTS_SECONDS`) only after a staging test with a working `X-Forwarded-Proto` path.
+  - Production LDAP must use `ldaps://` or `LDAP_START_TLS=true` with certificate verification.
 
 ### API summary
 
-- `POST /api/runs/runs/{run_id}/download-jobs/` → `{ job_id }`
-- `GET /api/runs/jobs/{job_id}/status` → `{ status, progress, bytes_total, bytes_done, url? }`
-- `POST /api/runs/jobs/{job_id}/cancel` → `{ status }`
-- `GET /api/runs/jobs/{job_id}/download` → ZIP file when ready
+- `POST /api/runs/runs/{run_id}/download-jobs/` → `{ job_id, job_token? }`
+- `GET /api/runs/jobs/{job_id}/status` (+ optional `X-Download-Token`) → `{ status, progress, bytes_total, bytes_done, url? }`
+- `POST /api/runs/jobs/{job_id}/cancel` (+ optional `X-Download-Token`) → `{ status }`
+- `GET /api/runs/jobs/{job_id}/download` (+ optional `X-Download-Token`) → ZIP file when ready
 
 Payload example for job creation:
 

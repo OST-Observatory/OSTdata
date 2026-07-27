@@ -18,13 +18,3 @@ class TagSerializer(ModelSerializer):
             'pk',
       ]
       read_only_fields = ('pk',)
-
-#class SimpleTagSerializer(ModelSerializer):
-
-   #class Meta:
-      #model = Tag
-      #fields = [
-            #'name',
-            #'color',
-            #'description',
-      #]

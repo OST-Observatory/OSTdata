@@ -322,8 +322,8 @@ class DataFileSerializer(ModelSerializer):
         read_only=False,
         source='tags',
     )
-    file_path = SerializerMethodField()
     file_name = SerializerMethodField()
+    download_url = SerializerMethodField()
     observation_run_name = SerializerMethodField()
     object_ids = SerializerMethodField()
     main_object_id = SerializerMethodField()
@@ -335,8 +335,8 @@ class DataFileSerializer(ModelSerializer):
             'pk',
             'observation_run',
             'observation_run_name',
-            'file_path',
             'file_name',
+            'download_url',
             'file_type',
             'instrument',
             'telescope',
@@ -414,8 +414,52 @@ class DataFileSerializer(ModelSerializer):
             'wcs_crval1',
             'wcs_crval2',
         ]
-        # read_only_fields = ('pk', 'added_by')
-        read_only_fields = ('pk',)
+        read_only_fields = (
+            'pk',
+            'observation_run',
+            'content_hash',
+            'file_size',
+            'plate_solved',
+            'plate_solve_attempted_at',
+            'plate_solve_error',
+            'plate_solve_tool',
+            'wcs_override',
+            'wcs_ra',
+            'wcs_dec',
+            'wcs_ra_hms',
+            'wcs_dec_dms',
+            'wcs_field_radius',
+            'wcs_orientation',
+            'wcs_pix_scale',
+            'wcs_parity',
+            'wcs_field_width',
+            'wcs_field_height',
+            'wcs_cd1_1',
+            'wcs_cd1_2',
+            'wcs_cd2_1',
+            'wcs_cd2_2',
+            'wcs_cdelt1',
+            'wcs_cdelt2',
+            'wcs_crota1',
+            'wcs_crota2',
+            'wcs_crpix1',
+            'wcs_crpix2',
+            'wcs_crval1',
+            'wcs_crval2',
+            'naxis1',
+            'naxis2',
+            'hjd',
+            'obs_date',
+            'exptime',
+            'ra',
+            'dec',
+            'ra_hms',
+            'dec_dms',
+            'file_type',
+            'exposure_type_ml',
+            'exposure_type_ml_confidence',
+            'exposure_type_ml_abstained',
+        )
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -432,12 +476,12 @@ class DataFileSerializer(ModelSerializer):
         tags = TagSerializer(obj.tags, many=True).data
         return tags
 
-    def get_file_path(self, obj):
-        return obj.datafile
-
     def get_file_name(self, obj):
         path = Path(obj.datafile)
         return path.name
+
+    def get_download_url(self, obj):
+        return f"/api/runs/datafiles/{obj.pk}/download/"
 
     def get_exposure_type_display(self, obj):
         # Return effective exposure type display instead of raw exposure_type

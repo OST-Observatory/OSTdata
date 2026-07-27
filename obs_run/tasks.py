@@ -176,7 +176,21 @@ def build_zip_task(self, job_id: int):
                 pass
             return
 
-        tmp = tempfile.NamedTemporaryFile(delete=False, suffix='.zip')
+        max_files = int(getattr(settings, 'DOWNLOAD_JOB_MAX_FILES', 500))
+        max_bytes = int(getattr(settings, 'DOWNLOAD_JOB_MAX_BYTES', 10 * 1024 ** 3))
+        if len(files) > max_files:
+            job.status = 'failed'
+            job.error = f'Too many files (max {max_files})'
+            job.finished_at = timezone.now()
+            job.save(update_fields=['status', 'error', 'finished_at'])
+            return
+
+        tmp_dir = getattr(settings, 'DOWNLOAD_JOB_TMP_DIR', None)
+        if tmp_dir:
+            Path(tmp_dir).mkdir(parents=True, exist_ok=True)
+            tmp = tempfile.NamedTemporaryFile(delete=False, suffix='.zip', dir=str(tmp_dir))
+        else:
+            tmp = tempfile.NamedTemporaryFile(delete=False, suffix='.zip')
         tmp_path = tmp.name
         tmp.close()
 
@@ -186,16 +200,32 @@ def build_zip_task(self, job_id: int):
         job.save(update_fields=['file_path', 'bytes_total', 'bytes_done'])
 
         # Compute total size and eligible paths
+        from obs_run.services.datafile_paths import safe_datafile_path, PathOutsideDataRoot
         total = 0
         paths: list[tuple[Path, int]] = []
         for df in files:
-            p = Path(df.datafile)
-            if p.exists() and p.is_file():
+            try:
+                p = safe_datafile_path(df.datafile, must_exist=True)
+            except (PathOutsideDataRoot, FileNotFoundError, OSError):
+                continue
+            if p.is_file():
                 try:
                     total += p.stat().st_size
                     paths.append((p, df.pk))
                 except Exception:
                     continue
+        if total > max_bytes:
+            try:
+                if tmp_path and os.path.exists(tmp_path):
+                    os.remove(tmp_path)
+            except Exception:
+                pass
+            job.status = 'failed'
+            job.error = f'Total size exceeds limit ({max_bytes} bytes)'
+            job.file_path = ''
+            job.finished_at = timezone.now()
+            job.save(update_fields=['status', 'error', 'file_path', 'finished_at'])
+            return
         job.bytes_total = total
         job.save(update_fields=['bytes_total'])
 

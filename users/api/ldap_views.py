@@ -58,8 +58,18 @@ def admin_ldap_test(request):
     user_filter_tpl = os.environ.get('LDAP_USER_FILTER') or getattr(settings, 'LDAP_USER_FILTER', '(uid=%(user)s)')
 
     username = (request.data or {}).get('username') or ''
-    override_filter = (request.data or {}).get('filter') or ''
-    search_filter = override_filter or (user_filter_tpl.replace('%(user)s', username) if username else user_filter_tpl)
+    # Free-form filter overrides are not allowed (LDAP injection risk).
+    if (request.data or {}).get('filter'):
+        return Response({'detail': 'Custom LDAP filters are not allowed'}, status=400)
+    try:
+        from ldap.filter import escape_filter_chars  # type: ignore
+        safe_username = escape_filter_chars(str(username)) if username else ''
+    except Exception:
+        # Conservative fallback: strip LDAP filter metacharacters
+        safe_username = ''.join(c for c in str(username) if c.isalnum() or c in '._-@')
+    if not safe_username:
+        return Response({'detail': 'username is required'}, status=400)
+    search_filter = user_filter_tpl.replace('%(user)s', safe_username)
 
     try:
         conn = ldap.initialize(server_uri)
@@ -89,6 +99,8 @@ def admin_ldap_test(request):
             scope = ldap.SCOPE_SUBTREE
             attrs = ['uid', 'mail', 'givenName', 'sn', 'cn', 'memberOf']
             entries = conn.search_s(search_base, scope, search_filter, attrs)
+            # Cap returned entries to avoid dumping large directories
+            entries = (entries or [])[:25]
             latency_ms = int((time.time() - t0) * 1000)
             result['search_ok'] = True
             result['latency_ms'] = latency_ms

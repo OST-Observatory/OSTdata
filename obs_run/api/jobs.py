@@ -3,14 +3,15 @@ from datetime import timedelta
 from pathlib import Path
 from django.conf import settings
 from django.utils import timezone
-from django.db import transaction
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework.exceptions import ValidationError
 from ostdata.permissions import HasPerm
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiExample
 from rest_framework import serializers
+from django.http import Http404
 import logging
 logger = logging.getLogger(__name__)
 
@@ -19,11 +20,13 @@ try:
 except Exception:
     _redis = None
 
-from obs_run.models import ObservationRun, DataFile, DownloadJob
-from obs_run.tasks import cleanup_expired_downloads, reconcile_filesystem
-from obs_run.tasks import cleanup_orphans_and_hashcheck
-from obs_run.services.downloads import enqueue_download_job_for_run, enqueue_download_job_bulk
-from ostdata.custom_permissions import get_allowed_run_objects_to_view_for_user
+from obs_run.models import DownloadJob
+from obs_run.services.downloads import (
+    enqueue_download_job_for_run,
+    enqueue_download_job_bulk,
+    user_can_access_download_job,
+)
+from ostdata.custom_permissions import get_run_for_user_or_404
 
 
 class DownloadJobBulkRequestSerializer(serializers.Serializer):
@@ -44,6 +47,7 @@ class DownloadJobBulkRequestSerializer(serializers.Serializer):
 
 class DownloadJobCreateResponseSerializer(serializers.Serializer):
     job_id = serializers.IntegerField()
+    job_token = serializers.CharField(required=False, allow_null=True)
 
 
 @extend_schema(
@@ -63,33 +67,36 @@ class DownloadJobCreateResponseSerializer(serializers.Serializer):
         ),
         OpenApiExample(
             'Response',
-            value={'job_id': 123},
+            value={'job_id': 123, 'job_token': None},
             response_only=True,
         ),
     ],
     tags=['Jobs'],
 )
 @api_view(['POST'])
+@permission_classes([AllowAny])
 def create_download_job_bulk(request):
     """Create a DownloadJob for arbitrary datafiles (IDs and/or filters across runs)."""
     payload = request.data if hasattr(request, 'data') else {}
     selected_ids = payload.get('ids') or []
     filters = payload.get('filters') or {}
-    if selected_ids:
-        allowed = get_allowed_run_objects_to_view_for_user(
-            DataFile.objects.filter(pk__in=selected_ids),
-            request.user,
+    try:
+        job = enqueue_download_job_bulk(
+            user=request.user if request.user.is_authenticated else None,
+            selected_ids=selected_ids,
+            filters=filters,
+            request=request,
         )
-        selected_ids = list(allowed.values_list('pk', flat=True))
-    job = enqueue_download_job_bulk(
-        user=request.user if request.user.is_authenticated else None,
-        selected_ids=selected_ids,
-        filters=filters,
-    )
-    return Response({'job_id': job.id}, status=201)
+    except ValidationError as e:
+        return Response(getattr(e, 'detail', {'detail': str(e)}), status=400)
+    body = {'job_id': job.id}
+    if job.job_token:
+        body['job_token'] = job.job_token
+    return Response(body, status=201)
 
 create_download_job_bulk.throttle_classes = [ScopedRateThrottle]
 create_download_job_bulk.throttle_scope = 'jobs'
+
 
 class RunDownloadJobRequestSerializer(serializers.Serializer):
     ids = serializers.ListField(
@@ -112,44 +119,44 @@ class RunDownloadJobRequestSerializer(serializers.Serializer):
     tags=['Jobs'],
 )
 @api_view(['POST'])
+@permission_classes([AllowAny])
 def create_download_job(request, run_pk):
     """Create a DownloadJob and enqueue the Celery task."""
     try:
-        run = ObservationRun.objects.get(pk=run_pk)
-    except ObservationRun.DoesNotExist:
-        return Response({'detail': 'Run not found'}, status=404)
-    if run and not run.is_public:
-        if request.user.is_anonymous:
-            return Response({'detail': 'Not found'}, status=404)
-        try:
-            if not request.user.can_read(run):
-                return Response({'detail': 'Not found'}, status=404)
-        except Exception:
-            return Response({'detail': 'Not found'}, status=404)
+        run = get_run_for_user_or_404(request.user, run_pk)
+    except Http404:
+        return Response({'detail': 'Not found'}, status=404)
     payload = request.data if hasattr(request, 'data') else {}
     selected_ids = payload.get('ids') or []
     filters = payload.get('filters') or {}
-    job = enqueue_download_job_for_run(
-        run=run,
-        user=request.user if request.user.is_authenticated else None,
-        selected_ids=selected_ids,
-        filters=filters,
-    )
-    return Response({'job_id': job.id}, status=201)
+    try:
+        job = enqueue_download_job_for_run(
+            run=run,
+            user=request.user if request.user.is_authenticated else None,
+            selected_ids=selected_ids,
+            filters=filters,
+            request=request,
+        )
+    except ValidationError as e:
+        return Response(getattr(e, 'detail', {'detail': str(e)}), status=400)
+    body = {'job_id': job.id}
+    if job.job_token:
+        body['job_token'] = job.job_token
+    return Response(body, status=201)
 
 create_download_job.throttle_classes = [ScopedRateThrottle]
 create_download_job.throttle_scope = 'jobs'
 
+
 @extend_schema(summary='Get download job status')
 @api_view(['GET'])
+@permission_classes([AllowAny])
 def download_job_status(request, job_id):
     try:
         job = DownloadJob.objects.get(pk=job_id)
     except DownloadJob.DoesNotExist:
         return Response({'detail': 'Not found'}, status=404)
-    if job.user_id and (not request.user.is_authenticated or request.user.pk != job.user_id):
-        return Response({'detail': 'Not found'}, status=404)
-    if job.user_id is None and request.user.is_anonymous and job.run and not job.run.is_public:
+    if not user_can_access_download_job(request, job):
         return Response({'detail': 'Not found'}, status=404)
     return Response({
         'status': job.status,
@@ -177,8 +184,6 @@ def list_download_jobs(request):
     if request.user.is_authenticated:
         if not (request.user.is_superuser or request.user.has_perm('users.acl_jobs_view_all')):
             qs = qs.filter(user_id=request.user.pk)
-    elif request.user.is_authenticated:
-        qs = qs.filter(user_id=request.user.pk)
     else:
         qs = qs.none()
     status_param = request.query_params.get('status')
@@ -220,6 +225,7 @@ def list_download_jobs(request):
 
 @extend_schema(summary='Cancel a download job')
 @api_view(['POST'])
+@permission_classes([AllowAny])
 def cancel_download_job(request, job_id):
     try:
         job = DownloadJob.objects.get(pk=job_id)
@@ -229,12 +235,8 @@ def cancel_download_job(request, job_id):
         request.user.is_authenticated
         and (request.user.is_superuser or request.user.has_perm('users.acl_jobs_cancel_any'))
     )
-    if job.user_id and (not request.user.is_authenticated or (
-        request.user.pk != job.user_id and not can_cancel_any
-    )):
+    if not can_cancel_any and not user_can_access_download_job(request, job):
         return Response({'detail': 'Not found'}, status=404)
-    if can_cancel_any and job.user_id and request.user.pk != job.user_id:
-        pass  # allowed via acl_jobs_cancel_any
     if job.status in ('done', 'failed', 'cancelled', 'expired'):
         return Response({'status': job.status, 'error': job.error or ''})
     job.status = 'cancelled'
@@ -260,7 +262,7 @@ def cancel_download_job(request, job_id):
             job,
             action='updated',
             change_reason='admin:job_cancel',
-            user=request.user,
+            user=request.user if request.user.is_authenticated else None,
             summary='Download job cancelled',
         )
     except Exception:
@@ -374,7 +376,6 @@ def batch_extend_jobs_expiry(request):
         hours = 48
     if hours <= 0 or not ids:
         return Response({'updated': 0}, status=200)
-    from datetime import timedelta
     now = timezone.now()
     updated = 0
     for job in DownloadJob.objects.filter(pk__in=ids):
@@ -426,22 +427,25 @@ def batch_expire_jobs_now(request):
 
 @extend_schema(summary='Download ZIP file for a completed job')
 @api_view(['GET'])
+@permission_classes([AllowAny])
 def download_job_download(request, job_id):
     try:
         job = DownloadJob.objects.get(pk=job_id)
     except DownloadJob.DoesNotExist:
         return Response({'detail': 'Not found'}, status=404)
-    if job.user_id and (not request.user.is_authenticated or request.user.pk != job.user_id):
-        return Response({'detail': 'Not found'}, status=404)
-    if job.user_id is None and request.user.is_anonymous and job.run and not job.run.is_public:
+    if not user_can_access_download_job(request, job):
         return Response({'detail': 'Not found'}, status=404)
     if job.status != 'done' or not job.file_path:
         return Response({'detail': 'Not ready'}, status=400)
     path = Path(job.file_path)
+    try:
+        tmp_root = Path(getattr(settings, 'DOWNLOAD_JOB_TMP_DIR', '') or '').resolve()
+        if str(tmp_root):
+            path.resolve().relative_to(tmp_root)
+    except Exception:
+        return Response({'detail': 'File missing'}, status=404)
     if not path.exists():
         return Response({'detail': 'File missing'}, status=404)
     from django.http import FileResponse
     filename = path.name
     return FileResponse(open(path, 'rb'), as_attachment=True, filename=filename)
-
-

@@ -165,7 +165,7 @@
             </v-tooltip>
           </v-card-title>
           <v-card-text>
-            <div v-if="object?.note" v-html="formatNotes(object.note)"></div>
+            <div v-if="object?.note" class="notes-text">{{ object.note }}</div>
             <div v-else class="text-grey">No notes available</div>
           </v-card-text>
         </v-card>
@@ -2139,10 +2139,6 @@ const formatDec = (dec) => {
   return `${sign}${degrees.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toFixed(1).padStart(4, '0')}`
 }
 
-const formatNotes = (notes) => {
-  return notes.replace(/\n/g, '<br>')
-}
-
 const formatDate = (date) => {
   if (!date) return 'N/A'
   return new Date(date).toLocaleDateString()
@@ -2545,26 +2541,17 @@ const resetDfFilters = () => {
 const selectedIds = ref([])
 const downloadingAll = ref(false)
 const downloadAllObjectFiles = async () => {
-  try {
-    downloadingAll.value = true
-    // build ids from all dataFiles for this object
-    const ids = (Array.isArray(dataFiles.value) ? dataFiles.value : []).map(f => f.pk || f.id)
-    const url = api.getDataFilesZipUrl(ids)
-    window.location.href = url
-  } finally {
-    downloadingAll.value = false
-  }
+  const ids = (Array.isArray(dataFiles.value) ? dataFiles.value : []).map(f => f.pk || f.id)
+  await triggerAsyncBulkDownload(ids, {}, { items: dataFiles.value || [] })
 }
-const downloadSelectedObjectFiles = () => {
+const downloadSelectedObjectFiles = async () => {
   if (!selectedIds.value.length) return
-  const url = api.getDataFilesZipUrl(selectedIds.value)
-  window.location.href = url
+  await triggerAsyncBulkDownload(selectedIds.value, {})
 }
-const downloadFilteredObjectFiles = () => {
+const downloadFilteredObjectFiles = async () => {
   const ids = filteredDataFiles.value.map(f => f.pk || f.id)
   if (!ids.length) return
-  const url = api.getDataFilesZipUrl(ids)
-  window.location.href = url
+  await triggerAsyncBulkDownload(ids, {}, { items: filteredDataFiles.value || [] })
 }
 
 // Async job helpers (bulk, across runs)
@@ -2576,10 +2563,11 @@ const triggerAsyncBulkDownload = async (ids = [], filters = {}, { items = [] } =
     } catch {}
     const res = await api.createBulkDownloadJob(ids, filters)
     const jobId = res?.job_id
+    const jobToken = res?.job_token || null
     if (!jobId) throw new Error('Job not created')
     try {
-      await pollDownloadJobUntilReady(jobId)
-      await api.downloadJobFile(jobId)
+      await pollDownloadJobUntilReady(jobId, { jobToken })
+      await api.downloadJobFile(jobId, jobToken)
       try { notify.success('Download started') } catch {}
     } catch (e) {
       try { notify.error(e?.message || 'Download job failed') } catch {}
@@ -2704,6 +2692,10 @@ watch(object, (val) => {
   height: 340px;
   display: flex;
   flex-direction: column;
+}
+.notes-text {
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .uniform-height .v-card-text {

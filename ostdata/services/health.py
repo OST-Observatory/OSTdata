@@ -7,6 +7,7 @@ import time as _time
 from pathlib import Path
 from typing import Dict, Any
 from datetime import timedelta
+from urllib.parse import urlparse, urlunparse
 
 from django.db import connection
 from django.utils import timezone
@@ -26,6 +27,37 @@ except Exception:
     _ldap = None
 
 
+def _mask_broker_url(url: str) -> str:
+    """Return broker URL with password redacted."""
+    if not url:
+        return ''
+    try:
+        u = urlparse(url)
+        if not u.hostname:
+            return url
+        user = u.username or ''
+        auth = f'{user}:***@' if (user or u.password) else ''
+        host = u.hostname
+        port = f':{u.port}' if u.port else ''
+        netloc = f'{auth}{host}{port}'
+        return urlunparse((u.scheme, netloc, u.path or '', '', '', ''))
+    except Exception:
+        return '***'
+
+
+def _mask_fs_path(path: str | None) -> str | None:
+    """Return only the last two path components."""
+    if not path:
+        return path
+    try:
+        parts = Path(path).parts
+        if len(parts) <= 2:
+            return str(path)
+        return '.../' + '/'.join(parts[-2:])
+    except Exception:
+        return '***'
+
+
 def gather_admin_health() -> Dict[str, Any]:
     from django.conf import settings
     data: Dict[str, Any] = {}
@@ -40,10 +72,11 @@ def gather_admin_health() -> Dict[str, Any]:
         data['versions']['bokeh'] = None
     try:
         data['celery'] = {
-            'broker_url': getattr(settings, 'CELERY_BROKER_URL', ''),
-            'result_backend': getattr(settings, 'CELERY_RESULT_BACKEND', ''),
+            'broker_url': _mask_broker_url(getattr(settings, 'CELERY_BROKER_URL', '')),
+            'result_backend': _mask_broker_url(getattr(settings, 'CELERY_RESULT_BACKEND', '')),
             'task_always_eager': bool(getattr(settings, 'CELERY_TASK_ALWAYS_EAGER', False)),
         }
+        _raw_broker_url = getattr(settings, 'CELERY_BROKER_URL', '') or ''
         try:
             from adminops.redis_helpers import plate_solving_task_enabled_get
             redis_enabled = plate_solving_task_enabled_get()
@@ -60,6 +93,7 @@ def gather_admin_health() -> Dict[str, Any]:
     except Exception:
         data['celery'] = {}
         data['features'] = {}
+        _raw_broker_url = ''
 
     # DB check
     db_ok = False
@@ -95,9 +129,8 @@ def gather_admin_health() -> Dict[str, Any]:
     redis_ok = None
     redis_latency_ms = None
     try:
-        broker = data['celery'].get('broker_url') or ''
+        broker = _raw_broker_url or getattr(settings, 'CELERY_BROKER_URL', '') or ''
         if broker.startswith('redis') and _redis:
-            from urllib.parse import urlparse
             u = urlparse(broker)
             host = u.hostname or '127.0.0.1'
             port = int(u.port or 6379)
@@ -240,7 +273,7 @@ def gather_admin_health() -> Dict[str, Any]:
             'django_settings_module': os.environ.get('DJANGO_SETTINGS_MODULE', None),
             # Values referenced on AdminHealth page
             'DOWNLOAD_JOB_TTL_HOURS': getattr(settings, 'DOWNLOAD_JOB_TTL_HOURS', None),
-            'DATA_DIRECTORY': os.environ.get('DATA_DIRECTORY', None),
+            'DATA_DIRECTORY': _mask_fs_path(os.environ.get('DATA_DIRECTORY', None) or str(getattr(settings, 'DATA_DIRECTORY', '') or '')),
             'WATCH_DEBOUNCE_SECONDS': os.environ.get('WATCH_DEBOUNCE_SECONDS', None),
             'WATCH_CREATED_DELAY_SECONDS': os.environ.get('WATCH_CREATED_DELAY_SECONDS', None),
             'WATCH_STABILITY_SECONDS': os.environ.get('WATCH_STABILITY_SECONDS', None),
@@ -253,11 +286,11 @@ def gather_admin_health() -> Dict[str, Any]:
     # Storage summary
     storage = {'ok': None}
     try:
-        data_path = os.environ.get('DATA_DIRECTORY', '')
+        data_path = os.environ.get('DATA_DIRECTORY', '') or str(getattr(settings, 'DATA_DIRECTORY', '') or '')
         p = Path(data_path) if data_path else None
         if p:
             exists = p.exists()
-            storage['path'] = str(p)
+            storage['path'] = _mask_fs_path(str(p))
             storage['exists'] = exists
             if exists:
                 st = os.statvfs(str(p))
@@ -303,8 +336,12 @@ def gather_admin_health() -> Dict[str, Any]:
         server_uri = getattr(settings, 'AUTH_LDAP_SERVER_URI', None) or os.environ.get('LDAP_SERVER_URI')
         if server_uri:
             ldap_data['configured'] = True
-            ldap_data['server_uri'] = server_uri
-            
+            # Host only — no credentials
+            try:
+                parsed = urlparse(server_uri)
+                ldap_data['server_uri'] = f'{parsed.scheme}://{parsed.hostname or ""}' + (f':{parsed.port}' if parsed.port else '')
+            except Exception:
+                ldap_data['server_uri'] = '***'
             if _ldap:
                 ldap_data['can_import'] = True
                 # Try to connect and bind

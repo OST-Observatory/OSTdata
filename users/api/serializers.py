@@ -55,4 +55,4 @@ class UserAdminSerializer(serializers.ModelSerializer):
             'source',
             'last_login',
         ]
-        read_only_fields = ['id', 'username', 'is_superuser']
+        read_only_fields = ['id', 'username', 'is_superuser', 'is_staff']

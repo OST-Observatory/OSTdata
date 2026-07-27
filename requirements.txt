@@ -44,6 +44,7 @@ cryptography==49.0.0
 pillow==12.3.0
 setuptools==83.0.0
 tornado==6.5.7
+pyasn1==0.6.4
 
 # ML exposure-type classification (pulls tensorflow, keras, pillow, scikit-learn, …)
 git+https://github.com/OST-Observatory/ost_image_classification.git@4d081e5416434596089fc78245dc41d7f534f781

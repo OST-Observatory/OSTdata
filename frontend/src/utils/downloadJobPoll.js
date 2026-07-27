@@ -7,16 +7,17 @@ import { api } from '@/services/api'
 
 /**
  * Poll until job is done (then caller usually calls api.downloadJobFile).
- * @param {string} jobId
- * @param {{ timeoutMs?: number, intervalMs?: number }} [overrides]
+ * @param {string|number} jobId
+ * @param {{ timeoutMs?: number, intervalMs?: number, jobToken?: string|null }} [overrides]
  */
 export async function pollDownloadJobUntilReady(jobId, overrides = {}) {
   await ensureDownloadJobConfig()
   const timeoutMs = overrides.timeoutMs ?? getDownloadJobMaxWaitMs()
   const intervalMs = overrides.intervalMs ?? getDownloadJobPollIntervalMs()
+  const jobToken = overrides.jobToken || null
   const start = Date.now()
   while (Date.now() - start < timeoutMs) {
-    const status = await api.getDownloadJobStatus(jobId)
+    const status = await api.getDownloadJobStatus(jobId, jobToken)
     if (status?.status === 'done' && status?.url) return status
     if (status?.status === 'failed' || status?.status === 'cancelled') {
       throw new Error(status?.error || 'Job failed')

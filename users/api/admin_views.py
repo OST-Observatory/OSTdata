@@ -1,6 +1,7 @@
 import logging
 
 from rest_framework import status, viewsets
+from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
@@ -15,6 +16,7 @@ class UserAdminViewSet(viewsets.ModelViewSet):
     """
     Admin-only user management (list/retrieve/update/partial_update/destroy).
     Username is immutable; account creation is out-of-scope for now.
+    is_staff is read-only on the normal update path; use set_staff (superuser only).
     """
     queryset = User.objects.all().order_by('username')
     serializer_class = UserAdminSerializer
@@ -25,6 +27,25 @@ class UserAdminViewSet(viewsets.ModelViewSet):
             return bool(user.is_superuser or user.has_perm(f'users.{codename}'))
         except Exception:
             return False
+
+    @action(detail=True, methods=['post'], url_path='set-staff')
+    def set_staff(self, request, pk=None):
+        """Superuser-only endpoint to toggle is_staff."""
+        if not getattr(request.user, 'is_superuser', False):
+            return Response({'detail': 'Forbidden'}, status=status.HTTP_403_FORBIDDEN)
+        user = self.get_object()
+        is_staff = request.data.get('is_staff')
+        if not isinstance(is_staff, bool):
+            return Response({'detail': 'is_staff must be a boolean'}, status=status.HTTP_400_BAD_REQUEST)
+        old = user.is_staff
+        user.is_staff = is_staff
+        user.save(update_fields=['is_staff'])
+        self._audit_log_user_changes(
+            user,
+            request,
+            [{'field': 'is_staff', 'old': old, 'new': is_staff}] if old != is_staff else [],
+        )
+        return Response(UserAdminSerializer(user).data)
 
     def list(self, request, *args, **kwargs):
         if not self._has(request.user, 'acl_users_view'):

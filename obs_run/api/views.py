@@ -2,6 +2,9 @@ from rest_framework import viewsets
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticatedOrReadOnly
+from rest_framework.throttling import ScopedRateThrottle
+from django.conf import settings as django_settings
 
 from django_filters.rest_framework import DjangoFilterBackend
 
@@ -11,6 +14,7 @@ from .serializers import DataFileSerializer
 from .filter import DataFileFilter
 from utilities import annotate_effective_exposure_type
 from ostdata.custom_permissions import get_allowed_run_objects_to_view_for_user
+from ostdata.permissions import user_has_acl
 from obs_run.datafile_filters import apply_datafile_filters
 from obs_run.ser_thumbnails import get_ser_thumbnail_png, is_ser_path
 
@@ -109,11 +113,22 @@ def get_datafile_thumbnail(request, pk):
     except Exception:
         w = max_dim
 
-    path = df.datafile
-    file_type = (df.file_type or '').upper()
-    file_path = Path(path)
-    if not file_path.exists():
+    try:
+        from obs_run.services.datafile_paths import safe_datafile_path, PathOutsideDataRoot
+        file_path = safe_datafile_path(df.datafile, must_exist=True)
+    except PathOutsideDataRoot:
         return Response({"detail": "File not found"}, status=404)
+    except FileNotFoundError:
+        return Response({"detail": "File not found"}, status=404)
+
+    try:
+        max_source = int(getattr(django_settings, 'THUMBNAIL_MAX_SOURCE_BYTES', 500 * 1024 * 1024))
+        if file_path.stat().st_size > max_source:
+            return Response({"detail": "Source file too large for thumbnail"}, status=400)
+    except Exception:
+        pass
+
+    file_type = (df.file_type or '').upper()
 
     # Determine FITS by type or extension (fallback)
     is_fits = (file_type == 'FITS') or (file_path.suffix.lower() in ['.fits', '.fit', '.fts'])
@@ -145,6 +160,9 @@ def get_datafile_thumbnail(request, pk):
                     return Response({"detail": "No image data"}, status=400)
                 if data.ndim > 2:
                     data = data[0]
+                max_pixels = int(getattr(django_settings, 'THUMBNAIL_MAX_PIXELS', 50_000_000))
+                if int(np.prod(data.shape)) > max_pixels:
+                    return Response({"detail": "Image too large for thumbnail"}, status=400)
                 # Replace non-finite
                 data = np.asarray(data, dtype=float)
                 finite = np.isfinite(data)
@@ -182,6 +200,10 @@ def get_datafile_thumbnail(request, pk):
     except Exception as e:
         logger.exception("thumbnail generation failed for datafile %s: %s", pk, e)
         return Response({"detail": "Thumbnail generation failed"}, status=400)
+
+
+get_datafile_thumbnail.throttle_classes = [ScopedRateThrottle]
+get_datafile_thumbnail.throttle_scope = 'thumbnails'
 
 
 @extend_schema(summary='DataFile FITS header', parameters=[OpenApiParameter('pk', int, OpenApiParameter.PATH)])
@@ -245,13 +267,17 @@ def download_datafile(request, pk):
         except Exception:
             return Response({"detail": "Not found"}, status=404)
 
-    file_path = Path(df.datafile)
-    if not file_path.exists() or not file_path.is_file():
+    try:
+        from obs_run.services.datafile_paths import safe_datafile_path, PathOutsideDataRoot
+        file_path = safe_datafile_path(df.datafile, must_exist=True)
+    except PathOutsideDataRoot:
+        return Response({"detail": "File not found"}, status=404)
+    except FileNotFoundError:
         return Response({"detail": "File not found"}, status=404)
 
     try:
         from django.http import FileResponse
-        resp = FileResponse(open(file_path, 'rb'), as_attachment=True, filename=Path(df.datafile).name)
+        resp = FileResponse(open(file_path, 'rb'), as_attachment=True, filename=file_path.name)
         return resp
     except Exception as e:
         logger.exception("download failed for datafile %s: %s", pk, e)
@@ -260,112 +286,26 @@ def download_datafile(request, pk):
 
 @api_view(['GET'])
 def download_run_datafiles(request, run_pk):
-    """
-    Create a ZIP archive of data files for a run. Optional query param `ids` (comma-separated)
-    to restrict which files to include.
-    """
-    try:
-        run = ObservationRun.objects.get(pk=run_pk)
-    except ObservationRun.DoesNotExist:
-        return Response({"detail": "Run not found"}, status=404)
-
-    if run and not run.is_public:
-        if request.user.is_anonymous:
-            return Response({"detail": "Not found"}, status=404)
-        try:
-            if not request.user.can_read(run):
-                return Response({"detail": "Not found"}, status=404)
-        except Exception:
-            return Response({"detail": "Not found"}, status=404)
-
-    qs = DataFile.objects.filter(observation_run_id=run_pk)
-    ids_param = request.query_params.get('ids')
-    if ids_param:
-        try:
-            id_list = [int(x) for x in ids_param.split(',') if x.strip().isdigit()]
-            if id_list:
-                qs = qs.filter(pk__in=id_list)
-        except Exception:
-            pass
-
-    qs = apply_datafile_filters(qs, request.query_params)
-
-    files = list(qs)
-    if not files:
-        return Response({"detail": "No files to download"}, status=400)
-
-    # Create temporary ZIP
-    tmp = tempfile.NamedTemporaryFile(delete=False, suffix='.zip')
-    tmp_path = tmp.name
-    tmp.close()
-    try:
-        with zipfile.ZipFile(tmp_path, 'w', compression=zipfile.ZIP_DEFLATED) as zf:
-            for df in files:
-                p = Path(df.datafile)
-                if p.exists() and p.is_file():
-                    arcname = f"{df.pk}_{p.name}"
-                    try:
-                        zf.write(p, arcname=arcname)
-                    except Exception:
-                        continue
-        from django.http import FileResponse
-        filename = f"run_{run_pk}_datafiles.zip"
-        resp = FileResponse(open(tmp_path, 'rb'), as_attachment=True, filename=filename)
-        return resp
-    except Exception as e:
-        logger.exception("run ZIP creation failed for run %s: %s", run_pk, e)
-        return Response({"detail": "ZIP creation failed"}, status=400)
+    """Synchronous ZIP downloads are retired; use async download-jobs API."""
+    return Response(
+        {
+            'detail': 'Synchronous ZIP downloads are gone. Use POST /api/runs/runs/{id}/download-jobs/.',
+            'code': 'sync_zip_gone',
+        },
+        status=410,
+    )
 
 
 @api_view(['GET'])
 def download_datafiles_bulk(request):
-    """
-    Create a ZIP of arbitrary datafiles selected by ids or by filters (across runs).
-    Query params:
-      - ids: comma-separated list of DataFile PKs (optional)
-      - filters: same subset as run download (file_type, main_target, exposure_type, spectroscopy,
-                 exptime_min, exptime_max, file_name, instrument, pixel_count_min/max)
-    Access: anonymous users only get files belonging to public runs.
-    """
-    qs = DataFile.objects.all().select_related('observation_run')
-    qs = get_allowed_run_objects_to_view_for_user(qs, request.user)
-
-    # Apply ids constraint first if provided
-    ids_param = request.query_params.get('ids')
-    if ids_param:
-        try:
-            id_list = [int(x) for x in ids_param.split(',') if x.strip().isdigit()]
-            if id_list:
-                qs = qs.filter(pk__in=id_list)
-        except Exception:
-            pass
-
-    qs = apply_datafile_filters(qs, request.query_params)
-
-    files = list(qs)
-    if not files:
-        return Response({"detail": "No files to download"}, status=400)
-
-    tmp = tempfile.NamedTemporaryFile(delete=False, suffix='.zip')
-    tmp_path = tmp.name
-    tmp.close()
-    try:
-        with zipfile.ZipFile(tmp_path, 'w', compression=zipfile.ZIP_DEFLATED) as zf:
-            for df in files:
-                p = Path(df.datafile)
-                if p.exists() and p.is_file():
-                    arcname = f"{df.pk}_{p.name}"
-                    try:
-                        zf.write(p, arcname=arcname)
-                    except Exception:
-                        continue
-        from django.http import FileResponse
-        filename = f"datafiles_filtered.zip"
-        resp = FileResponse(open(tmp_path, 'rb'), as_attachment=True, filename=filename)
-        return resp
-    except Exception as e:
-        logger.exception("bulk ZIP creation failed: %s", e)
-        return Response({"detail": "Bulk ZIP creation failed"}, status=400)
+    """Synchronous bulk ZIP downloads are retired; use async download-jobs API."""
+    return Response(
+        {
+            'detail': 'Synchronous ZIP downloads are gone. Use POST /api/runs/datafiles/download-jobs/.',
+            'code': 'sync_zip_gone',
+        },
+        status=410,
+    )
 
 
 #
@@ -398,6 +338,7 @@ class DataFileViewSet(viewsets.ModelViewSet):
     queryset = DataFile.objects.select_related('observation_run').prefetch_related('object_set').all()
     serializer_class = DataFileSerializer
     pagination_class = DataFilesPagination
+    permission_classes = [IsAuthenticatedOrReadOnly]
 
     filter_backends = (DjangoFilterBackend,)
     filterset_class = DataFileFilter
@@ -405,6 +346,26 @@ class DataFileViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         qs = super().get_queryset()
         return get_allowed_run_objects_to_view_for_user(qs, self.request.user)
+
+    def create(self, request, *args, **kwargs):
+        user = request.user
+        if not user or not getattr(user, 'is_authenticated', False):
+            return Response({'detail': 'Forbidden'}, status=403)
+        if not (getattr(user, 'is_superuser', False) or user_has_acl(user, 'acl_runs_edit')):
+            return Response({'detail': 'Forbidden'}, status=403)
+        run_id = request.data.get('observation_run')
+        if run_id is None:
+            return Response({'detail': 'observation_run is required'}, status=400)
+        try:
+            run = ObservationRun.objects.get(pk=run_id)
+        except ObservationRun.DoesNotExist:
+            return Response({'detail': 'Run not found'}, status=404)
+        try:
+            if not user.can_add(run):
+                return Response({'detail': 'Forbidden'}, status=403)
+        except Exception:
+            return Response({'detail': 'Forbidden'}, status=403)
+        return super().create(request, *args, **kwargs)
 
     def list(self, request, *args, **kwargs):
         queryset = self.filter_queryset(self.get_queryset())

@@ -497,6 +497,15 @@ class DownloadJob(models.Model):
     started_at = models.DateTimeField(null=True, blank=True)
     finished_at = models.DateTimeField(null=True, blank=True)
     expires_at = models.DateTimeField(null=True, blank=True)
+    # SHA-256 hex digest of one-time access token for anonymous jobs (plaintext never stored)
+    access_token_hash = models.CharField(max_length=64, blank=True, default='')
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['status', 'created_at'], name='dljob_status_created_idx'),
+            models.Index(fields=['user', 'status'], name='dljob_user_status_idx'),
+            models.Index(fields=['access_token_hash'], name='dljob_token_hash_idx'),
+        ]
 
     def __str__(self):
         return f"DownloadJob #{self.pk} ({self.status})"

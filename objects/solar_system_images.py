@@ -1,11 +1,13 @@
 """Storage and lookup for solar-system object preview images."""
 from __future__ import annotations
 
+import io
 import re
 from pathlib import Path
 from typing import Optional, Tuple
 
 from django.conf import settings
+from django.core.exceptions import ValidationError
 
 ALLOWED_IMAGE_EXTENSIONS = ('.jpg', '.jpeg', '.png', '.webp', '.gif')
 ALLOWED_UPLOAD_CONTENT_TYPES = {
@@ -13,6 +15,13 @@ ALLOWED_UPLOAD_CONTENT_TYPES = {
     'image/png',
     'image/webp',
     'image/gif',
+}
+# Pillow format -> preferred extension after re-encode
+_SAFE_FORMATS = {
+    'JPEG': '.jpg',
+    'PNG': '.png',
+    'WEBP': '.webp',
+    'GIF': '.gif',
 }
 
 
@@ -73,28 +82,53 @@ def image_info_for_object(obj, request=None) -> Tuple[bool, Optional[str], str]:
 
 
 def save_image_for_object(obj, uploaded_file) -> Path:
-    """Persist upload; replaces any existing image for this object's stem."""
+    """
+    Persist upload after size/signature validation and Pillow re-encode.
+    Replaces any existing image for this object's stem.
+    """
+    max_bytes = int(getattr(settings, 'SOLAR_IMAGE_MAX_UPLOAD_BYTES', 10 * 1024 * 1024))
+    size = getattr(uploaded_file, 'size', None)
+    if size is not None and size > max_bytes:
+        raise ValidationError(f'Image exceeds maximum size ({max_bytes} bytes)')
+
+    try:
+        from PIL import Image, ImageOps
+    except Exception as exc:
+        raise ValidationError('Image processing unavailable') from exc
+
+    raw = uploaded_file.read()
+    if len(raw) > max_bytes:
+        raise ValidationError(f'Image exceeds maximum size ({max_bytes} bytes)')
+
+    try:
+        img = Image.open(io.BytesIO(raw))
+        img.load()
+        img = ImageOps.exif_transpose(img)
+    except Exception as exc:
+        raise ValidationError('Invalid image file') from exc
+
+    fmt = (img.format or '').upper()
+    if fmt not in _SAFE_FORMATS:
+        raise ValidationError(f'Unsupported image format: {fmt or "unknown"}')
+
+    # Re-encode to strip metadata / polyglot payloads
+    if fmt == 'JPEG' and img.mode not in ('RGB', 'L'):
+        img = img.convert('RGB')
+    elif fmt == 'PNG' and img.mode not in ('RGB', 'RGBA', 'L', 'LA', 'P'):
+        img = img.convert('RGBA')
+
     stem = sanitize_object_image_stem(getattr(obj, 'name', '') or '')
-    original = (getattr(uploaded_file, 'name', '') or '').lower()
-    ext = Path(original).suffix.lower()
-    if ext not in ALLOWED_IMAGE_EXTENSIONS:
-        content_type = (getattr(uploaded_file, 'content_type', '') or '').lower()
-        ext_map = {
-            'image/jpeg': '.jpg',
-            'image/png': '.png',
-            'image/webp': '.webp',
-            'image/gif': '.gif',
-        }
-        ext = ext_map.get(content_type, '.jpg')
+    ext = _SAFE_FORMATS[fmt]
     directory = get_images_directory()
     for old_ext in ALLOWED_IMAGE_EXTENSIONS:
         old = directory / f'{stem}{old_ext}'
         if old.is_file():
             old.unlink()
     dest = directory / f'{stem}{ext}'
-    with dest.open('wb') as out:
-        for chunk in uploaded_file.chunks():
-            out.write(chunk)
+    save_kwargs = {}
+    if fmt == 'JPEG':
+        save_kwargs = {'quality': 90, 'optimize': True}
+    img.save(dest, format=fmt, **save_kwargs)
     return dest
 
 
