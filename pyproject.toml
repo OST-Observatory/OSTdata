@@ -3,9 +3,16 @@ name = "ostdata"
 requires-python = ">=3.12"
 
 [tool.basedpyright]
+# Django apps live in this directory (manage.py root).
 extraPaths = ["."]
 venvPath = ".."
 venv = "ostdata_env"
+pythonVersion = "3.12"
+typeCheckingMode = "basic"
+# DRF/Django do not ship complete stubs; stubs packages are optional/noisy for this repo.
+reportMissingTypeStubs = "none"
+reportUnusedImport = "none"
+reportUnusedVariable = "none"
 
 [tool.ruff]
 line-length = 120
