@@ -127,7 +127,7 @@ export async function buildDownloadPrepMessage({ fileCount, items = [], sizeIsPa
   const waitMinutes = formatDownloadJobWaitMinutes()
   lines.push(
     `Preparing the archive can take a while for large sets. Please keep this tab open; the download should start automatically within about ${waitMinutes} minute${waitMinutes === 1 ? '' : 's'}. ` +
-      `If nothing starts by then, wait a bit longer and try again — the archive may still be building on the server. ` +
+      `If nothing starts by then, wait a bit longer and try again, as the archive may still be building on the server. ` +
       `If the problem continues, contact the site administrator.`
   )
   return lines.join(' ')
