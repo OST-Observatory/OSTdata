@@ -1,11 +1,15 @@
-from django.urls import reverse
+from __future__ import annotations
+
+from typing import Any, Optional
+
 from django.utils import timezone
 
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import extend_schema_field
 from rest_framework.serializers import (
     ModelSerializer,
     SerializerMethodField,
     PrimaryKeyRelatedField,
-    ReadOnlyField,
 )
 
 from pathlib import Path
@@ -55,8 +59,8 @@ class RunSerializer(ModelSerializer):
     end_time = SerializerMethodField()
     objects = SerializerMethodField()
     search_match_via_aux = SerializerMethodField()
-
-    owner = ReadOnlyField(source='added_by.username')
+    # ObservationRun.added_by was removed; keep API key for compatibility (always null).
+    owner = SerializerMethodField()
 
     class Meta:
         model = ObservationRun
@@ -96,7 +100,7 @@ class RunSerializer(ModelSerializer):
             'note_override',
             'mid_observation_jd_override',
         ]
-        read_only_fields = ('pk', 'tags', 'reduction_status_display')
+        read_only_fields = ('pk', 'tags', 'reduction_status_display', 'owner')
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -109,17 +113,24 @@ class RunSerializer(ModelSerializer):
                 if field_name in self.fields:
                     self.fields[field_name].read_only = True
 
-    def get_href(self, obj):
+    @extend_schema_field(OpenApiTypes.STR)
+    def get_owner(self, obj) -> Optional[str]:
+        return None
+
+    @extend_schema_field(OpenApiTypes.STR)
+    def get_href(self, obj) -> str:
         # Return SPA route instead of Django reverse (legacy templates removed)
         return f"/observation-runs/{obj.pk}"
 
-    def get_tags(self, obj):
+    @extend_schema_field(TagSerializer(many=True))
+    def get_tags(self, obj) -> list:
         #   This has to be used instead of a through field, as otherwise
         #   PUT or PATCH requests fail!
         tags = TagSerializer(obj.tags, many=True).data
         return tags
 
-    def get_reduction_status_display(self, obj):
+    @extend_schema_field(OpenApiTypes.STR)
+    def get_reduction_status_display(self, obj) -> str:
         return obj.get_reduction_status_display()
 
     def _get_annotated_or(self, obj, name, fallback_callable):
@@ -134,17 +145,20 @@ class RunSerializer(ModelSerializer):
         except Exception:
             return 0
 
-    def get_n_datafiles(self, obj):
+    @extend_schema_field(OpenApiTypes.INT)
+    def get_n_datafiles(self, obj) -> int:
         return self._get_annotated_or(obj, 'n_datafiles', lambda: obj.datafile_set.count())
 
-    def get_n_fits(self, obj):
+    @extend_schema_field(OpenApiTypes.INT)
+    def get_n_fits(self, obj) -> int:
         return self._get_annotated_or(
             obj,
             'n_fits',
             lambda: obj.datafile_set.filter(file_type__exact='FITS').count(),
         )
 
-    def get_n_img(self, obj):
+    @extend_schema_field(OpenApiTypes.INT)
+    def get_n_img(self, obj) -> int:
         return self._get_annotated_or(
             obj,
             'n_img',
@@ -155,7 +169,8 @@ class RunSerializer(ModelSerializer):
             ),
         )
 
-    def get_n_ser(self, obj):
+    @extend_schema_field(OpenApiTypes.INT)
+    def get_n_ser(self, obj) -> int:
         return self._get_annotated_or(
             obj,
             'n_ser',
@@ -186,18 +201,22 @@ class RunSerializer(ModelSerializer):
         except Exception:
             return 0
 
-    def get_n_light(self, obj):
+    @extend_schema_field(OpenApiTypes.INT)
+    def get_n_light(self, obj) -> int:
         return self._count_exptype(obj, {'ann': 'n_light', 'codes': ['LI'], 'prefixes': ['LIGHT']})
 
-    def get_n_flat(self, obj):
+    @extend_schema_field(OpenApiTypes.INT)
+    def get_n_flat(self, obj) -> int:
         return self._count_exptype(obj, {'ann': 'n_flat', 'codes': ['FL'], 'prefixes': ['FLAT']})
 
-    def get_n_dark(self, obj):
+    @extend_schema_field(OpenApiTypes.INT)
+    def get_n_dark(self, obj) -> int:
         return self._count_exptype(obj, {'ann': 'n_dark', 'codes': ['DA'], 'prefixes': ['DARK']})
 
     # (legacy alias getters removed)
 
-    def get_expo_time(self, obj):
+    @extend_schema_field(OpenApiTypes.NUMBER)
+    def get_expo_time(self, obj) -> float:
         try:
             v = getattr(obj, 'expo_time', None)
             if isinstance(v, (int, float)) and v >= 0:
@@ -212,7 +231,8 @@ class RunSerializer(ModelSerializer):
                 total_expo_time += float(expo_time)
         return total_expo_time
 
-    def get_light_expo_time(self, obj):
+    @extend_schema_field(OpenApiTypes.NUMBER)
+    def get_light_expo_time(self, obj) -> float:
         """Total exposure time of Light (LI) frames only."""
         try:
             v = getattr(obj, 'light_expo_time', None)
@@ -234,7 +254,8 @@ class RunSerializer(ModelSerializer):
         except Exception:
             return 0.0
 
-    def get_start_time(self, obj):
+    @extend_schema_field(OpenApiTypes.STR)
+    def get_start_time(self, obj) -> str:
         # Return ISO-8601 timestamp
         data_files = obj.datafile_set.filter(hjd__gt=2451545).order_by('hjd')
         if data_files.exists():
@@ -251,7 +272,8 @@ class RunSerializer(ModelSerializer):
             return '2000-01-01T00:00:00Z'
         return '2000-01-01T00:00:00Z'
 
-    def get_end_time(self, obj):
+    @extend_schema_field(OpenApiTypes.STR)
+    def get_end_time(self, obj) -> str:
         # Return ISO-8601 timestamp
         data_files = obj.datafile_set.filter(hjd__gt=2451545).order_by('-hjd')
         if data_files.exists():
@@ -268,11 +290,13 @@ class RunSerializer(ModelSerializer):
             return '2000-01-01T00:00:00Z'
         return '2000-01-01T00:00:00Z'
 
-    def get_objects(self, obj):
+    @extend_schema_field(ObjectSimpleSerializer(many=True))
+    def get_objects(self, obj) -> list:
         objects = ObjectSimpleSerializer(obj.object_set.all(), many=True).data
         return objects
 
-    def get_search_match_via_aux(self, obj):
+    @extend_schema_field(OpenApiTypes.STR)
+    def get_search_match_via_aux(self, obj) -> Optional[str]:
         aux_search = self.context.get('aux_object')
         if not aux_search:
             return None
@@ -299,7 +323,8 @@ class SimpleRunSerializer(ModelSerializer):
         ]
         read_only_fields = ('pk',)
 
-    def get_href(self, obj):
+    @extend_schema_field(OpenApiTypes.STR)
+    def get_href(self, obj) -> str:
         # Return SPA route instead of Django reverse (legacy templates removed)
         return f"/observation-runs/{obj.pk}"
 
@@ -328,6 +353,10 @@ class DataFileSerializer(ModelSerializer):
     object_ids = SerializerMethodField()
     main_object_id = SerializerMethodField()
     main_object_name = SerializerMethodField()
+    ra_hms = SerializerMethodField()
+    dec_dms = SerializerMethodField()
+    ra_hms = SerializerMethodField()
+    dec_dms = SerializerMethodField()
 
     class Meta:
         model = DataFile
@@ -472,22 +501,27 @@ class DataFileSerializer(ModelSerializer):
                 if field_name in self.fields:
                     self.fields[field_name].read_only = True
 
-    def get_tags(self, obj):
+    @extend_schema_field(TagSerializer(many=True))
+    def get_tags(self, obj) -> list:
         tags = TagSerializer(obj.tags, many=True).data
         return tags
 
-    def get_file_name(self, obj):
+    @extend_schema_field(OpenApiTypes.STR)
+    def get_file_name(self, obj) -> str:
         path = Path(obj.datafile)
         return path.name
 
-    def get_download_url(self, obj):
+    @extend_schema_field(OpenApiTypes.URI)
+    def get_download_url(self, obj) -> str:
         return f"/api/runs/datafiles/{obj.pk}/download/"
 
-    def get_exposure_type_display(self, obj):
+    @extend_schema_field(OpenApiTypes.STR)
+    def get_exposure_type_display(self, obj) -> Optional[str]:
         # Return effective exposure type display instead of raw exposure_type
         return obj.get_effective_exposure_type_display()
 
-    def get_effective_exposure_type(self, obj):
+    @extend_schema_field(OpenApiTypes.STR)
+    def get_effective_exposure_type(self, obj) -> Optional[str]:
         # Check for annotated_effective_exposure_type first (used to avoid property conflicts)
         if hasattr(obj, '__dict__') and 'annotated_effective_exposure_type' in obj.__dict__:
             return obj.__dict__['annotated_effective_exposure_type']
@@ -497,10 +531,12 @@ class DataFileSerializer(ModelSerializer):
         # Fall back to property if no annotation exists
         return obj.effective_exposure_type
 
-    def get_effective_exposure_type_display(self, obj):
+    @extend_schema_field(OpenApiTypes.STR)
+    def get_effective_exposure_type_display(self, obj) -> Optional[str]:
         return obj.get_effective_exposure_type_display()
 
-    def get_exposure_type_ml_display(self, obj):
+    @extend_schema_field(OpenApiTypes.STR)
+    def get_exposure_type_ml_display(self, obj) -> Optional[str]:
         if obj.exposure_type_ml:
             # Get display value from choices
             for code, label in DataFile.EXPOSURE_TYPE_POSSIBILITIES:
@@ -508,7 +544,8 @@ class DataFileSerializer(ModelSerializer):
                     return label
         return None
 
-    def get_exposure_type_user_display(self, obj):
+    @extend_schema_field(OpenApiTypes.STR)
+    def get_exposure_type_user_display(self, obj) -> Optional[str]:
         if obj.exposure_type_user:
             # Get display value from choices
             for code, label in DataFile.EXPOSURE_TYPE_POSSIBILITIES:
@@ -516,7 +553,8 @@ class DataFileSerializer(ModelSerializer):
                     return label
         return None
 
-    def get_binning(self, obj):
+    @extend_schema_field(OpenApiTypes.STR)
+    def get_binning(self, obj) -> str:
         try:
             header = obj.get_fits_header()
             bx = header.get('XBINNING') or header.get('XBIN') or header.get('BINX')
@@ -533,15 +571,18 @@ class DataFileSerializer(ModelSerializer):
         except Exception:
             return "1x1"
 
-    def get_observation_run_name(self, obj):
+    @extend_schema_field(OpenApiTypes.STR)
+    def get_observation_run_name(self, obj) -> str:
         return obj.observation_run.name
 
-    def get_object_ids(self, obj):
+    @extend_schema_field({'type': 'array', 'items': {'type': 'integer'}})
+    def get_object_ids(self, obj) -> list[int]:
         """List of object PKs this datafile is associated with."""
         objs = obj.object_set.all().only('pk')
         return [o.pk for o in objs]
 
-    def get_main_object_id(self, obj):
+    @extend_schema_field(OpenApiTypes.INT)
+    def get_main_object_id(self, obj) -> Optional[int]:
         """
         Object ID for linking when displaying main_target.
         Prefer object whose name matches main_target; else first object if only one.
@@ -558,7 +599,8 @@ class DataFileSerializer(ModelSerializer):
             return objs[0].pk
         return objs[0].pk if objs else None
 
-    def get_main_object_name(self, obj):
+    @extend_schema_field(OpenApiTypes.STR)
+    def get_main_object_name(self, obj) -> Optional[str]:
         """Name of the object we link to (main_object_id)."""
         objs = list(obj.object_set.all().only('pk', 'name'))
         if not objs:
@@ -571,6 +613,14 @@ class DataFileSerializer(ModelSerializer):
         if len(objs) == 1:
             return objs[0].name
         return objs[0].name if objs else None
+
+    @extend_schema_field(OpenApiTypes.STR)
+    def get_ra_hms(self, obj) -> str:
+        return obj.ra_hms()
+
+    @extend_schema_field(OpenApiTypes.STR)
+    def get_dec_dms(self, obj) -> str:
+        return obj.dec_dms()
 
     def update(self, instance, validated_data):
         """Override update to set override flags for user changes."""

@@ -125,6 +125,9 @@ SPECTACULAR_SETTINGS = {
     'SERVE_INCLUDE_SCHEMA': False,
     'SERVE_PERMISSIONS': ['ostdata.permissions.IsAdminOrSuperuser'],
     'COMPONENT_SPLIT_REQUEST': True,
+    'ENUM_NAME_OVERRIDES': {
+        'ExposureTypeEnum': 'obs_run.models.DataFile.EXPOSURE_TYPE_POSSIBILITIES',
+    },
 }
 
 # Production LDAP must use ldaps:// or STARTTLS

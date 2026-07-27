@@ -13,6 +13,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from ostdata.permissions import IsAdminOrSuperuser as IsAdminUser, HasPerm, user_has_acl
 from rest_framework.response import Response
 from drf_spectacular.utils import extend_schema, extend_schema_view, OpenApiParameter
+from ostdata.openapi import EmptyObjectSerializer, JSON_OBJECT_RESPONSE, JSON_OBJECT_ACCEPTED
 from rest_framework import serializers
 import logging
 logger = logging.getLogger(__name__)
@@ -187,7 +188,8 @@ from adminops.redis_helpers import (
 
 # -------------------- Admin endpoints --------------------
 
-@extend_schema(summary='Admin system health (admin only)', tags=['Admin'])
+@extend_schema(summary='Admin system health (admin only)', tags=['Admin'],
+    responses=JSON_OBJECT_RESPONSE)
 @api_view(['GET'])
 @permission_classes([IsAuthenticated, HasPerm('acl_system_health_view')])
 def admin_health(request):
@@ -237,7 +239,7 @@ def admin_health(request):
             description='Search entity, user, reason, and changed fields.',
         ),
     ],
-)
+    responses=JSON_OBJECT_RESPONSE)
 @api_view(['GET'])
 @permission_classes([IsAuthenticated, HasPerm('acl_admin_audit_log_view')])
 def admin_audit_log(request):
@@ -283,7 +285,9 @@ def admin_audit_log(request):
         status=200,
     )
 
-@extend_schema(summary='Set observation date (mid JD) for a run', tags=['Admin'])
+@extend_schema(summary='Set observation date (mid JD) for a run', tags=['Admin'],
+    responses=JSON_OBJECT_RESPONSE,
+    request=EmptyObjectSerializer)
 @api_view(['POST'])
 @permission_classes([IsAuthenticated, HasPerm('acl_runs_edit')])
 def admin_run_set_date(request, run_id: int):
@@ -330,7 +334,9 @@ def admin_run_set_date(request, run_id: int):
         logger.exception("Failed to set mid_observation_jd for run %s: %s", run_id, e)
         return Response({'detail': str(e)}, status=400)
 
-@extend_schema(summary='Recompute observation date (mid JD) from files', tags=['Admin'])
+@extend_schema(summary='Recompute observation date (mid JD) from files', tags=['Admin'],
+    responses=JSON_OBJECT_RESPONSE,
+    request=None)
 @api_view(['POST'])
 @permission_classes([IsAuthenticated, HasPerm('acl_runs_edit')])
 def admin_run_recompute_date(request, run_id: int):
@@ -355,7 +361,9 @@ def admin_run_recompute_date(request, run_id: int):
         logger.exception("Failed to recompute mid_observation_jd for run %s: %s", run_id, e)
         return Response({'detail': str(e)}, status=400)
 
-@extend_schema(summary='Clear override flag for a specific field', tags=['Admin'])
+@extend_schema(summary='Clear override flag for a specific field', tags=['Admin'],
+    responses=JSON_OBJECT_RESPONSE,
+    request=None)
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def admin_clear_override_flag(request, model_type: str, instance_id: int, field_name: str):
@@ -407,7 +415,9 @@ def admin_clear_override_flag(request, model_type: str, instance_id: int, field_
         logger.exception("Failed to clear override flag: %s", e)
         return Response({'detail': str(e)}, status=400)
 
-@extend_schema(summary='Clear all override flags for an instance', tags=['Admin'])
+@extend_schema(summary='Clear all override flags for an instance', tags=['Admin'],
+    responses=JSON_OBJECT_RESPONSE,
+    request=None)
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def admin_clear_all_overrides(request, model_type: str, instance_id: int):
@@ -478,7 +488,8 @@ def admin_clear_all_overrides(request, model_type: str, instance_id: int):
         'count': len(cleared_flags),
     })
 
-@extend_schema(summary='List all instances with override flags', tags=['Admin'])
+@extend_schema(summary='List all instances with override flags', tags=['Admin'],
+    responses=JSON_OBJECT_RESPONSE)
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def admin_list_override_flags(request):
@@ -559,9 +570,9 @@ class AdminReconcileRequestSerializer(serializers.Serializer):
     dry_run = serializers.BooleanField(required=False, default=True)
 
 
+@extend_schema(summary='Trigger cleanup of expired downloads', request=None, responses=JSON_OBJECT_ACCEPTED, tags=['Admin'])
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
-@extend_schema(summary='Trigger cleanup of expired downloads', request=None, responses={'202': {'type': 'object'}}, tags=['Admin'])
 def admin_trigger_cleanup_downloads(request):
     if not (request.user.is_superuser or request.user.has_perm('users.acl_maintenance_cleanup')):
         return Response({'detail': 'Forbidden'}, status=403)
@@ -573,9 +584,9 @@ def admin_trigger_cleanup_downloads(request):
         return Response({'enqueued': False, 'error': str(e)}, status=400)
 
 
+@extend_schema(summary='Trigger filesystem reconcile', request=AdminReconcileRequestSerializer, responses=JSON_OBJECT_ACCEPTED, tags=['Admin'])
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
-@extend_schema(summary='Trigger filesystem reconcile', request=AdminReconcileRequestSerializer, responses={'202': {'type': 'object'}}, tags=['Admin'])
 def admin_trigger_reconcile(request):
     if not (request.user.is_superuser or request.user.has_perm('users.acl_maintenance_reconcile')):
         return Response({'detail': 'Forbidden'}, status=403)
@@ -602,9 +613,9 @@ class AdminScanMissingRequestSerializer(serializers.Serializer):
     limit = serializers.IntegerField(required=False, allow_null=True)
 
 
+@extend_schema(summary='Trigger orphans cleanup/hashcheck', request=AdminOrphansRequestSerializer, responses=JSON_OBJECT_ACCEPTED, tags=['Admin'])
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
-@extend_schema(summary='Trigger orphans cleanup/hashcheck', request=AdminOrphansRequestSerializer, responses={'202': {'type': 'object'}}, tags=['Admin'])
 def admin_trigger_orphans_hashcheck(request):
     if not (request.user.is_superuser or request.user.has_perm('users.acl_maintenance_orphans')):
         return Response({'detail': 'Forbidden'}, status=403)
@@ -630,9 +641,9 @@ def admin_trigger_orphans_hashcheck(request):
         return Response({'enqueued': False, 'error': str(e)}, status=400)
 
 
+@extend_schema(summary='Trigger scan for missing files (ingest new files from filesystem)', request=AdminScanMissingRequestSerializer, responses=JSON_OBJECT_ACCEPTED, tags=['Admin'])
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
-@extend_schema(summary='Trigger scan for missing files (ingest new files from filesystem)', request=AdminScanMissingRequestSerializer, responses={'202': {'type': 'object'}}, tags=['Admin'])
 def admin_trigger_scan_missing(request):
     if not (request.user.is_superuser or request.user.has_perm('users.acl_maintenance_reconcile')):
         return Response({'detail': 'Forbidden'}, status=403)
@@ -658,15 +669,15 @@ class AdminOrphanObjectsRequestSerializer(serializers.Serializer):
     dry_run = serializers.BooleanField(required=False, default=True)
 
 
-@api_view(['POST'])
-@permission_classes([IsAuthenticated])
 @extend_schema(
     summary='Cleanup orphan Objects (no DataFiles)',
     description='Finds and removes Objects that have no associated DataFiles. Also recalculates first_hjd and cleans stale observation_run M2M links.',
     request=AdminOrphanObjectsRequestSerializer,
-    responses={'202': {'type': 'object'}},
+    responses=JSON_OBJECT_ACCEPTED,
     tags=['Admin']
 )
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
 def admin_trigger_orphan_objects(request):
     if not (request.user.is_superuser or request.user.has_perm('users.acl_maintenance_orphans')):
         return Response({'detail': 'Forbidden'}, status=403)
@@ -683,15 +694,15 @@ def admin_trigger_orphan_objects(request):
         return Response({'enqueued': False, 'error': str(e)}, status=400)
 
 
-@api_view(['POST'])
-@permission_classes([IsAuthenticated])
 @extend_schema(
     summary='Unlink non-Light DataFiles from Objects',
     description='Removes Object–DataFile associations for all DataFiles that are not Light frames (flats, darks, bias, etc.).',
     request=AdminOrphanObjectsRequestSerializer,
-    responses={'202': {'type': 'object'}},
+    responses=JSON_OBJECT_ACCEPTED,
     tags=['Admin']
 )
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
 def admin_trigger_unlink_non_light_datafiles(request):
     if not (request.user.is_superuser or request.user.has_perm('users.acl_maintenance_orphans')):
         return Response({'detail': 'Forbidden'}, status=403)
@@ -714,7 +725,8 @@ class AdminBannerSetSerializer(serializers.Serializer):
     level = serializers.ChoiceField(choices=['info', 'success', 'warning', 'error'], required=False, default='warning')
 
 
-@extend_schema(summary='Admin banner: get current banner', tags=['Admin'])
+@extend_schema(summary='Admin banner: get current banner', tags=['Admin'],
+    responses=JSON_OBJECT_RESPONSE)
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def admin_get_banner(request):
@@ -724,10 +736,14 @@ def admin_get_banner(request):
     return Response(data)
 
 
-@extend_schema(summary='Admin banner: set banner', tags=['Admin'])
+@extend_schema(
+    summary='Admin banner: set banner',
+    tags=['Admin'],
+    request=AdminBannerSetSerializer,
+    responses=JSON_OBJECT_RESPONSE,
+)
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
-@extend_schema(request=AdminBannerSetSerializer, responses={'200': {'type': 'object'}})
 def admin_set_banner(request):
     if not (request.user.is_superuser or request.user.has_perm('users.acl_banner_manage')):
         return Response({'detail': 'Forbidden'}, status=403)
@@ -757,7 +773,9 @@ def admin_set_banner(request):
     return Response(payload)
 
 
-@extend_schema(summary='Admin banner: clear banner', tags=['Admin'])
+@extend_schema(summary='Admin banner: clear banner', tags=['Admin'],
+    responses=JSON_OBJECT_RESPONSE,
+    request=None)
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def admin_clear_banner(request):
@@ -783,7 +801,8 @@ def admin_clear_banner(request):
     return Response({'cleared': True})
 
 
-@extend_schema(summary='Public banner info', tags=['Admin'])
+@extend_schema(summary='Public banner info', tags=['Admin'],
+    responses=JSON_OBJECT_RESPONSE)
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def banner_info(request):
@@ -791,9 +810,10 @@ def banner_info(request):
     return Response(data)
 
 
+@extend_schema(summary='Trigger dashboard stats refresh', responses=JSON_OBJECT_ACCEPTED, tags=['Admin'],
+    request=None)
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
-@extend_schema(summary='Trigger dashboard stats refresh', responses={'202': {'type': 'object'}}, tags=['Admin'])
 def admin_trigger_refresh_dashboard_stats(request):
     """
     Manually trigger a background refresh of dashboard statistics.
@@ -810,9 +830,10 @@ def admin_trigger_refresh_dashboard_stats(request):
         return Response({'enqueued': False, 'error': str(e)}, status=400)
 
 
+@extend_schema(summary='Trigger plate solving', responses=JSON_OBJECT_ACCEPTED, tags=['Admin'],
+    request=None)
 @api_view(['POST'])
 @permission_classes([IsAuthenticated, HasPerm('acl_datafiles_plate_solve')])
-@extend_schema(summary='Trigger plate solving', responses={'202': {'type': 'object'}}, tags=['Admin'])
 def admin_trigger_plate_solve_task(request):
     """
     Manually trigger plate solving for pending files.
@@ -825,14 +846,14 @@ def admin_trigger_plate_solve_task(request):
         return Response({'enqueued': False, 'error': str(e)}, status=400)
 
 
-@api_view(['POST'])
-@permission_classes([IsAuthenticated, HasPerm('acl_datafiles_reevaluate')])
 @extend_schema(
     summary='Re-evaluate plate-solved files',
     description='Re-run object association for plate-solved files where header had no coords or WCS differs from header by > threshold.',
-    responses={'202': {'type': 'object'}},
-    tags=['Admin']
-)
+    responses=JSON_OBJECT_ACCEPTED,
+    tags=['Admin'],
+    request=None)
+@api_view(['POST'])
+@permission_classes([IsAuthenticated, HasPerm('acl_datafiles_reevaluate')])
 def admin_trigger_re_evaluate_plate_solved(request):
     """
     Manually trigger re-evaluation of plate-solved files (evaluate_data_file).
@@ -848,8 +869,8 @@ def admin_trigger_re_evaluate_plate_solved(request):
 @extend_schema(
     summary='Delete all aliases (identifiers) for an object',
     description='Removes all non-header-based identifiers (aliases) for the given object.',
-    responses={200: serializers.Serializer}
-)
+    responses=JSON_OBJECT_RESPONSE,
+    request=None)
 @api_view(['POST'])
 @permission_classes([IsAuthenticated, HasPerm('acl_object_delete_aliases')])
 def admin_delete_object_aliases(request, object_id):
@@ -881,8 +902,8 @@ def admin_delete_object_aliases(request, object_id):
 @extend_schema(
     summary='Update object identifiers from SIMBAD',
     description='Query SIMBAD and update identifiers for an object. Supports matching by name or coordinates.',
-    request=serializers.Serializer,
-    responses={200: serializers.Serializer}
+    request=EmptyObjectSerializer,
+    responses=JSON_OBJECT_RESPONSE
 )
 @api_view(['POST'])
 @permission_classes([IsAuthenticated, HasPerm('acl_object_simbad_identifiers')])
@@ -1115,8 +1136,8 @@ def admin_update_object_identifiers(request, object_id):
     description='Query SIMBAD by object coordinates, update name, object_type, and identifiers. '
                 'If classified as star, verifies with extended search (default 10 arcmin). '
                 'Propagates name changes to associated DataFiles.',
-    request=serializers.Serializer,
-    responses={200: serializers.Serializer}
+    request=EmptyObjectSerializer,
+    responses=JSON_OBJECT_RESPONSE
 )
 @api_view(['POST'])
 @permission_classes([IsAuthenticated, HasPerm('acl_object_simbad_reanalyze')])
@@ -1163,7 +1184,7 @@ def admin_reanalyse_object(request, object_id):
         OpenApiParameter('has_user_type', bool, OpenApiParameter.QUERY, description='Filter by presence of user-set type'),
         OpenApiParameter('file_name', str, OpenApiParameter.QUERY, description='Filter by file name (case-insensitive partial match)'),
     ],
-)
+    responses=JSON_OBJECT_RESPONSE)
 @api_view(['GET'])
 @permission_classes([IsAuthenticated, HasPerm('acl_datafiles_exposure_type_user')])
 def admin_get_exposure_type_discrepancies(request):
@@ -1234,7 +1255,8 @@ def admin_get_exposure_type_discrepancies(request):
     parameters=[
         OpenApiParameter('pk', int, OpenApiParameter.PATH),
     ],
-)
+    responses=JSON_OBJECT_RESPONSE,
+    request=EmptyObjectSerializer)
 @api_view(['PATCH'])
 @permission_classes([IsAuthenticated, HasPerm('acl_datafiles_exposure_type_user')])
 def admin_update_exposure_type_user(request, pk):
@@ -1309,7 +1331,7 @@ def admin_update_exposure_type_user(request, pk):
         OpenApiParameter('observation_run_name', str, OpenApiParameter.QUERY, description='Filter by observation run name (case-insensitive partial match)'),
         OpenApiParameter('file_name', str, OpenApiParameter.QUERY, description='Filter by file name (case-insensitive partial match)'),
     ],
-)
+    responses=JSON_OBJECT_RESPONSE)
 @api_view(['GET'])
 @permission_classes([IsAuthenticated, HasPerm('acl_datafiles_spectrograph')])
 def admin_get_spectrograph_files(request):
@@ -1366,7 +1388,8 @@ def admin_get_spectrograph_files(request):
     parameters=[
         OpenApiParameter('pk', int, OpenApiParameter.PATH),
     ],
-)
+    responses=JSON_OBJECT_RESPONSE,
+    request=EmptyObjectSerializer)
 @api_view(['PATCH'])
 @permission_classes([IsAuthenticated, HasPerm('acl_datafiles_spectrograph')])
 def admin_update_spectrograph(request, pk):
@@ -1431,7 +1454,7 @@ def admin_update_spectrograph(request, pk):
         OpenApiParameter('observation_run', int, OpenApiParameter.QUERY, description='Filter by observation run ID'),
         OpenApiParameter('file_name', str, OpenApiParameter.QUERY, description='Filter by file name (case-insensitive partial match)'),
     ],
-)
+    responses=JSON_OBJECT_RESPONSE)
 @api_view(['GET'])
 @permission_classes([IsAuthenticated, HasPerm('acl_datafiles_plate_solve')])
 def admin_get_unsolved_plate_files(request):
@@ -1551,7 +1574,7 @@ def admin_get_unsolved_plate_files(request):
 @extend_schema(
     summary='Get list of observation runs for plate solving filter',
     parameters=[],
-)
+    responses=JSON_OBJECT_RESPONSE)
 @api_view(['GET'])
 @permission_classes([IsAuthenticated, HasPerm('acl_datafiles_plate_solve')])
 def admin_get_observation_runs_for_plate_solving(request):
@@ -1585,7 +1608,8 @@ def admin_get_observation_runs_for_plate_solving(request):
 @extend_schema(
     summary='Trigger plate solving for specific files',
     parameters=[],
-)
+    responses=JSON_OBJECT_ACCEPTED,
+    request=EmptyObjectSerializer)
 @api_view(['POST'])
 @permission_classes([IsAuthenticated, HasPerm('acl_datafiles_plate_solve')])
 def admin_trigger_plate_solve(request):
@@ -1635,7 +1659,7 @@ def admin_trigger_plate_solve(request):
 @extend_schema(
     summary='Get plate solving statistics',
     parameters=[],
-)
+    responses=JSON_OBJECT_RESPONSE)
 @api_view(['GET'])
 @permission_classes([IsAuthenticated, HasPerm('acl_datafiles_plate_solve')])
 def admin_plate_solve_stats(request):
@@ -1669,7 +1693,7 @@ def admin_plate_solve_stats(request):
 @extend_schema(
     summary='Get plate solving task enabled status',
     parameters=[],
-)
+    responses=JSON_OBJECT_RESPONSE)
 @api_view(['GET'])
 @permission_classes([IsAuthenticated, HasPerm('acl_datafiles_plate_solve')])
 def admin_get_plate_solving_task_enabled(request):
@@ -1685,7 +1709,8 @@ def admin_get_plate_solving_task_enabled(request):
 @extend_schema(
     summary='Set plate solving task enabled status',
     parameters=[],
-)
+    responses=JSON_OBJECT_RESPONSE,
+    request=EmptyObjectSerializer)
 @api_view(['POST'])
 @permission_classes([IsAuthenticated, HasPerm('acl_datafiles_plate_solve')])
 def admin_set_plate_solving_task_enabled(request):
@@ -1706,7 +1731,7 @@ def admin_set_plate_solving_task_enabled(request):
         OpenApiParameter('limit', int, description='Page size (-1 for all)'),
         OpenApiParameter('ordering', str, description='Sort field, prefix with - for desc'),
     ],
-)
+    responses=JSON_OBJECT_RESPONSE)
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def admin_list_all_datafiles(request):
@@ -1823,8 +1848,8 @@ def _do_re_evaluate_run_all(queryset):
 
 @extend_schema(
     summary='Re-evaluate selected DataFiles',
-    request=serializers.Serializer,
-)
+    request=EmptyObjectSerializer,
+    responses=JSON_OBJECT_RESPONSE)
 @api_view(['POST'])
 @permission_classes([IsAuthenticated, HasPerm('acl_datafiles_reevaluate')])
 def admin_re_evaluate_datafiles(request):
@@ -1846,7 +1871,8 @@ def admin_re_evaluate_datafiles(request):
 @extend_schema(
     summary='Re-evaluate all DataFiles of an Observation Run',
     tags=['Admin'],
-)
+    responses=JSON_OBJECT_RESPONSE,
+    request=None)
 @api_view(['POST'])
 @permission_classes([IsAuthenticated, HasPerm('acl_run_datafiles_bulk_admin')])
 def admin_re_evaluate_run(request, run_id: int):
@@ -1870,8 +1896,8 @@ def admin_re_evaluate_run(request, run_id: int):
 
 @extend_schema(
     summary='Link DataFiles to an Object',
-    request=serializers.Serializer,
-)
+    request=EmptyObjectSerializer,
+    responses=JSON_OBJECT_RESPONSE)
 @api_view(['POST'])
 @permission_classes([IsAuthenticated, HasPerm('acl_datafiles_link_object')])
 def admin_link_datafiles_to_object(request):
@@ -1924,8 +1950,8 @@ def admin_link_datafiles_to_object(request):
 
 @extend_schema(
     summary='Unlink DataFiles from Objects',
-    request=serializers.Serializer,
-)
+    request=EmptyObjectSerializer,
+    responses=JSON_OBJECT_RESPONSE)
 @api_view(['POST'])
 @permission_classes([IsAuthenticated, HasPerm('acl_datafiles_unlink_object')])
 def admin_unlink_datafiles_from_objects(request):
@@ -1969,7 +1995,8 @@ def admin_unlink_datafiles_from_objects(request):
     })
 
 
-@extend_schema(summary='Auxiliary objects statistics', tags=['Admin'])
+@extend_schema(summary='Auxiliary objects statistics', tags=['Admin'],
+    responses=JSON_OBJECT_RESPONSE)
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def admin_aux_objects_stats(request):
@@ -1997,7 +2024,9 @@ def admin_aux_objects_stats(request):
     return Response(stats)
 
 
-@extend_schema(summary='Trigger auxiliary-object SIMBAD lookups', tags=['Admin'])
+@extend_schema(summary='Trigger auxiliary-object SIMBAD lookups', tags=['Admin'],
+    responses=JSON_OBJECT_ACCEPTED,
+    request=EmptyObjectSerializer)
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def admin_trigger_aux_objects(request):
@@ -2056,7 +2085,9 @@ def admin_trigger_aux_objects(request):
     }, status=202)
 
 
-@extend_schema(summary='Trigger auxiliary-objects queue processor', tags=['Admin'])
+@extend_schema(summary='Trigger auxiliary-objects queue processor', tags=['Admin'],
+    responses=JSON_OBJECT_ACCEPTED,
+    request=None)
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def admin_trigger_aux_objects_queue(request):
@@ -2072,7 +2103,8 @@ def admin_trigger_aux_objects_queue(request):
         return Response({'enqueued': False, 'error': str(e)}, status=400)
 
 
-@extend_schema(summary='Get auxiliary-objects beat task enabled status', tags=['Admin'])
+@extend_schema(summary='Get auxiliary-objects beat task enabled status', tags=['Admin'],
+    responses=JSON_OBJECT_RESPONSE)
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def admin_get_aux_objects_task_enabled(request):
@@ -2087,7 +2119,9 @@ def admin_get_aux_objects_task_enabled(request):
     })
 
 
-@extend_schema(summary='Set auxiliary-objects beat task enabled status', tags=['Admin'])
+@extend_schema(summary='Set auxiliary-objects beat task enabled status', tags=['Admin'],
+    responses=JSON_OBJECT_RESPONSE,
+    request=EmptyObjectSerializer)
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def admin_set_aux_objects_task_enabled(request):

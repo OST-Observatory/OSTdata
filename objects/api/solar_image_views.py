@@ -2,6 +2,7 @@ import mimetypes
 
 from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404
+from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema
 from rest_framework.decorators import api_view, permission_classes, parser_classes
 from rest_framework.parsers import FormParser, MultiPartParser
@@ -17,6 +18,7 @@ from objects.solar_system_images import (
     save_image_for_object,
     sanitize_object_image_stem,
 )
+from ostdata.openapi import EmptyObjectSerializer, JSON_OBJECT_RESPONSE
 from ostdata.permissions import HasPerm
 
 
@@ -26,7 +28,11 @@ def _object_visible(request, obj):
     return bool(getattr(obj, 'is_public', False))
 
 
-@extend_schema(summary='Solar-system object preview image', tags=['Objects'])
+@extend_schema(
+    summary='Solar-system object preview image',
+    tags=['Objects'],
+    responses={200: OpenApiTypes.BINARY},
+)
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def object_solar_image(request, pk: int):
@@ -42,7 +48,11 @@ def object_solar_image(request, pk: int):
     return FileResponse(path.open('rb'), content_type=content_type or 'image/jpeg')
 
 
-@extend_schema(summary='List solar-system objects and image status', tags=['Admin'])
+@extend_schema(
+    summary='List solar-system objects and image status',
+    tags=['Admin'],
+    responses=JSON_OBJECT_RESPONSE,
+)
 @api_view(['GET'])
 @permission_classes([IsAuthenticated, HasPerm('acl_objects_edit')])
 def admin_list_solar_system_images(request):
@@ -63,7 +73,11 @@ def admin_list_solar_system_images(request):
     })
 
 
-@extend_schema(summary='Upload solar-system object image', tags=['Admin'])
+@extend_schema(
+    summary='Upload solar-system object image',
+    tags=['Admin'],
+    responses=JSON_OBJECT_RESPONSE,
+    request=EmptyObjectSerializer)
 @api_view(['POST'])
 @permission_classes([IsAuthenticated, HasPerm('acl_objects_edit')])
 @parser_classes([MultiPartParser, FormParser])
@@ -115,7 +129,11 @@ def admin_upload_solar_system_image(request):
     })
 
 
-@extend_schema(summary='Delete solar-system object image', tags=['Admin'])
+@extend_schema(
+    summary='Delete solar-system object image',
+    tags=['Admin'],
+    responses=JSON_OBJECT_RESPONSE,
+)
 @api_view(['DELETE'])
 @permission_classes([IsAuthenticated, HasPerm('acl_objects_edit')])
 def admin_delete_solar_system_image(request, object_id: int):

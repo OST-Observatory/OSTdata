@@ -132,6 +132,10 @@ SPECTACULAR_SETTINGS = {
     'SERVE_INCLUDE_SCHEMA': False,
     'SERVE_PERMISSIONS': [],
     'COMPONENT_SPLIT_REQUEST': True,
+    # Shared choice set used by exposure_type / exposure_type_ml / exposure_type_user
+    'ENUM_NAME_OVERRIDES': {
+        'ExposureTypeEnum': 'obs_run.models.DataFile.EXPOSURE_TYPE_POSSIBILITIES',
+    },
 }
 
 # Canonical archive filesystem root (path jail for downloads/thumbnails/tasks)

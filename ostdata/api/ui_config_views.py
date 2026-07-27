@@ -7,6 +7,8 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
+from ostdata.openapi import JSON_OBJECT_RESPONSE
+
 
 @extend_schema(
     summary='Public UI configuration',
@@ -14,6 +16,7 @@ from rest_framework.response import Response
         'Non-sensitive limits for the SPA, e.g. async ZIP download job polling. '
         'Values come from Django settings / environment (see DOWNLOAD_JOB_*).'
     ),
+    responses=JSON_OBJECT_RESPONSE,
 )
 @api_view(['GET'])
 @permission_classes([AllowAny])

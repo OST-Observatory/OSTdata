@@ -4,12 +4,14 @@ from django.contrib.auth import authenticate, login as django_login, logout as d
 from django.contrib.auth.models import Group
 from django.conf import settings
 from django.middleware.csrf import get_token
+from drf_spectacular.utils import extend_schema
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 
+from ostdata.openapi import EmptyObjectSerializer, JSON_OBJECT_RESPONSE
 from .serializers import UserSerializer
 
 logger = logging.getLogger(__name__)
@@ -47,6 +49,7 @@ def _sync_role_groups(user):
         logger.warning('Group sync failed during login for %s', user.username, exc_info=True)
 
 
+@extend_schema(summary='Get CSRF cookie', tags=['Auth'], responses=JSON_OBJECT_RESPONSE)
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def csrf_cookie(request):
@@ -69,6 +72,8 @@ def csrf_cookie(request):
     return response
 
 
+@extend_schema(summary='Session login', tags=['Auth'], responses=JSON_OBJECT_RESPONSE,
+    request=EmptyObjectSerializer)
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def login(request):
@@ -102,6 +107,8 @@ login.throttle_classes = [ScopedRateThrottle]
 login.throttle_scope = 'login'
 
 
+@extend_schema(summary='Session logout', tags=['Auth'], responses=JSON_OBJECT_RESPONSE,
+    request=None)
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def logout(request):
@@ -117,6 +124,7 @@ def logout(request):
         )
 
 
+@extend_schema(summary='Current user info', tags=['Auth'], responses=JSON_OBJECT_RESPONSE)
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def user_info(request):
@@ -126,6 +134,8 @@ def user_info(request):
     return Response(_user_payload(request.user))
 
 
+@extend_schema(summary='Change password', tags=['Auth'], responses=JSON_OBJECT_RESPONSE,
+    request=EmptyObjectSerializer)
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def change_password(request):

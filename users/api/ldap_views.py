@@ -3,14 +3,18 @@ import os
 import time
 
 from django.conf import settings
+from drf_spectacular.utils import extend_schema
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+from ostdata.openapi import EmptyObjectSerializer, JSON_OBJECT_RESPONSE
 from ostdata.permissions import HasPerm
 
 logger = logging.getLogger(__name__)
 
+@extend_schema(summary='Admin LDAP connectivity test', tags=['Admin'], responses=JSON_OBJECT_RESPONSE,
+    request=EmptyObjectSerializer)
 @api_view(['POST'])
 @permission_classes([IsAuthenticated, HasPerm('acl_users_view')])
 def admin_ldap_test(request):

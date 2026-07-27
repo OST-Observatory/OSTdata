@@ -2,10 +2,12 @@ import logging
 
 from django.contrib.auth.models import Group, Permission
 from django.contrib.contenttypes.models import ContentType
+from drf_spectacular.utils import extend_schema
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+from ostdata.openapi import EmptyObjectSerializer, JSON_OBJECT_RESPONSE
 from ostdata.permissions import HasPerm
 from users.models import User
 
@@ -192,6 +194,7 @@ def _build_acl_payload():
     }
 
 
+@extend_schema(summary='Get ACL matrix', tags=['Admin'], responses=JSON_OBJECT_RESPONSE)
 @api_view(['GET'])
 @permission_classes([IsAuthenticated, HasPerm('acl_users_view')])
 def admin_acl_get(request):
@@ -200,6 +203,8 @@ def admin_acl_get(request):
     """
     return Response(_build_acl_payload())
 
+@extend_schema(summary='Set ACL matrix', tags=['Admin'], responses=JSON_OBJECT_RESPONSE,
+    request=EmptyObjectSerializer)
 @api_view(['POST'])
 @permission_classes([IsAuthenticated, HasPerm('acl_users_edit_roles')])
 def admin_acl_set(request):

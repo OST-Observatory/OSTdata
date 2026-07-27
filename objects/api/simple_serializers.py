@@ -1,5 +1,5 @@
-from django.urls import reverse
-
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import extend_schema_field
 from rest_framework.serializers import (
     ModelSerializer,
     SerializerMethodField,
@@ -25,6 +25,7 @@ class ObjectSimpleSerializer(ModelSerializer):
         ]
         read_only_fields = ('pk',)
 
-    def get_href(self, obj):
+    @extend_schema_field(OpenApiTypes.STR)
+    def get_href(self, obj) -> str:
         # Return SPA route to object detail
         return f"/objects/{obj.pk}"

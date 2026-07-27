@@ -1,11 +1,16 @@
-from django.urls import reverse
+from __future__ import annotations
+
+from datetime import datetime
+from typing import Any, Optional
+
 from django.utils import timezone
 
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import extend_schema_field
 from rest_framework.serializers import (
     ModelSerializer,
     SerializerMethodField,
     PrimaryKeyRelatedField,
-    IntegerField,
 )
 
 from objects.models import Object
@@ -103,25 +108,29 @@ class ObjectListSerializer(ModelSerializer):
                     self.fields[field_name].read_only = True
 
 
-    def get_search_match_via(self, obj):
+    @extend_schema_field(OpenApiTypes.STR)
+    def get_search_match_via(self, obj) -> Optional[str]:
         search = self.context.get('search')
         if not search:
             return None
         return find_search_match_via(obj, search)
 
-    def get_has_solar_system_image(self, obj):
+    @extend_schema_field(OpenApiTypes.BOOL)
+    def get_has_solar_system_image(self, obj) -> bool:
         if getattr(obj, 'object_type', None) != 'SO':
             return False
         has_image, _, _ = image_info_for_object(obj, self.context.get('request'))
         return has_image
 
-    def get_solar_system_image_url(self, obj):
+    @extend_schema_field(OpenApiTypes.URI)
+    def get_solar_system_image_url(self, obj) -> Optional[str]:
         if getattr(obj, 'object_type', None) != 'SO':
             return None
         has_image, url, _ = image_info_for_object(obj, self.context.get('request'))
         return url if has_image else None
 
-    def get_observation_run(self, obj):
+    @extend_schema_field({'type': 'array', 'items': {'type': 'object'}})
+    def get_observation_run(self, obj) -> list[dict[str, Any]]:
         runs = obj.observation_run.all()
         result = []
         for run in runs:
@@ -244,11 +253,13 @@ class ObjectListSerializer(ModelSerializer):
             })
         return result
 
-    def get_tags(self, obj):
+    @extend_schema_field(TagSerializer(many=True))
+    def get_tags(self, obj) -> list:
         tags = TagSerializer(obj.tags, many=True).data
         return tags
 
-    def get_identifiers(self, obj):
+    @extend_schema_field({'type': 'array', 'items': {'type': 'object'}})
+    def get_identifiers(self, obj) -> list[dict[str, Any]]:
         try:
             items = obj.identifier_set.all()
             out = []
@@ -263,34 +274,41 @@ class ObjectListSerializer(ModelSerializer):
         except Exception:
             return []
 
-    def get_href(self, obj):
+    @extend_schema_field(OpenApiTypes.STR)
+    def get_href(self, obj) -> str:
         # SPA route to object detail
         return f"/objects/{obj.pk}"
 
-    def get_object_type_display(self, obj):
+    @extend_schema_field(OpenApiTypes.STR)
+    def get_object_type_display(self, obj) -> str:
         return obj.get_object_type_display()
 
-    def get_last_modified(self, obj):
+    @extend_schema_field(OpenApiTypes.DATETIME)
+    def get_last_modified(self, obj) -> Optional[datetime]:
         history = obj.history.order_by('-history_date').first()
         return history.history_date if history else None
 
-    def get_ra_hms(self, obj):
+    @extend_schema_field(OpenApiTypes.STR)
+    def get_ra_hms(self, obj) -> str:
         return obj.ra_hms()
 
-    def get_dec_dms(self, obj):
+    @extend_schema_field(OpenApiTypes.STR)
+    def get_dec_dms(self, obj) -> str:
         return obj.dec_dms()
 
-    def get_n_light(self, obj):
+    @extend_schema_field(OpenApiTypes.INT)
+    def get_n_light(self, obj) -> int:
         try:
             from utilities import annotate_effective_exposure_type
             return annotate_effective_exposure_type(obj.datafiles.all()).filter(annotated_effective_exposure_type='LI').count()
         except Exception:
             return 0
 
-    def get_light_expo_time(self, obj):
+    @extend_schema_field(OpenApiTypes.NUMBER)
+    def get_light_expo_time(self, obj) -> float:
         try:
             from utilities import annotate_effective_exposure_type
-            total = 0
+            total = 0.0
             light_files = annotate_effective_exposure_type(obj.datafiles.all()).filter(annotated_effective_exposure_type='LI')
             for f in light_files.only('exptime'):
                 try:
@@ -300,5 +318,5 @@ class ObjectListSerializer(ModelSerializer):
                     continue
             return total
         except Exception:
-            return 0
+            return 0.0
 

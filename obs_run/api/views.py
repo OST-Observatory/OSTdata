@@ -32,6 +32,8 @@ except Exception:
     Image = None
 
 from drf_spectacular.utils import extend_schema, OpenApiParameter, extend_schema_view
+from drf_spectacular.types import OpenApiTypes
+from ostdata.openapi import JSON_OBJECT_RESPONSE
 import logging
 logger = logging.getLogger(__name__)
 #
@@ -78,6 +80,7 @@ def getRunDataFile(request, run_pk):
         OpenApiParameter('pk', int, OpenApiParameter.PATH),
         OpenApiParameter('w', int, OpenApiParameter.QUERY, description='Max width/height in pixels (default 512, max 2048)'),
     ],
+    responses={200: OpenApiTypes.BINARY},
 )
 @api_view(['GET'])
 def get_datafile_thumbnail(request, pk):
@@ -206,7 +209,11 @@ get_datafile_thumbnail.throttle_classes = [ScopedRateThrottle]
 get_datafile_thumbnail.throttle_scope = 'thumbnails'
 
 
-@extend_schema(summary='DataFile FITS header', parameters=[OpenApiParameter('pk', int, OpenApiParameter.PATH)])
+@extend_schema(
+    summary='DataFile FITS header',
+    parameters=[OpenApiParameter('pk', int, OpenApiParameter.PATH)],
+    responses=JSON_OBJECT_RESPONSE,
+)
 @api_view(['GET'])
 def get_datafile_header(request, pk):
     """
@@ -246,7 +253,12 @@ def get_datafile_header(request, pk):
         return Response({"detail": "Failed to read FITS header"}, status=400)
 
 
-@extend_schema(summary='Download raw datafile', parameters=[OpenApiParameter('pk', int, OpenApiParameter.PATH)])
+@extend_schema(
+    summary='Download raw datafile',
+    operation_id='runs_datafile_download',
+    parameters=[OpenApiParameter('pk', int, OpenApiParameter.PATH)],
+    responses={200: OpenApiTypes.BINARY},
+)
 @api_view(['GET'])
 def download_datafile(request, pk):
     """
@@ -284,6 +296,10 @@ def download_datafile(request, pk):
         return Response({"detail": "Download failed"}, status=400)
 
 
+@extend_schema(
+    summary='Download run datafiles (retired sync ZIP)',
+    responses={410: OpenApiTypes.OBJECT},
+)
 @api_view(['GET'])
 def download_run_datafiles(request, run_pk):
     """Synchronous ZIP downloads are retired; use async download-jobs API."""
@@ -296,6 +312,11 @@ def download_run_datafiles(request, run_pk):
     )
 
 
+@extend_schema(
+    summary='Download datafiles bulk (retired sync ZIP)',
+    operation_id='runs_datafiles_download_bulk',
+    responses={410: OpenApiTypes.OBJECT},
+)
 @api_view(['GET'])
 def download_datafiles_bulk(request):
     """Synchronous bulk ZIP downloads are retired; use async download-jobs API."""

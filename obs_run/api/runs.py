@@ -23,6 +23,7 @@ from rest_framework.parsers import MultiPartParser, FormParser
 from django_filters.rest_framework import DjangoFilterBackend
 from django.db.models import Count, Sum, Q, Max
 from drf_spectacular.utils import extend_schema, OpenApiParameter, extend_schema_view, OpenApiExample
+from ostdata.openapi import JSON_OBJECT_RESPONSE
 import logging
 logger = logging.getLogger(__name__)
 
@@ -372,6 +373,7 @@ class RunViewSet(viewsets.ModelViewSet):
         OpenApiParameter('start_hjd', float, OpenApiParameter.QUERY),
         OpenApiParameter('expo_time', float, OpenApiParameter.QUERY),
     ],
+    responses=JSON_OBJECT_RESPONSE,
 )
 @api_view(['GET'])
 def get_visibility_plot(request):
@@ -393,7 +395,12 @@ def get_visibility_plot(request):
         return Response({'error': 'Plot generation failed'}, status=400)
 
 
-@extend_schema(summary='Observing conditions plot', description='Returns a Bokeh JSON item (Tabs) for observing conditions of a run.', tags=['Runs', 'Plots'])
+@extend_schema(
+    summary='Observing conditions plot',
+    description='Returns a Bokeh JSON item (Tabs) for observing conditions of a run.',
+    tags=['Runs', 'Plots'],
+    responses=JSON_OBJECT_RESPONSE,
+)
 @api_view(['GET'])
 def get_observing_conditions(request, run_pk):
     try:
@@ -420,6 +427,7 @@ def get_observing_conditions(request, run_pk):
         OpenApiParameter('rotation', float, OpenApiParameter.QUERY),
         OpenApiParameter('constellations', bool, OpenApiParameter.QUERY),
     ],
+    responses=JSON_OBJECT_RESPONSE,
 )
 @api_view(['GET'])
 def get_sky_fov(request):
@@ -450,6 +458,7 @@ def get_sky_fov(request):
         OpenApiParameter('label', str, OpenApiParameter.QUERY),
         OpenApiParameter('months', int, OpenApiParameter.QUERY),
     ],
+    responses=JSON_OBJECT_RESPONSE,
 )
 @api_view(['GET'])
 def get_time_distribution(request):
@@ -483,6 +492,7 @@ get_observing_conditions.throttle_classes = [ScopedRateThrottle]
 get_observing_conditions.throttle_scope = 'plots'
 
 
+@extend_schema(summary='Dashboard statistics', tags=['Runs'], responses=JSON_OBJECT_RESPONSE)
 @api_view(['GET'])
 def getDashboardStats(request):
     """
@@ -660,6 +670,7 @@ getDashboardStats.throttle_scope = 'stats'
             'required': ['exptime', 'ccd_temp', 'instrument', 'naxis1', 'naxis2'],
         }
     },
+    responses=JSON_OBJECT_RESPONSE,
     tags=['Dark Finder'],
 )
 @api_view(['POST'])
@@ -783,6 +794,7 @@ def dark_finder_search(request):
             },
         }
     },
+    responses=JSON_OBJECT_RESPONSE,
     tags=['Dark Finder'],
 )
 @api_view(['POST'])
@@ -941,6 +953,7 @@ def parse_fits_header(request):
 @extend_schema(
     summary='Get list of available instruments',
     tags=['Dark Finder'],
+    responses=JSON_OBJECT_RESPONSE,
 )
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
@@ -975,6 +988,7 @@ def get_instruments(request):
 @extend_schema(
     summary='Get instrument catalog with dimensions',
     tags=['Dark Finder'],
+    responses=JSON_OBJECT_RESPONSE,
 )
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
@@ -1023,6 +1037,7 @@ def _get_run_for_aux_objects(request, pk: int) -> ObservationRun | None:
         OpenApiParameter('pk', int, OpenApiParameter.PATH),
         OpenApiParameter('refresh', bool, OpenApiParameter.QUERY, description='Force recompute'),
     ],
+    responses=JSON_OBJECT_RESPONSE,
 )
 @api_view(['GET'])
 def get_run_aux_objects(request, pk):

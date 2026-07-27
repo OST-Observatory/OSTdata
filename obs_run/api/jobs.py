@@ -10,6 +10,7 @@ from ostdata.permissions import HasPerm
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiExample
+from drf_spectacular.types import OpenApiTypes
 from rest_framework import serializers
 from django.http import Http404
 import logging
@@ -27,6 +28,7 @@ from obs_run.services.downloads import (
     user_can_access_download_job,
 )
 from ostdata.custom_permissions import get_run_for_user_or_404
+from ostdata.openapi import EmptyObjectSerializer, JSON_OBJECT_RESPONSE
 
 
 class DownloadJobBulkRequestSerializer(serializers.Serializer):
@@ -148,7 +150,7 @@ create_download_job.throttle_classes = [ScopedRateThrottle]
 create_download_job.throttle_scope = 'jobs'
 
 
-@extend_schema(summary='Get download job status')
+@extend_schema(summary='Get download job status', responses=JSON_OBJECT_RESPONSE, tags=['Jobs'])
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def download_job_status(request, job_id):
@@ -175,6 +177,7 @@ def download_job_status(request, job_id):
         OpenApiParameter('run', int, OpenApiParameter.QUERY, description='Filter by run ID'),
         OpenApiParameter('user', int, OpenApiParameter.QUERY, description='Filter by user ID (admin/staff only)'),
     ],
+    responses=JSON_OBJECT_RESPONSE,
     tags=['Jobs'],
 )
 @api_view(['GET'])
@@ -223,7 +226,8 @@ def list_download_jobs(request):
     return Response({'items': items, 'total': qs.count()})
 
 
-@extend_schema(summary='Cancel a download job')
+@extend_schema(summary='Cancel a download job', responses=JSON_OBJECT_RESPONSE, tags=['Jobs'],
+    request=None)
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def cancel_download_job(request, job_id):
@@ -283,7 +287,8 @@ def cancel_download_job(request, job_id):
     return Response({'status': job.status, 'error': job.error or ''})
 
 
-@extend_schema(summary='Batch cancel download jobs (admin)')
+@extend_schema(summary='Batch cancel download jobs (admin)', responses=JSON_OBJECT_RESPONSE, tags=['Jobs'],
+    request=EmptyObjectSerializer)
 @api_view(['POST'])
 @permission_classes([IsAuthenticated, HasPerm('acl_jobs_cancel_any')])
 def batch_cancel_download_jobs(request):
@@ -357,7 +362,8 @@ def batch_cancel_download_jobs(request):
     return Response({'cancelled': cancelled, 'skipped': skipped}, status=200)
 
 
-@extend_schema(summary='Batch extend download job expiry (admin)')
+@extend_schema(summary='Batch extend download job expiry (admin)', responses=JSON_OBJECT_RESPONSE, tags=['Jobs'],
+    request=EmptyObjectSerializer)
 @api_view(['POST'])
 @permission_classes([IsAuthenticated, HasPerm('acl_jobs_ttl_modify')])
 def batch_extend_jobs_expiry(request):
@@ -389,7 +395,8 @@ def batch_extend_jobs_expiry(request):
     return Response({'updated': updated}, status=200)
 
 
-@extend_schema(summary='Batch expire download jobs immediately (admin)')
+@extend_schema(summary='Batch expire download jobs immediately (admin)', responses=JSON_OBJECT_RESPONSE, tags=['Jobs'],
+    request=EmptyObjectSerializer)
 @api_view(['POST'])
 @permission_classes([IsAuthenticated, HasPerm('acl_jobs_ttl_modify')])
 def batch_expire_jobs_now(request):
@@ -425,7 +432,11 @@ def batch_expire_jobs_now(request):
     return Response({'expired': expired}, status=200)
 
 
-@extend_schema(summary='Download ZIP file for a completed job')
+@extend_schema(
+    summary='Download ZIP file for a completed job',
+    responses={200: OpenApiTypes.BINARY},
+    tags=['Jobs'],
+)
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def download_job_download(request, job_id):
