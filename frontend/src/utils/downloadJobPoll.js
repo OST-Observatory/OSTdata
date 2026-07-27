@@ -1,4 +1,5 @@
 import {
+  buildDownloadTimeoutMessage,
   ensureDownloadJobConfig,
   getDownloadJobMaxWaitMs,
   getDownloadJobPollIntervalMs,
@@ -24,5 +25,5 @@ export async function pollDownloadJobUntilReady(jobId, overrides = {}) {
     }
     await new Promise((r) => setTimeout(r, intervalMs))
   }
-  throw new Error('Timed out waiting for download job')
+  throw new Error(buildDownloadTimeoutMessage())
 }

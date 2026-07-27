@@ -27,3 +27,13 @@ test('download job APIs send X-Download-Token header', () => {
   assert.match(poll, /jobToken/)
   assert.match(api, /downloadJobFile:\s*async \(jobId,\s*jobToken/)
 })
+
+test('download prep message avoids admin jobs and zero-minute wait', async () => {
+  const { buildDownloadPrepMessage, formatDownloadJobWaitMinutes } = await import('../src/config/downloadJobs.js')
+  assert.equal(formatDownloadJobWaitMinutes(10_000), 1)
+  assert.equal(formatDownloadJobWaitMinutes(45 * 60 * 1000), 45)
+  const msg = await buildDownloadPrepMessage({ fileCount: 2, items: [{ file_size: 1000 }] })
+  assert.doesNotMatch(msg, /Admin/)
+  assert.doesNotMatch(msg, /0 minutes/)
+  assert.match(msg, /site administrator/)
+})

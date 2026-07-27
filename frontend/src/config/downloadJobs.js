@@ -5,6 +5,9 @@
 
 const FALLBACK_DOWNLOAD_JOB_POLL_INTERVAL_MS = 2000
 const FALLBACK_DOWNLOAD_JOB_MAX_WAIT_MS = 45 * 60 * 1000 // 45 minutes
+/** Ignore absurdly small server values (e.g. minutes/seconds mistaken for ms). */
+const MIN_CLIENT_MAX_WAIT_MS = 5 * 60 * 1000 // 5 minutes
+const MAX_CLIENT_MAX_WAIT_MS = 48 * 60 * 60 * 1000 // 48 hours
 
 /** Same defaults as Django when /api/ui-config/ is unavailable */
 export const DOWNLOAD_JOB_POLL_INTERVAL_MS = FALLBACK_DOWNLOAD_JOB_POLL_INTERVAL_MS
@@ -34,10 +37,15 @@ export async function ensureDownloadJobConfig() {
         if (!res.ok) throw new Error('ui-config not ok')
         const data = await res.json()
         const poll = _parsePositiveMs(data.download_job_poll_interval_ms, FALLBACK_DOWNLOAD_JOB_POLL_INTERVAL_MS)
-        const max = _parsePositiveMs(data.download_job_max_wait_ms, FALLBACK_DOWNLOAD_JOB_MAX_WAIT_MS)
+        let max = _parsePositiveMs(data.download_job_max_wait_ms, FALLBACK_DOWNLOAD_JOB_MAX_WAIT_MS)
+        // Values below 5 minutes are almost always a unit mistake in .env (seconds/minutes
+        // instead of ms). Fall back to the documented default rather than timing out quickly.
+        if (max < MIN_CLIENT_MAX_WAIT_MS) {
+          max = FALLBACK_DOWNLOAD_JOB_MAX_WAIT_MS
+        }
         _cachedConfig = {
           pollIntervalMs: Math.min(Math.max(poll, 500), 120_000),
-          maxWaitMs: Math.min(Math.max(max, 10_000), 48 * 60 * 60 * 1000),
+          maxWaitMs: Math.min(max, MAX_CLIENT_MAX_WAIT_MS),
         }
       } catch {
         _cachedConfig = {
@@ -59,6 +67,15 @@ export function getDownloadJobPollIntervalMs() {
 
 export function getDownloadJobMaxWaitMs() {
   return _cachedConfig?.maxWaitMs ?? FALLBACK_DOWNLOAD_JOB_MAX_WAIT_MS
+}
+
+/** Whole minutes for user-facing copy (never show "0 minutes"). */
+export function formatDownloadJobWaitMinutes(maxWaitMs = getDownloadJobMaxWaitMs()) {
+  const ms = Number(maxWaitMs)
+  if (!Number.isFinite(ms) || ms <= 0) {
+    return Math.ceil(FALLBACK_DOWNLOAD_JOB_MAX_WAIT_MS / 60000)
+  }
+  return Math.max(1, Math.ceil(ms / 60000))
 }
 
 export function sumFileSizes(items) {
@@ -107,9 +124,20 @@ export async function buildDownloadPrepMessage({ fileCount, items = [], sizeIsPa
   } else if (typeof fileCount === 'number' && fileCount > 0) {
     lines.push('Exact total size will be known when the archive is ready.')
   }
-  const waitMinutes = Math.round(getDownloadJobMaxWaitMs() / 60000)
+  const waitMinutes = formatDownloadJobWaitMinutes()
   lines.push(
-    `Preparing the archive can take a long time for large sets. This page waits up to about ${waitMinutes} minutes; keep the tab open until the download starts. If it takes longer, check Admin → Jobs — the job may still be running.`
+    `Preparing the archive can take a while for large sets. Please keep this tab open; the download should start automatically within about ${waitMinutes} minute${waitMinutes === 1 ? '' : 's'}. ` +
+      `If nothing starts by then, wait a bit longer and try again — the archive may still be building on the server. ` +
+      `If the problem continues, contact the site administrator.`
   )
   return lines.join(' ')
+}
+
+export function buildDownloadTimeoutMessage() {
+  const waitMinutes = formatDownloadJobWaitMinutes()
+  return (
+    `This page stopped waiting after about ${waitMinutes} minute${waitMinutes === 1 ? '' : 's'}, ` +
+    `but the archive may still be preparing on the server. Please wait a few minutes and try the download again. ` +
+    `If it keeps failing, contact the site administrator.`
+  )
 }

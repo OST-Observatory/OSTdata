@@ -138,7 +138,8 @@ SPECTACULAR_SETTINGS = {
 DATA_DIRECTORY = env.path('DATA_DIRECTORY', default=BASE_DIR / 'data' / 'archive')
 
 # Public SPA configuration (exposed via GET /api/ui-config/)
-# Override in .env, e.g. DOWNLOAD_JOB_MAX_WAIT_MS=2700000 (45 min default)
+# Override in .env, e.g. DOWNLOAD_JOB_MAX_WAIT_MS=2700000 (milliseconds; 45 min default).
+# Values below ~5 minutes are treated as misconfiguration by the SPA and clamped upward.
 DOWNLOAD_JOB_POLL_INTERVAL_MS = env.int('DOWNLOAD_JOB_POLL_INTERVAL_MS', default=2000)
 DOWNLOAD_JOB_MAX_WAIT_MS = env.int('DOWNLOAD_JOB_MAX_WAIT_MS', default=45 * 60 * 1000)
 DOWNLOAD_JOB_MAX_FILES = env.int('DOWNLOAD_JOB_MAX_FILES', default=500)
