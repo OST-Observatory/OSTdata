@@ -91,7 +91,7 @@ def create_download_job_bulk(request):
         )
     except ValidationError as e:
         return Response(getattr(e, 'detail', {'detail': str(e)}), status=400)
-    body = {'job_id': job.id}
+    body: dict[str, int | str] = {'job_id': job.id}
     if job.job_token:
         body['job_token'] = job.job_token
     return Response(body, status=201)
@@ -141,7 +141,7 @@ def create_download_job(request, run_pk):
         )
     except ValidationError as e:
         return Response(getattr(e, 'detail', {'detail': str(e)}), status=400)
-    body = {'job_id': job.id}
+    body: dict[str, int | str] = {'job_id': job.id}
     if job.job_token:
         body['job_token'] = job.job_token
     return Response(body, status=201)

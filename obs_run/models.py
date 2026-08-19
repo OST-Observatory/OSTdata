@@ -5,6 +5,7 @@ from django.conf import settings
 from simple_history.models import HistoricalRecords
 
 from collections import OrderedDict
+from typing import TYPE_CHECKING
 
 from astropy.io import fits
 from astropy.coordinates.angles import Angle
@@ -499,6 +500,11 @@ class DownloadJob(models.Model):
     expires_at = models.DateTimeField(null=True, blank=True)
     # SHA-256 hex digest of one-time access token for anonymous jobs (plaintext never stored)
     access_token_hash = models.CharField(max_length=64, blank=True, default='')
+
+    if TYPE_CHECKING:
+        # FK pk accessors (django-stubs mypy plugin; basedpyright needs these declared)
+        user_id: int | None
+        run_id: int | None
 
     class Meta:
         indexes = [

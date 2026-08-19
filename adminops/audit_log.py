@@ -8,12 +8,11 @@ from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone as dt_timezone
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
-from django.contrib.auth import get_user_model
 from django.db import connection
 from django.utils import timezone
 
@@ -21,8 +20,7 @@ from adminops.models import AuditLogEntry
 from objects.models import Identifier, Object
 from obs_run.models import DataFile, ObservationRun
 from tags.models import Tag
-
-User = get_user_model()
+from users.models import User
 
 MAX_AUDIT_ENTRIES = 1000
 DEFAULT_PAGE_SIZE = 25
@@ -169,7 +167,7 @@ def _serialize_value(value: Any) -> Any:
     if isinstance(value, datetime):
         if timezone.is_aware(value):
             return value.isoformat()
-        return timezone.make_aware(value, timezone.utc).isoformat()
+        return timezone.make_aware(value, dt_timezone.utc).isoformat()
     if isinstance(value, date):
         return value.isoformat()
     if isinstance(value, Decimal):
@@ -236,20 +234,20 @@ def _user_display(
     if user is None:
         return None, 'System'
     return {
-        'id': user.id,
+        'id': user.pk,
         'username': getattr(user, 'username', '') or '',
         'email': getattr(user, 'email', '') or '',
-    }, getattr(user, 'username', None) or getattr(user, 'email', None) or f'User #{user.id}'
+    }, getattr(user, 'username', None) or getattr(user, 'email', None) or f'User #{user.pk}'
 
 
 def _user_display_from_user(user) -> tuple[dict[str, Any] | None, str]:
     if user is None:
         return None, 'System'
     return {
-        'id': user.id,
+        'id': user.pk,
         'username': getattr(user, 'username', '') or '',
         'email': getattr(user, 'email', '') or '',
-    }, getattr(user, 'username', None) or getattr(user, 'email', None) or f'User #{user.id}'
+    }, getattr(user, 'username', None) or getattr(user, 'email', None) or f'User #{user.pk}'
 
 
 def _normalize_history_record(
@@ -264,7 +262,7 @@ def _normalize_history_record(
     action = _history_action(record.history_type)
     history_date = record.history_date
     if history_date and timezone.is_naive(history_date):
-        history_date = timezone.make_aware(history_date, timezone.utc)
+        history_date = timezone.make_aware(history_date, dt_timezone.utc)
     ts = history_date.isoformat() if history_date else None
     reason = getattr(record, 'history_change_reason', None) or None
     if reason is not None:
@@ -525,7 +523,7 @@ def _load_users_for_history(records: list[Any]) -> dict[int, Any]:
     if not user_ids:
         return {}
     return {
-        u.id: u
+        u.pk: u
         for u in User.objects.filter(pk__in=user_ids).only('id', 'username', 'email')
     }
 
@@ -535,7 +533,7 @@ def _load_users_for_events(entries: list[AuditLogEntry]) -> dict[int, Any]:
     if not user_ids:
         return {}
     return {
-        u.id: u
+        u.pk: u
         for u in User.objects.filter(pk__in=user_ids).only('id', 'username', 'email')
     }
 

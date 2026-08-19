@@ -1,3 +1,5 @@
+from typing import TYPE_CHECKING
+
 from django.conf import settings
 from django.db import models
 
@@ -27,6 +29,10 @@ class AuditLogEntry(models.Model):
     batch_count = models.PositiveIntegerField(default=1)
     changes = models.JSONField(default=list, blank=True)
     summary = models.TextField(blank=True, default='')
+
+    if TYPE_CHECKING:
+        # FK pk accessor (basedpyright; django-stubs mypy plugin normally provides this)
+        user_id: int | None
 
     class Meta:
         ordering = ['-created_at']
