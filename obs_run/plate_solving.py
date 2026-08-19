@@ -22,7 +22,7 @@ from django.utils import timezone
 logger = logging.getLogger(__name__)
 
 
-def _ra_dec_valid(ra: float, dec: float) -> bool:
+def _ra_dec_valid(ra: Optional[float], dec: Optional[float]) -> bool:
     """Check if ra/dec are valid for use in nearby search."""
     if ra is None or dec is None:
         return False
@@ -394,9 +394,16 @@ class PlateSolvingService:
         image_path_obj = Path(image_path)
         file_ext = image_path_obj.suffix.lstrip('.').lower()
 
-        use_nearby = _ra_dec_valid(ra_deg, dec_deg) if (ra_deg is not None and dec_deg is not None) else False
         field_radius = self._field_radius_from_fov(fov_x, fov_y)
-        search_radius = getattr(settings, 'PLATE_SOLVING_NEARBY_SEARCH_RADIUS', 5.0)
+        search_radius = float(getattr(settings, 'PLATE_SOLVING_NEARBY_SEARCH_RADIUS', 5.0))
+        # Narrow Optional[float] before solve_nearby (type checker cannot follow a separate bool).
+        nearby_ra: Optional[float] = ra_deg
+        nearby_dec: Optional[float] = dec_deg
+        use_nearby = (
+            nearby_ra is not None
+            and nearby_dec is not None
+            and _ra_dec_valid(nearby_ra, nearby_dec)
+        )
         
         for solver in self.solvers:
             # Check if solver supports this file format
@@ -406,11 +413,17 @@ class PlateSolvingService:
                 continue
 
             # Try nearby search first when coordinates are known
-            if use_nearby and hasattr(solver, 'solve_nearby') and callable(getattr(solver, 'solve_nearby')):
+            if (
+                use_nearby
+                and nearby_ra is not None
+                and nearby_dec is not None
+                and hasattr(solver, 'solve_nearby')
+                and callable(getattr(solver, 'solve_nearby'))
+            ):
                 try:
                     logger.info(f"Attempting nearby plate solve with {solver.get_name()} for {image_path}")
                     result = solver.solve_nearby(
-                        image_path, ra_deg, dec_deg, field_radius, search_radius
+                        image_path, nearby_ra, nearby_dec, field_radius, search_radius
                     )
                     if result and result.get('success'):
                         logger.info(f"Nearby plate solve successful with {solver.get_name()}")
