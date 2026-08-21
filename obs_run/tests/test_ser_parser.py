@@ -9,9 +9,9 @@ from django.test import SimpleTestCase
 
 from obs_run.ser_parser import (
     SERParser,
-    infer_frame_count_from_size,
     _normalize_file_id,
     _ser_pixel_endian,
+    infer_frame_count_from_size,
 )
 
 SUN_WHITE_SER = (

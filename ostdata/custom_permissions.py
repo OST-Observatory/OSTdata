@@ -3,8 +3,8 @@ from django.http import Http404
 from django.shortcuts import redirect
 from rest_framework import permissions
 
-from obs_run.models import ObservationRun
 from objects.models import Object
+from obs_run.models import ObservationRun
 from ostdata.permissions import user_has_acl
 
 

@@ -1,6 +1,6 @@
 from django.test import TestCase
 
-from objects.models import Object, Identifier
+from objects.models import Identifier, Object
 from objects.search import find_search_match_via, normalize_search_term
 
 

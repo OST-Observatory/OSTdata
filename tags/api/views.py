@@ -1,16 +1,13 @@
 
-from django_filters.rest_framework import DjangoFilterBackend
 from django_filters import rest_framework as filters
-
-from rest_framework import viewsets, status
+from django_filters.rest_framework import DjangoFilterBackend
+from rest_framework import status, viewsets
 from rest_framework.permissions import IsAuthenticatedOrReadOnly
 from rest_framework.response import Response
 
-from .serializers import TagSerializer
-
 from tags.models import Tag
 
-from ostdata.custom_permissions import get_allowed_run_objects_to_view_for_user
+from .serializers import TagSerializer
 
 # ===============================================================
 # TAGS

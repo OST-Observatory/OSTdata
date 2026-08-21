@@ -1,40 +1,39 @@
-from rest_framework import viewsets
-from rest_framework.pagination import PageNumberPagination
-from rest_framework.decorators import api_view
-from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticatedOrReadOnly
-from rest_framework.throttling import ScopedRateThrottle
-from django.conf import settings as django_settings
-
-from django_filters.rest_framework import DjangoFilterBackend
-
-from obs_run.models import ObservationRun, DataFile
-
-from .serializers import DataFileSerializer
-from .filter import DataFileFilter
-from utilities import annotate_effective_exposure_type
-from ostdata.custom_permissions import get_allowed_run_objects_to_view_for_user
-from ostdata.permissions import user_has_acl
-from obs_run.datafile_filters import apply_datafile_filters
-from obs_run.ser_thumbnails import get_ser_thumbnail_png, is_ser_path
-
-from django.http import HttpResponse
 from io import BytesIO
 from pathlib import Path
-import tempfile
-import zipfile
+
 import numpy as np
 from astropy.io import fits
-from astropy.visualization import ZScaleInterval, ImageNormalize, AsinhStretch
+from astropy.visualization import AsinhStretch, ImageNormalize, ZScaleInterval
+from django.conf import settings as django_settings
+from django.http import HttpResponse
+from django_filters.rest_framework import DjangoFilterBackend
+from rest_framework import viewsets
+from rest_framework.decorators import api_view
+from rest_framework.pagination import PageNumberPagination
+from rest_framework.permissions import IsAuthenticatedOrReadOnly
+from rest_framework.response import Response
+from rest_framework.throttling import ScopedRateThrottle
+
+from obs_run.models import DataFile, ObservationRun
+from obs_run.ser_thumbnails import get_ser_thumbnail_png, is_ser_path
+from ostdata.custom_permissions import get_allowed_run_objects_to_view_for_user
+from ostdata.permissions import user_has_acl
+
+from .filter import DataFileFilter
+from .serializers import DataFileSerializer
+
 try:
     from PIL import Image
 except Exception:
     Image = None
 
-from drf_spectacular.utils import extend_schema, OpenApiParameter, extend_schema_view
-from drf_spectacular.types import OpenApiTypes
-from ostdata.openapi import JSON_OBJECT_RESPONSE
 import logging
+
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import OpenApiParameter, extend_schema, extend_schema_view
+
+from ostdata.openapi import JSON_OBJECT_RESPONSE
+
 logger = logging.getLogger(__name__)
 #
 
@@ -117,7 +116,7 @@ def get_datafile_thumbnail(request, pk):
         w = max_dim
 
     try:
-        from obs_run.services.datafile_paths import safe_datafile_path, PathOutsideDataRoot
+        from obs_run.services.datafile_paths import PathOutsideDataRoot, safe_datafile_path
         file_path = safe_datafile_path(df.datafile, must_exist=True)
     except PathOutsideDataRoot:
         return Response({"detail": "File not found"}, status=404)
@@ -154,8 +153,9 @@ def get_datafile_thumbnail(request, pk):
                 data = None
                 # Prefer first image-like HDU with 2D data
                 for hdu in hdul:
-                    if hasattr(hdu, 'data') and hdu.data is not None:
-                        arr = np.asarray(hdu.data)
+                    hdu_data = getattr(hdu, 'data', None)
+                    if hdu_data is not None:
+                        arr = np.asarray(hdu_data)
                         if arr.ndim >= 2:
                             data = arr
                             break
@@ -280,7 +280,7 @@ def download_datafile(request, pk):
             return Response({"detail": "Not found"}, status=404)
 
     try:
-        from obs_run.services.datafile_paths import safe_datafile_path, PathOutsideDataRoot
+        from obs_run.services.datafile_paths import PathOutsideDataRoot, safe_datafile_path
         file_path = safe_datafile_path(df.datafile, must_exist=True)
     except PathOutsideDataRoot:
         return Response({"detail": "File not found"}, status=404)

@@ -1,7 +1,10 @@
 
+from django.core.exceptions import PermissionDenied
 from django.shortcuts import get_object_or_404
 
+from objects.models import Object
 from obs_run.models import ObservationRun
+
 
 def user_login_required_for_edit(function):
    '''
@@ -17,7 +20,8 @@ def user_login_required_for_edit(function):
          raise PermissionDenied
 
       elif run in request.user.readwriteown_runs.objects.all():
-         if Star.objects.get(pk=kwargs['star_id']).added_by == request.user:
+         obj = Object.objects.get(pk=kwargs['star_id'])
+         if getattr(obj, 'added_by', None) == request.user:
             return function(request, *args, **kwargs)
          else:
             raise PermissionDenied

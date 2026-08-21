@@ -1,8 +1,7 @@
 from django.apps import apps
+from django.contrib.auth.models import AbstractUser
 from django.db import models
 from django.db.models import Q
-
-from django.contrib.auth.models import AbstractUser
 
 # from obs_run import models as run_models
 

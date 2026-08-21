@@ -1,16 +1,15 @@
-from django.db import models
-
-from django.conf import settings
-
 from astropy.coordinates.angles import Angle
-
-from obs_run.models import ObservationRun, DataFile
-
+from django.db import models
 from simple_history.models import HistoricalRecords
 
+from obs_run.models import DataFile, ObservationRun
 from tags.models import Tag
 
-from users.models import get_sentinel_user
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from django.db.models.fields.related_descriptors import RelatedManager
+    from django.db.models.manager import Manager
 
 
 class Object(models.Model):
@@ -25,6 +24,10 @@ class Object(models.Model):
         DataFile,
         blank=True,
     )
+
+    if TYPE_CHECKING:
+        # Reverse FK from Identifier.obj (basedpyright; django-stubs plugin normally provides this)
+        identifier_set: RelatedManager["Identifier"]
 
     #   Name
     name = models.CharField(max_length=200)
@@ -96,7 +99,11 @@ class Object(models.Model):
     exclude_from_orphan_cleanup = models.BooleanField(default=False)
 
     #   Bookkeeping
-    history = HistoricalRecords()
+    if TYPE_CHECKING:
+        # HistoricalRecords installs a manager at class construction time
+        history: Manager[Any]
+    else:
+        history = HistoricalRecords()
     # added_on      = models.DateTimeField(auto_now_add=True)
     # last_modified = models.DateTimeField(auto_now=True)
     # added_by      = models.ForeignKey(
@@ -120,7 +127,7 @@ class Object(models.Model):
         if self.ra != -1:
             try:
                 a = Angle(float(self.ra), unit='degree').hms
-            except Exception as e:
+            except Exception:
                 # return self.ra
                 return '-'
             return "{:02.0f}:{:02.0f}:{:05.2f}".format(*a)
@@ -131,7 +138,7 @@ class Object(models.Model):
         if self.ra != -1:
             try:
                 a = Angle(float(self.dec), unit='degree').dms
-            except Exception as e:
+            except Exception:
                 # return self.dec
                 return '-'
             return "{:+03.0f}:{:02.0f}:{:05.2f}".format(

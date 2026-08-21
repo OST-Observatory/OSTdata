@@ -2,7 +2,7 @@ import os
 
 from django.core.management.base import BaseCommand, CommandError
 
-from obs_run.models import ObservationRun, DataFile
+from obs_run.models import DataFile, ObservationRun
 
 
 class Command(BaseCommand):

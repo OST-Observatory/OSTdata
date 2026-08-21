@@ -11,7 +11,6 @@ from urllib.parse import urlparse
 from django.conf import settings
 from django.db import transaction
 from django.db.models import Sum
-from django.utils import timezone
 from rest_framework.exceptions import PermissionDenied, ValidationError
 
 from obs_run.datafile_filters import apply_datafile_filters

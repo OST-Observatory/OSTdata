@@ -4,9 +4,9 @@ import json
 import os
 import sys
 import time as _time
+from datetime import datetime, timedelta, timezone as dt_timezone
 from pathlib import Path
-from typing import Dict, Any
-from datetime import timedelta
+from typing import Any, Dict
 from urllib.parse import urlparse, urlunparse
 
 from django.db import connection
@@ -25,6 +25,15 @@ try:
     import ldap as _ldap
 except Exception:
     _ldap = None
+
+
+def _as_text(value: Any) -> str | None:
+    """Decode Redis bytes/str values without assuming a single type."""
+    if value is None:
+        return None
+    if isinstance(value, (bytes, bytearray)):
+        return value.decode('utf-8')
+    return str(value)
 
 
 def _mask_broker_url(url: str) -> str:
@@ -150,7 +159,6 @@ def gather_admin_health() -> Dict[str, Any]:
         periodic = {}
         broker = data.get('celery', {}).get('broker_url') or ''
         if broker.startswith('redis') and _redis:
-            from urllib.parse import urlparse
             u = urlparse(broker)
             host = u.hostname or '127.0.0.1'
             port = int(u.port or 6379)
@@ -160,7 +168,7 @@ def gather_admin_health() -> Dict[str, Any]:
             # Scan keys like health:task:<name>
             for key in client.scan_iter(match='health:task:*', count=50):
                 try:
-                    name = key.decode('utf-8').split(':', 2)[-1]
+                    name = (_as_text(key) or '').split(':', 2)[-1]
                 except Exception:
                     continue
                 try:
@@ -170,18 +178,16 @@ def gather_admin_health() -> Dict[str, Any]:
                 item = {}
                 # last_run
                 try:
-                    lr = raw.get(b'last_run')
-                    last_run = lr.decode('utf-8') if lr else None
+                    last_run = _as_text(raw.get(b'last_run') or raw.get('last_run'))
                     item['last_run'] = last_run
                     if last_run:
                         try:
-                            from datetime import datetime
                             # Python 3.11: fromisoformat handles offsets
                             dt = datetime.fromisoformat(last_run)
                             # Convert to aware timezone.now() for delta
                             try:
                                 if dt.tzinfo is None:
-                                    dt = dt.replace(tzinfo=timezone.utc)
+                                    dt = dt.replace(tzinfo=dt_timezone.utc)
                             except Exception:
                                 pass
                             age = (timezone.now() - dt).total_seconds()
@@ -192,16 +198,15 @@ def gather_admin_health() -> Dict[str, Any]:
                     item['last_run'] = None
                 # last_error
                 try:
-                    le = raw.get(b'last_error')
-                    item['last_error'] = le.decode('utf-8') if le else ''
+                    item['last_error'] = _as_text(raw.get(b'last_error') or raw.get('last_error')) or ''
                 except Exception:
                     item['last_error'] = ''
                 # data (JSON)
                 try:
-                    dj = raw.get(b'data')
+                    dj = _as_text(raw.get(b'data') or raw.get('data'))
                     if dj:
                         try:
-                            item['data'] = json.loads(dj.decode('utf-8'))
+                            item['data'] = json.loads(dj)
                         except Exception:
                             item['data'] = None
                     else:
@@ -284,7 +289,7 @@ def gather_admin_health() -> Dict[str, Any]:
         data['settings'] = {}
 
     # Storage summary
-    storage = {'ok': None}
+    storage: dict[str, Any] = {'ok': None}
     try:
         data_path = os.environ.get('DATA_DIRECTORY', '') or str(getattr(settings, 'DATA_DIRECTORY', '') or '')
         p = Path(data_path) if data_path else None
@@ -351,8 +356,8 @@ def gather_admin_health() -> Dict[str, Any]:
                     bind_pw = getattr(settings, 'AUTH_LDAP_BIND_PASSWORD', None) or os.environ.get('LDAP_BIND_PASSWORD') or ''
                     
                     conn = _ldap.initialize(server_uri)
-                    conn.set_option(_ldap.OPT_REFERRALS, 0)
-                    conn.set_option(_ldap.OPT_NETWORK_TIMEOUT, getattr(settings, 'AUTH_LDAP_CONNECT_TIMEOUT', 5))
+                    conn.set_option(getattr(_ldap, 'OPT_REFERRALS'), 0)
+                    conn.set_option(getattr(_ldap, 'OPT_NETWORK_TIMEOUT'), getattr(settings, 'AUTH_LDAP_CONNECT_TIMEOUT', 5))
                     
                     if start_tls:
                         try:

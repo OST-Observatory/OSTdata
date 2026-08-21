@@ -8,7 +8,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from ostdata.openapi import EmptyObjectSerializer, JSON_OBJECT_RESPONSE
+from ostdata.openapi import JSON_OBJECT_RESPONSE, EmptyObjectSerializer
 from ostdata.permissions import HasPerm
 
 logger = logging.getLogger(__name__)

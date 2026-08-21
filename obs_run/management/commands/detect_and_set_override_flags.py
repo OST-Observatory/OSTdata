@@ -1,10 +1,10 @@
-from django.core.management.base import BaseCommand
-from django.db import transaction
 import logging
 
-from obs_run.models import ObservationRun, DataFile
+from django.core.management.base import BaseCommand
+
 from objects.models import Object
-from obs_run.utils import get_override_field_name, detect_user_changes_from_history
+from obs_run.models import DataFile, ObservationRun
+from obs_run.utils import detect_user_changes_from_history, get_override_field_name
 
 logger = logging.getLogger(__name__)
 

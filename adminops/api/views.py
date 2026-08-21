@@ -1,22 +1,84 @@
-from pathlib import Path
-import os
 import json
-import sys
-import time as _time
+import logging
+from typing import Any
+from urllib.parse import urlparse
 
-from django.db import connection, transaction
 from django.conf import settings
-from django.utils import timezone
-from django.utils.http import http_date
+from django.db import transaction
+from django.db.models import Case, CharField, Count, F, Q, Value, When
+from drf_spectacular.utils import OpenApiParameter, extend_schema
+from rest_framework import serializers
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
-from ostdata.permissions import IsAdminOrSuperuser as IsAdminUser, HasPerm, user_has_acl
 from rest_framework.response import Response
-from drf_spectacular.utils import extend_schema, extend_schema_view, OpenApiParameter
-from ostdata.openapi import EmptyObjectSerializer, JSON_OBJECT_RESPONSE, JSON_OBJECT_ACCEPTED
-from rest_framework import serializers
-import logging
+
+from adminops.redis_helpers import (
+    aux_objects_task_enabled_get as _aux_objects_task_enabled_get,
+)
+from adminops.redis_helpers import (
+    aux_objects_task_enabled_set as _aux_objects_task_enabled_set,
+)
+from adminops.redis_helpers import (
+    plate_solving_task_enabled_get as _plate_solving_task_enabled_get,
+)
+from adminops.redis_helpers import (
+    plate_solving_task_enabled_set as _plate_solving_task_enabled_set,
+)
+from objects.models import Identifier, Object
+from obs_run.api.serializers import DataFileSerializer
+from obs_run.api.views import DataFilesPagination
+from obs_run.models import DataFile, ObservationRun
+from obs_run.plate_solving import PlateSolvingService, solve_and_update_datafile
+from obs_run.tasks import (
+    cleanup_expired_downloads,
+    cleanup_orphan_objects,
+    cleanup_orphans_and_hashcheck,
+    enqueue_aux_objects_for_run,
+    plate_solve_pending_files,
+    process_aux_objects_queue,
+    re_evaluate_plate_solved_files,
+    reconcile_filesystem,
+    scan_missing_filesystem,
+    unlink_non_light_datafiles_from_objects,
+)
+from obs_run.utils import should_allow_auto_update
+from ostdata.openapi import JSON_OBJECT_ACCEPTED, JSON_OBJECT_RESPONSE, EmptyObjectSerializer
+from ostdata.permissions import HasPerm, user_has_acl
+from ostdata.services.health import gather_admin_health
+from utilities import (
+    _query_object_variants,
+    _query_region_safe,
+    annotate_effective_exposure_type,
+    evaluate_data_file,
+    reanalyse_object_from_simbad,
+    update_object_photometry_spectroscopy,
+    update_observation_run_photometry_spectroscopy,
+)
+
+try:
+    import redis as _redis
+except Exception:
+    _redis = None
+try:
+    import django
+    _django_version = getattr(django, 'get_version', lambda: '')()
+except Exception:
+    _django_version = ''
+try:
+    import ldap as _ldap
+except Exception:
+    _ldap = None
+try:
+    from ostdata.celery import app as celery_app
+except Exception:
+    celery_app = None
+
 logger = logging.getLogger(__name__)
+
+
+def _celery_delay(task: Any, *args: Any, **kwargs: Any) -> Any:
+    """Enqueue a Celery task (avoids basedpyright noise on untyped shared_task.delay)."""
+    return task.delay(*args, **kwargs)
 
 
 def _aux_objects_admin_denied_response(request):
@@ -72,55 +134,6 @@ def _has_any_datafile_admin_acl(user) -> bool:
             return True
     return False
 
-try:
-    import redis as _redis
-except Exception:
-    _redis = None
-try:
-    import django
-    _django_version = getattr(django, 'get_version', lambda: '')()
-except Exception:
-    _django_version = ''
-try:
-    import ldap as _ldap
-except Exception:
-    _ldap = None
-try:
-    from ostdata.celery import app as celery_app
-except Exception:
-    celery_app = None
-
-from obs_run.tasks import (
-    cleanup_expired_downloads,
-    reconcile_filesystem,
-    cleanup_orphans_and_hashcheck,
-    scan_missing_filesystem,
-    cleanup_orphan_objects,
-    unlink_non_light_datafiles_from_objects,
-    plate_solve_pending_files,
-    re_evaluate_plate_solved_files,
-    process_aux_objects_queue,
-    enqueue_aux_objects_for_run,
-)
-from ostdata.services.health import gather_admin_health
-from obs_run.models import ObservationRun, DataFile
-from obs_run.api.serializers import DataFileSerializer
-from obs_run.api.views import DataFilesPagination
-from objects.models import Object, Identifier
-from utilities import (
-    _query_object_variants, 
-    _query_region_safe, 
-    update_observation_run_photometry_spectroscopy, 
-    update_object_photometry_spectroscopy, 
-    annotate_effective_exposure_type, 
-    evaluate_data_file, 
-    reanalyse_object_from_simbad
-)
-from obs_run.utils import should_allow_auto_update
-from obs_run.plate_solving import PlateSolvingService, solve_and_update_datafile
-from django.db.models import Q, F, Count, Case, When, Value
-from django.db.models import CharField
-
 
 # -------------------- Banner helpers (Redis) --------------------
 _BANNER_REDIS_KEY = 'site:banner'
@@ -129,7 +142,6 @@ def _get_redis_from_broker():
     try:
         broker = getattr(settings, 'CELERY_BROKER_URL', '')
         if broker.startswith('redis') and _redis:
-            from urllib.parse import urlparse
             u = urlparse(broker)
             host = u.hostname or '127.0.0.1'
             port = int(u.port or 6379)
@@ -150,7 +162,8 @@ def _banner_get():
         if not raw:
             return None
         try:
-            return json.loads(raw.decode('utf-8'))
+            text = raw.decode('utf-8') if isinstance(raw, (bytes, bytearray)) else str(raw)
+            return json.loads(text)
         except Exception:
             return None
     except Exception:
@@ -175,16 +188,6 @@ def _banner_clear():
         return True
     except Exception:
         return False
-
-
-# Plate Solving Task: use redis_helpers to avoid circular imports with obs_run.tasks
-from adminops.redis_helpers import (
-    plate_solving_task_enabled_get as _plate_solving_task_enabled_get,
-    plate_solving_task_enabled_set as _plate_solving_task_enabled_set,
-    aux_objects_task_enabled_get as _aux_objects_task_enabled_get,
-    aux_objects_task_enabled_set as _aux_objects_task_enabled_set,
-)
-
 
 # -------------------- Admin endpoints --------------------
 
@@ -305,7 +308,7 @@ def admin_run_set_date(request, run_id: int):
             try:
                 from astropy.time import Time  # type: ignore
                 t = Time(str(iso), format='isot', scale='utc') if 'T' in str(iso) else Time(str(iso), format='iso', scale='utc')
-                jd = float(t.jd)
+                jd = float(t.jd)  # type: ignore[arg-type]
             except Exception:
                 # Fallback: parse as datetime and convert from Unix epoch
                 from datetime import datetime, timezone
@@ -577,7 +580,7 @@ def admin_trigger_cleanup_downloads(request):
     if not (request.user.is_superuser or request.user.has_perm('users.acl_maintenance_cleanup')):
         return Response({'detail': 'Forbidden'}, status=403)
     try:
-        res = cleanup_expired_downloads.delay()
+        res = _celery_delay(cleanup_expired_downloads)
         return Response({'enqueued': True, 'task_id': getattr(res, 'id', None)}, status=202)
     except Exception as e:
         logger.exception("admin_trigger_cleanup_downloads failed: %s", e)
@@ -595,7 +598,7 @@ def admin_trigger_reconcile(request):
     except Exception:
         dry_run = True
     try:
-        res = reconcile_filesystem.delay(dry_run=dry_run)
+        res = _celery_delay(reconcile_filesystem, dry_run=dry_run)
         return Response({'enqueued': True, 'task_id': getattr(res, 'id', None), 'dry_run': dry_run}, status=202)
     except Exception as e:
         logger.exception("admin_trigger_reconcile failed: %s", e)
@@ -634,7 +637,7 @@ def admin_trigger_orphans_hashcheck(request):
     except Exception:
         limit = None
     try:
-        res = cleanup_orphans_and_hashcheck.delay(dry_run=dry_run, fix_missing_hashes=fix_missing_hashes, limit=limit)
+        res = _celery_delay(cleanup_orphans_and_hashcheck, dry_run=dry_run, fix_missing_hashes=fix_missing_hashes, limit=limit)
         return Response({'enqueued': True, 'task_id': getattr(res, 'id', None), 'dry_run': dry_run}, status=202)
     except Exception as e:
         logger.exception("admin_trigger_orphans_hashcheck failed: %s", e)
@@ -658,7 +661,7 @@ def admin_trigger_scan_missing(request):
     except Exception:
         limit = None
     try:
-        res = scan_missing_filesystem.delay(dry_run=dry_run, limit=limit)
+        res = _celery_delay(scan_missing_filesystem, dry_run=dry_run, limit=limit)
         return Response({'enqueued': True, 'task_id': getattr(res, 'id', None), 'dry_run': dry_run, 'limit': limit}, status=202)
     except Exception as e:
         logger.exception("admin_trigger_scan_missing failed: %s", e)
@@ -687,7 +690,7 @@ def admin_trigger_orphan_objects(request):
     except Exception:
         dry_run = True
     try:
-        res = cleanup_orphan_objects.delay(dry_run=dry_run)
+        res = _celery_delay(cleanup_orphan_objects, dry_run=dry_run)
         return Response({'enqueued': True, 'task_id': getattr(res, 'id', None), 'dry_run': dry_run}, status=202)
     except Exception as e:
         logger.exception("admin_trigger_orphan_objects failed: %s", e)
@@ -712,7 +715,7 @@ def admin_trigger_unlink_non_light_datafiles(request):
     except Exception:
         dry_run = True
     try:
-        res = unlink_non_light_datafiles_from_objects.delay(dry_run=dry_run)
+        res = _celery_delay(unlink_non_light_datafiles_from_objects, dry_run=dry_run)
         return Response({'enqueued': True, 'task_id': getattr(res, 'id', None), 'dry_run': dry_run}, status=202)
     except Exception as e:
         logger.exception("admin_trigger_unlink_non_light_datafiles failed: %s", e)
@@ -823,7 +826,7 @@ def admin_trigger_refresh_dashboard_stats(request):
         return Response({'detail': 'Forbidden'}, status=403)
     try:
         from obs_run.tasks import refresh_dashboard_stats
-        res = refresh_dashboard_stats.delay()
+        res = _celery_delay(refresh_dashboard_stats)
         return Response({'enqueued': True, 'task_id': getattr(res, 'id', None)}, status=202)
     except Exception as e:
         logger.exception("admin_trigger_refresh_dashboard_stats failed: %s", e)
@@ -839,7 +842,7 @@ def admin_trigger_plate_solve_task(request):
     Manually trigger plate solving for pending files.
     """
     try:
-        res = plate_solve_pending_files.delay()
+        res = _celery_delay(plate_solve_pending_files)
         return Response({'enqueued': True, 'task_id': getattr(res, 'id', None)}, status=202)
     except Exception as e:
         logger.exception("admin_trigger_plate_solve_task failed: %s", e)
@@ -859,7 +862,7 @@ def admin_trigger_re_evaluate_plate_solved(request):
     Manually trigger re-evaluation of plate-solved files (evaluate_data_file).
     """
     try:
-        res = re_evaluate_plate_solved_files.delay()
+        res = _celery_delay(re_evaluate_plate_solved_files)
         return Response({'enqueued': True, 'task_id': getattr(res, 'id', None)}, status=202)
     except Exception as e:
         logger.exception("admin_trigger_re_evaluate_plate_solved failed: %s", e)
@@ -1582,7 +1585,7 @@ def admin_get_observation_runs_for_plate_solving(request):
     Get list of observation runs that have Light frames (for plate solving filter dropdown).
     Only accessible to admin/staff users.
     """
-    from django.db.models import Subquery, OuterRef
+    from django.db.models import OuterRef, Subquery
 
     # Get the first obs_date from datafiles of each run (for display)
     first_obs_date = DataFile.objects.filter(
@@ -1598,7 +1601,7 @@ def admin_get_observation_runs_for_plate_solving(request):
         obs_date=Subquery(first_obs_date)
     ).order_by('-mid_observation_jd')[:100]
 
-    runs = [{'id': r.id, 'name': r.name, 'obs_date': r.obs_date or ''} for r in queryset]
+    runs = [{'id': r.pk, 'name': r.name, 'obs_date': getattr(r, 'obs_date', None) or ''} for r in queryset]
 
     return Response({
         'results': runs
@@ -1770,8 +1773,8 @@ def _do_re_evaluate_datafiles(queryset):
     """
     Re-evaluate plate-solved DataFiles (WCS-based). Returns dict with evaluated, skipped, errors, total.
     """
-    from astropy.coordinates import SkyCoord
     import astropy.units as u
+    from astropy.coordinates import SkyCoord
 
     threshold_arcmin = getattr(settings, 'PLATE_SOLVING_RE_EVAL_COORD_THRESHOLD_ARCMIN', 5.0)
     evaluated = 0
@@ -1785,8 +1788,8 @@ def _do_re_evaluate_datafiles(queryset):
             if not condition1:
                 c_header = SkyCoord(ra=datafile.ra * u.deg, dec=datafile.dec * u.deg)
                 c_wcs = SkyCoord(ra=datafile.wcs_ra * u.deg, dec=datafile.wcs_dec * u.deg)
-                sep_arcmin = c_header.separation(c_wcs).arcmin
-                condition2 = sep_arcmin > threshold_arcmin
+                sep_arcmin = float(c_header.separation(c_wcs).arcmin)  # type: ignore[arg-type]
+                condition2 = sep_arcmin > float(threshold_arcmin)
 
             if condition1 or condition2:
                 if datafile.observation_run and datafile.wcs_ra is not None and datafile.wcs_dec is not None:
@@ -2096,7 +2099,7 @@ def admin_trigger_aux_objects_queue(request):
     if denied:
         return denied
     try:
-        res = process_aux_objects_queue.delay()
+        res = _celery_delay(process_aux_objects_queue)
         return Response({'enqueued': True, 'task_id': getattr(res, 'id', None)}, status=202)
     except Exception as e:
         logger.exception('admin_trigger_aux_objects_queue failed: %s', e)

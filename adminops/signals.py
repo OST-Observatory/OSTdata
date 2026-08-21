@@ -5,8 +5,8 @@ from django.db.models.signals import m2m_changed
 from django.dispatch import receiver
 
 from adminops.audit_events import get_audit_user, log_audit_event
-from obs_run.models import ObservationRun
 from objects.models import Object
+from obs_run.models import ObservationRun
 
 
 def _log_tag_m2m(instance, action: str, pk_set, *, model_type: str, entity_path: str):

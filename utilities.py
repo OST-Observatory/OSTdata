@@ -1,37 +1,32 @@
+import hashlib
+import logging
 import os
 import re
+import time
+import warnings
 from pathlib import Path
 
-import numpy as np
+# Astropy/Numpy/FITS stub mismatches are common in this analysis-heavy module.
+# pyright: reportOperatorIssue=false, reportOptionalMemberAccess=false, reportOptionalOperand=false, reportOptionalSubscript=false, reportCallIssue=false, reportArgumentType=false, reportAttributeAccessIssue=false, reportInvalidTypeForm=false
 
-from astroquery.simbad import Simbad
-from astropy.coordinates.angles import Angle
-from astropy.coordinates import SkyCoord, EarthLocation, get_body
 import astropy.units as u
+import matplotlib.pyplot as plt
+import numpy as np
+from astropy.coordinates import EarthLocation, SkyCoord, get_body
+from astropy.coordinates.angles import Angle
 from astropy.io import fits
 from astropy.time import Time
 from astropy.visualization import simple_norm
-
+from astroquery.simbad import Simbad
+from django.conf import settings
+from django.db.models import Case, CharField, ExpressionWrapper, F, FloatField, Q, Value, When
 from scipy import ndimage, signal
 
-import matplotlib.pyplot as plt
-import hashlib
-import logging
-
-import django
-from django.db.models import F, ExpressionWrapper, DecimalField, FloatField, Case, When, Value, Q, CharField
-
-os.environ["DJANGO_SETTINGS_MODULE"] = "ostdata.settings"
-django.setup()
-
-from django.conf import settings
 from objects.models import Object
-from obs_run.models import ObservationRun, DataFile
-from obs_run.utils import should_allow_auto_update, object_has_any_override
-logger = logging.getLogger(__name__)
+from obs_run.models import DataFile, ObservationRun
+from obs_run.utils import object_has_any_override, should_allow_auto_update
 
-import time
-import warnings
+logger = logging.getLogger(__name__)
 
 # Simple in-process SIMBAD safeguards: rate limit and negative cache
 _SIMBAD_NEGATIVE_CACHE = set()
@@ -721,7 +716,6 @@ def verify_star_classification(obj, data_file=None, enable_extended_search=True,
     dict
         Result dictionary with 'updated' (bool), 'best_match' (dict or None), 'candidates' (list)
     """
-    import math
     
     # Only check objects classified as stars
     if obj.object_type != 'ST':
@@ -933,7 +927,7 @@ def reanalyse_object_from_simbad(obj, fixed_radius_arcmin=10.0, dry_run=False, b
         
         result_table = _query_region_safe(obj.ra, obj.dec, radius_str, row_limit=500)
         if result_table is None or len(result_table) == 0:
-            return {'success': False, 'error': f'No SIMBAD result found for coordinates'}
+            return {'success': False, 'error': 'No SIMBAD result found for coordinates'}
         
         # Use brightest object if V magnitude available, else first (closest)
         index = 0

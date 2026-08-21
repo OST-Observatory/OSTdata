@@ -1,13 +1,15 @@
-from django.core.management.base import BaseCommand
-from django.db.models import Q
-from django.conf import settings
-from obs_run.models import DataFile
-from obs_run.ml_classification import ExposureTypeClassifier
-from pathlib import Path
 import logging
 import time
-from utilities import update_observation_run_photometry_spectroscopy, update_object_photometry_spectroscopy
-                    
+from pathlib import Path
+
+from django.conf import settings
+from django.core.management.base import BaseCommand
+from django.db.models import Q
+
+from obs_run.ml_classification import ExposureTypeClassifier
+from obs_run.models import DataFile
+from utilities import update_object_photometry_spectroscopy, update_observation_run_photometry_spectroscopy
+
 logger = logging.getLogger(__name__)
 
 

@@ -2,8 +2,9 @@
 Admin-specific filters for DataFiles list (all datafiles, no run visibility restriction).
 """
 import re
-from django_filters import rest_framework as filters
+
 from django.db.models import Q
+from django_filters import rest_framework as filters
 
 from obs_run.models import DataFile
 from tags.models import Tag

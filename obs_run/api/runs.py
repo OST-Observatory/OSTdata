@@ -1,50 +1,64 @@
+import logging
+import os
+import tempfile
 from datetime import datetime, timedelta
 from io import BytesIO
 from pathlib import Path
-import json
-import numpy as np
-import os
-import tempfile
-import zipfile
 
-from django.db import connection, transaction
+import environ
+from astropy.io import fits
 from django.conf import settings
+from django.db import transaction
+from django.db.models import Count, Max, Q, Sum
 from django.http import Http404
 from django.utils.http import http_date
-from django.utils.timezone import make_aware, now as timezone_now
+from django.utils.timezone import make_aware
+from django_filters.rest_framework import DjangoFilterBackend
+from drf_spectacular.utils import OpenApiParameter, extend_schema, extend_schema_view
 from rest_framework import viewsets
-from rest_framework.decorators import api_view, permission_classes, parser_classes
+from rest_framework.decorators import api_view, parser_classes, permission_classes
 from rest_framework.filters import OrderingFilter
 from rest_framework.pagination import PageNumberPagination
-from rest_framework.permissions import IsAuthenticatedOrReadOnly, IsAuthenticated
+from rest_framework.parsers import FormParser, MultiPartParser
+from rest_framework.permissions import IsAuthenticated, IsAuthenticatedOrReadOnly
+from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
-from rest_framework.parsers import MultiPartParser, FormParser
-from django_filters.rest_framework import DjangoFilterBackend
-from django.db.models import Count, Sum, Q, Max
-from drf_spectacular.utils import extend_schema, OpenApiParameter, extend_schema_view, OpenApiExample
-from ostdata.openapi import JSON_OBJECT_RESPONSE
-import logging
-logger = logging.getLogger(__name__)
 
-from obs_run.models import ObservationRun, DataFile
 from objects.models import Object
+from obs_run.models import DataFile, ObservationRun
 from obs_run.utils import (
-    normalize_alias,
     INSTRUMENT_ALIASES,
     INSTRUMENT_CATALOG,
     check_and_set_override,
-    get_override_field_name,
     count_history_created_since,
+    get_override_field_name,
+    normalize_alias,
 )
-from .serializers import RunSerializer
 from ostdata.custom_permissions import (
     get_allowed_runs_to_view_for_user,
-    get_allowed_objects_to_view_for_user,
-    get_allowed_run_objects_to_view_for_user,
     get_run_for_user_or_404,
 )
-from ostdata.permissions import user_has_acl
+from ostdata.openapi import JSON_OBJECT_RESPONSE
+from utilities import annotate_effective_exposure_type, get_effective_exposure_type_filter
+
+from ..auxil import get_size_dir
+from ..plotting import (
+    plot_observation_conditions,
+    plot_sky_fov,
+    plot_sky_fov_with_constellations,
+    plot_visibility,
+    time_distribution_model,
+)
+from .filter import RunFilter
+from .serializers import RunSerializer
+
+try:
+    from PIL import Image
+except Exception:
+    Image = None
+
+logger = logging.getLogger(__name__)
 
 # PATCH fields on ObservationRun -> ACL codename(s) required (superuser bypasses; acl_runs_edit grants all)
 RUN_PATCH_FIELD_PERMS = {
@@ -63,27 +77,6 @@ def _perms_required_for_run_patch(data_keys):
         if keys & fields:
             required.add(perm)
     return required
-from utilities import get_effective_exposure_type_filter, annotate_effective_exposure_type
-from .filter import RunFilter
-from ..plotting import (
-    plot_visibility,
-    plot_observation_conditions,
-    plot_sky_fov,
-    plot_sky_fov_with_constellations,
-    time_distribution_model,
-)
-from django.http import HttpResponse
-from astropy.io import fits
-from astropy.visualization import ZScaleInterval, ImageNormalize, AsinhStretch
-try:
-    from PIL import Image
-except Exception:
-    Image = None
-from objects.models import Object
-from rest_framework.decorators import api_view
-import environ
-from ..auxil import get_size_dir
-from obs_run.models import DataFile
 
 
 class RunsPagination(PageNumberPagination):
@@ -127,6 +120,7 @@ class RunViewSet(viewsets.ModelViewSet):
     filterset_class = RunFilter
     ordering_fields = ['name', 'mid_observation_jd', 'reduction_status']
     ordering = ['mid_observation_jd']
+    request: Request
 
     def get_queryset(self):
         # Prefetch tags and annotate light-weight aggregates for list views
@@ -286,7 +280,7 @@ class RunViewSet(viewsets.ModelViewSet):
             elif field not in allowed:
                 queryset = queryset.order_by('mid_observation_jd')
         try:
-            from obs_run.models import ObservationRun, DataFile  # local import safe
+            from obs_run.models import DataFile, ObservationRun  # local import safe
             latest_run_hist = ObservationRun.history.aggregate(m=Max('history_date'))['m']
             latest_df_hist = DataFile.history.aggregate(m=Max('history_date'))['m']
             count = queryset.count()
@@ -320,7 +314,7 @@ class RunViewSet(viewsets.ModelViewSet):
                 resp['ETag'] = etag
             # Prefer the latest of run/file histories if available
             try:
-                from obs_run.models import ObservationRun, DataFile
+                from obs_run.models import DataFile, ObservationRun
                 latest_run_hist = ObservationRun.history.aggregate(m=Max('history_date'))['m']
                 latest_df_hist = DataFile.history.aggregate(m=Max('history_date'))['m']
                 latest_hist_any = max([d for d in [latest_run_hist, latest_df_hist] if d is not None], default=None)
@@ -378,7 +372,7 @@ class RunViewSet(viewsets.ModelViewSet):
 @api_view(['GET'])
 def get_visibility_plot(request):
     try:
-        run_id = float(request.query_params.get('run_id'))
+        _run_id = float(request.query_params.get('run_id'))
         ra = float(request.query_params.get('ra'))
         dec = float(request.query_params.get('dec'))
         start_hjd = request.query_params.get('start_hjd')
@@ -583,7 +577,7 @@ def getDashboardStats(request):
     if storage_size is None:
         env = environ.Env()
         environ.Env.read_env()
-        data_path = env("DATA_DIRECTORY", default='/archive/ftp/')
+        data_path = env.str("DATA_DIRECTORY", default='/archive/ftp/')
         try:
             storage_size = get_size_dir(data_path) * pow(1000, -4)
         except Exception:
@@ -883,7 +877,11 @@ def parse_fits_header(request):
         
         try:
             # Extract parameters using existing function
-            from obs_run.analyze_fits_header import extract_fits_header_info, detect_instruments, disambiguate_instrument
+            from obs_run.analyze_fits_header import (
+                detect_instruments,
+                disambiguate_instrument,
+                extract_fits_header_info,
+            )
             header_data = extract_fits_header_info(header)
             
             # Detect all possible instruments from chip parameters (primary method)

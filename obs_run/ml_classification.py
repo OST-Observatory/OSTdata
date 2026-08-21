@@ -6,9 +6,12 @@ a trained Keras model from the ost_image_classification package.
 """
 import logging
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
+
 from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
+
+from .models import DataFile
 
 logger = logging.getLogger(__name__)
 
@@ -22,8 +25,6 @@ except ImportError:
         'ost_image_classification package not available. '
         'Install with: pip install git+https://github.com/OST-Observatory/ost_image_classification.git@main'
     )
-
-from .models import DataFile
 
 
 class ExposureTypeClassifier:
@@ -194,6 +195,16 @@ class ExposureTypeClassifier:
                 'error': str(e),
             }
 
+        classifier = self._classifier
+        if classifier is None:
+            return {
+                'exposure_type_ml': None,
+                'exposure_type_ml_confidence': None,
+                'exposure_type_ml_abstained': False,
+                'spectrograph_ml': None,
+                'error': 'Classifier is not initialized',
+            }
+
         file_path = Path(datafile.datafile)
         if not file_path.exists():
             return {
@@ -206,7 +217,7 @@ class ExposureTypeClassifier:
         try:
             # Call the classifier service - predict_paths expects a list
             file_path_str = str(file_path)
-            batch_result = self._classifier.predict_paths([file_path_str], batch_size=1)
+            batch_result = classifier.predict_paths([file_path_str], batch_size=1)
             
             # Extract classification result from batch results
             # predict_paths returns: {"meta": {...}, "results": [...], "defects": [...], "warnings": [...]}
@@ -301,6 +312,16 @@ class ExposureTypeClassifier:
                 'error': str(e),
             } for _ in paths]
 
+        classifier = self._classifier
+        if classifier is None:
+            return [{
+                'exposure_type_ml': None,
+                'exposure_type_ml_confidence': None,
+                'exposure_type_ml_abstained': False,
+                'spectrograph_ml': None,
+                'error': 'Classifier is not initialized',
+            } for _ in paths]
+
         for path in paths:
             if not path.exists():
                 results.append({
@@ -329,7 +350,7 @@ class ExposureTypeClassifier:
 
                 # Call the classifier service - predict_paths expects a list
                 path_str = str(path)
-                batch_result = self._classifier.predict_paths([path_str], batch_size=1)
+                batch_result = classifier.predict_paths([path_str], batch_size=1)
                 
                 # Extract classification result from batch results
                 batch_results = batch_result.get('results', [])

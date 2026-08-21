@@ -4,7 +4,7 @@ from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema
-from rest_framework.decorators import api_view, permission_classes, parser_classes
+from rest_framework.decorators import api_view, parser_classes, permission_classes
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
@@ -15,10 +15,10 @@ from objects.solar_system_images import (
     delete_image_for_object,
     find_image_path_for_object,
     image_info_for_object,
-    save_image_for_object,
     sanitize_object_image_stem,
+    save_image_for_object,
 )
-from ostdata.openapi import EmptyObjectSerializer, JSON_OBJECT_RESPONSE
+from ostdata.openapi import JSON_OBJECT_RESPONSE, EmptyObjectSerializer
 from ostdata.permissions import HasPerm
 
 

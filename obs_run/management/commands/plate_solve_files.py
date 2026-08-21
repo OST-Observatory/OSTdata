@@ -4,17 +4,17 @@ Management command to plate solve existing DataFiles retroactively.
 Supports rate limiting to avoid overloading the server.
 """
 
-from django.core.management.base import BaseCommand
-from django.conf import settings
-from django.db.models import Q
-from django.utils import timezone
-from pathlib import Path
-import time
 import logging
+import time
+from pathlib import Path
+
+from django.conf import settings
+from django.core.management.base import BaseCommand
+from django.db.models import Q
 
 from obs_run.models import DataFile
-from utilities import annotate_effective_exposure_type
 from obs_run.plate_solving import PlateSolvingService, solve_and_update_datafile
+from utilities import annotate_effective_exposure_type
 
 logger = logging.getLogger(__name__)
 
@@ -138,7 +138,7 @@ class Command(BaseCommand):
                     result = solve_and_update_datafile(datafile, service=service, save=True)
                     if result['success']:
                         succeeded += 1
-                        self.stdout.write(self.style.SUCCESS(f'  ✓ Successfully plate solved'))
+                        self.stdout.write(self.style.SUCCESS('  ✓ Successfully plate solved'))
                     else:
                         failed += 1
                         self.stdout.write(self.style.ERROR(f'  ✗ {result["error"]}'))

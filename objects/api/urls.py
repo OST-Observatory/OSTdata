@@ -1,9 +1,8 @@
 from django.urls import include, path
-
 from rest_framework import routers
 
-from .views import ObjectViewSet, getObjectRunViewSet, getObjectDatafileViewSet, ObjectVuetifyViewSet
 from .solar_image_views import object_solar_image
+from .views import ObjectViewSet, ObjectVuetifyViewSet, getObjectDatafileViewSet, getObjectRunViewSet
 
 app_name = 'objects-api'
 

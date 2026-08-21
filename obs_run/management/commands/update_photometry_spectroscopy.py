@@ -1,9 +1,15 @@
-from django.core.management.base import BaseCommand
-from obs_run.models import ObservationRun
-from objects.models import Object
-from utilities import update_observation_run_photometry_spectroscopy, update_object_photometry_spectroscopy, should_allow_auto_update
 import logging
 import time
+
+from django.core.management.base import BaseCommand
+
+from objects.models import Object
+from obs_run.models import ObservationRun
+from utilities import (
+    should_allow_auto_update,
+    update_object_photometry_spectroscopy,
+    update_observation_run_photometry_spectroscopy,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -193,11 +199,11 @@ class Command(BaseCommand):
         # Summary
         elapsed = time.time() - start_time
         self.stdout.write(self.style.SUCCESS('\n=== Summary ==='))
-        self.stdout.write(f'Observation Runs:')
+        self.stdout.write('Observation Runs:')
         self.stdout.write(f'  Processed: {runs_processed}')
         self.stdout.write(f'  Updated: {runs_updated}')
         self.stdout.write(f'  Skipped (override flags): {runs_skipped_override}')
-        self.stdout.write(f'Objects:')
+        self.stdout.write('Objects:')
         self.stdout.write(f'  Processed: {objects_processed}')
         self.stdout.write(f'  Updated: {objects_updated}')
         self.stdout.write(f'  Skipped (override flags): {objects_skipped_override}')

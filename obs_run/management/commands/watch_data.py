@@ -1,5 +1,6 @@
-from django.core.management.base import BaseCommand, CommandError
 import logging
+
+from django.core.management.base import BaseCommand, CommandError
 
 logger = logging.getLogger(__name__)
 

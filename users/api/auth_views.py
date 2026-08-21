@@ -1,8 +1,10 @@
 import logging
 
-from django.contrib.auth import authenticate, login as django_login, logout as django_logout
-from django.contrib.auth.models import Group
 from django.conf import settings
+from django.contrib.auth import authenticate
+from django.contrib.auth import login as django_login
+from django.contrib.auth import logout as django_logout
+from django.contrib.auth.models import Group
 from django.middleware.csrf import get_token
 from drf_spectacular.utils import extend_schema
 from rest_framework import status
@@ -11,7 +13,8 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 
-from ostdata.openapi import EmptyObjectSerializer, JSON_OBJECT_RESPONSE
+from ostdata.openapi import JSON_OBJECT_RESPONSE, EmptyObjectSerializer
+
 from .serializers import UserSerializer
 
 logger = logging.getLogger(__name__)

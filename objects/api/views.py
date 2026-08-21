@@ -1,23 +1,23 @@
-from rest_framework import viewsets, status
-from rest_framework.exceptions import ValidationError
-from typing import cast
-from rest_framework.permissions import IsAuthenticatedOrReadOnly, IsAuthenticated
-from ostdata.permissions import IsAdminOrSuperuser as IsAdminUser
-from rest_framework.response import Response
-from rest_framework.pagination import PageNumberPagination
-from rest_framework.filters import OrderingFilter
+from typing import Any, cast
 
-from django_filters.rest_framework import DjangoFilterBackend
-
-from objects.models import Object, Identifier
+from astropy.coordinates import SkyCoord
 from django.db import models
-from django.db.models import Count, Q, QuerySet
-from rest_framework.decorators import action
-from drf_spectacular.utils import extend_schema, OpenApiParameter
-from django.utils.http import http_date
+from django.db.models import Count, Q, QuerySet, Sum
 from django.shortcuts import get_object_or_404
+from django.utils.http import http_date
+from django_filters.rest_framework import DjangoFilterBackend
+from drf_spectacular.utils import OpenApiParameter, extend_schema
+from rest_framework import status, viewsets
+from rest_framework.decorators import action
+from rest_framework.exceptions import ValidationError
+from rest_framework.filters import OrderingFilter
+from rest_framework.generics import GenericAPIView
+from rest_framework.pagination import PageNumberPagination
+from rest_framework.permissions import IsAuthenticated, IsAuthenticatedOrReadOnly
+from rest_framework.request import Request
+from rest_framework.response import Response
 
-from .serializers import ObjectListSerializer
+from objects.models import Identifier, Object
 from objects.search import (
     IDENTIFIER_LOOKUP,
     IDENTIFIER_PREFETCH,
@@ -25,22 +25,16 @@ from objects.search import (
     build_object_search_q,
     normalize_search_term,
 )
-
-from obs_run.api.serializers import RunSerializer, DataFileSerializer
-
-from .filter import ObjectFilter
-from utilities import annotate_effective_exposure_type, get_effective_exposure_type_filter
-
+from obs_run.api.serializers import DataFileSerializer, RunSerializer
 from ostdata.custom_permissions import (
-    get_allowed_runs_to_view_for_user,
     get_allowed_run_objects_to_view_for_user,
+    get_allowed_runs_to_view_for_user,
     get_object_for_user_or_404,
 )
-from django.db.models import Count, Sum, Q
+from utilities import get_effective_exposure_type_filter
 
-from astropy.coordinates import SkyCoord
-import astropy.units as u
-
+from .filter import ObjectFilter
+from .serializers import ObjectListSerializer
 
 # ===============================================================
 #   OBJECTS
@@ -73,14 +67,15 @@ class ObjectLookupMixin:
     """Typed object lookup for DRF viewsets (avoids pyright Never on get_object())."""
 
     def _fetch_object(self) -> Object:
+        view = cast(GenericAPIView, self)
         queryset = cast(
             QuerySet[Object],
-            self.filter_queryset(self.get_queryset()),
+            view.filter_queryset(view.get_queryset()),
         )
-        lookup_url_kwarg = self.lookup_url_kwarg or self.lookup_field
-        filter_kwargs = {self.lookup_field: self.kwargs[lookup_url_kwarg]}
+        lookup_url_kwarg = view.lookup_url_kwarg or view.lookup_field
+        filter_kwargs = {view.lookup_field: view.kwargs[lookup_url_kwarg]}
         obj = get_object_or_404(queryset, **filter_kwargs)
-        self.check_object_permissions(self.request, obj)
+        view.check_object_permissions(view.request, obj)
         return obj
 
 
@@ -101,7 +96,6 @@ class StandardResultsSetPagination(PageNumberPagination):
         return self.page_size
 
     def paginate_queryset(self, queryset, request, view=None):
-        page_size = self.get_page_size(request)
         return super().paginate_queryset(queryset, request, view)
 
     def get_paginated_response(self, data):
@@ -116,6 +110,7 @@ class ObjectViewSet(ObjectLookupMixin, viewsets.ModelViewSet):
     serializer_class = ObjectListSerializer
     pagination_class = StandardResultsSetPagination
     permission_classes = [IsAuthenticatedOrReadOnly]
+    request: Request
 
     filter_backends = (DjangoFilterBackend, OrderingFilter)
     filterset_class = ObjectFilter
@@ -186,6 +181,7 @@ class ObjectViewSet(ObjectLookupMixin, viewsets.ModelViewSet):
         # Conditional GET headers (ETag/Last-Modified) for the list
         try:
             from django.db.models import Max
+
             from objects.models import Object as ObjectModel
             latest_hist = ObjectModel.history.aggregate(m=Max('history_date'))['m']
             # Compute queryset and count for signature (after filters)
@@ -248,10 +244,11 @@ class ObjectViewSet(ObjectLookupMixin, viewsets.ModelViewSet):
                           'is_main', 'photometry', 'spectroscopy', 
                           'simbad_resolved', 'object_type', 'note']
         
+        validated = cast(dict[str, Any], serializer.validated_data)
         for field_name in fields_to_check:
-            if field_name in serializer.validated_data:
+            if field_name in validated:
                 old_value = getattr(instance, field_name, None)
-                new_value = serializer.validated_data[field_name]
+                new_value = validated[field_name]
                 if check_and_set_override(instance, field_name, new_value, old_value):
                     override_fields.append(get_override_field_name(field_name))
         
@@ -286,16 +283,17 @@ class ObjectViewSet(ObjectLookupMixin, viewsets.ModelViewSet):
                           'is_main', 'photometry', 'spectroscopy', 
                           'simbad_resolved', 'object_type', 'note']
         
+        validated = cast(dict[str, Any], serializer.validated_data)
         for field_name in fields_to_check:
-            if field_name in serializer.validated_data:
+            if field_name in validated:
                 old_value = getattr(instance, field_name, None)
-                new_value = serializer.validated_data[field_name]
+                new_value = validated[field_name]
                 if check_and_set_override(instance, field_name, new_value, old_value):
                     override_fields.append(get_override_field_name(field_name))
         
         # Capture old name before save (for propagating to DataFiles)
         old_name = instance.name
-        name_changed = 'name' in serializer.validated_data and serializer.validated_data['name'] != old_name
+        name_changed = 'name' in validated and validated['name'] != old_name
 
         serializer.save()
 
@@ -330,7 +328,10 @@ class ObjectViewSet(ObjectLookupMixin, viewsets.ModelViewSet):
             return Response({'detail': 'Forbidden'}, status=status.HTTP_403_FORBIDDEN)
         payload = request.data if hasattr(request, 'data') else {}
         try:
-            target_id = int(payload.get('target_id'))
+            raw_target = payload.get('target_id')
+            if raw_target is None:
+                raise ValueError('target_id required')
+            target_id = int(raw_target)
         except Exception:
             return Response({'detail': 'target_id required'}, status=400)
         src_ids = payload.get('source_ids') or []
@@ -529,6 +530,7 @@ class ObjectVuetifyViewSet(ObjectLookupMixin, viewsets.ModelViewSet):
     ordering_fields = ['name', 'object_type', 'ra', 'dec']
     ordering = ['name']
     permission_classes = [IsAuthenticatedOrReadOnly]
+    request: Request
 
     def _has(self, user, codename: str) -> bool:
         try:
@@ -564,8 +566,10 @@ class ObjectVuetifyViewSet(ObjectLookupMixin, viewsets.ModelViewSet):
             if val is None:
                 return None
             s = str(val).strip().lower()
-            if s in ('1', 'true', 'yes', 'on'): return True
-            if s in ('0', 'false', 'no', 'off'): return False
+            if s in ('1', 'true', 'yes', 'on'):
+                return True
+            if s in ('0', 'false', 'no', 'off'):
+                return False
             return None
 
         photometry = parse_bool(self.request.query_params.get('photometry', None))
@@ -610,13 +614,13 @@ class ObjectVuetifyViewSet(ObjectLookupMixin, viewsets.ModelViewSet):
                         continue
                     obj_coord = SkyCoord(obj.ra, obj.dec, unit='deg')
                     sep = target.separation(obj_coord)
-                    if sep.arcsecond <= radius_arcsec:
+                    if float(sep.arcsecond) <= radius_arcsec:  # type: ignore[arg-type]
                         filtered_ids.append(obj.pk)
                 if filtered_ids:
                     queryset = queryset.filter(pk__in=filtered_ids)
                 else:
                     queryset = queryset.none()
-            except Exception as e:
+            except Exception:
                 queryset = queryset.none()
         
         # Handle sorting
@@ -643,6 +647,16 @@ class ObjectVuetifyViewSet(ObjectLookupMixin, viewsets.ModelViewSet):
             ctx['search'] = normalize_search_term(str(search))
         return ctx
 
+    @extend_schema(
+        summary='List objects (Vuetify table optimized)',
+        parameters=[
+            OpenApiParameter('page', int, OpenApiParameter.QUERY),
+            OpenApiParameter('limit', int, OpenApiParameter.QUERY),
+            OpenApiParameter('sortBy', str, OpenApiParameter.QUERY),
+            OpenApiParameter('sortDesc', bool, OpenApiParameter.QUERY),
+            OpenApiParameter('search', str, OpenApiParameter.QUERY),
+        ],
+    )
     def list(self, request, *args, **kwargs):
         # Validate sortBy param
         sort_by = request.query_params.get('sortBy', None)
@@ -651,7 +665,25 @@ class ObjectVuetifyViewSet(ObjectLookupMixin, viewsets.ModelViewSet):
             allowed = set(self.ordering_fields or [])
             if field not in allowed:
                 return Response({'detail': f'Invalid sortBy: {field}'}, status=400)
-        return super().list(request, *args, **kwargs)
+        queryset = self.get_queryset()
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            resp = self.get_paginated_response(serializer.data)
+            try:
+                if request.user.is_anonymous:
+                    resp['Cache-Control'] = 'public, max-age=60'
+            except Exception:
+                pass
+            return resp
+        serializer = self.get_serializer(queryset, many=True)
+        resp = Response(serializer.data)
+        try:
+            if request.user.is_anonymous:
+                resp['Cache-Control'] = 'public, max-age=60'
+        except Exception:
+            pass
+        return resp
 
     @extend_schema(summary='Retrieve object', description='Get an object by ID.')
     def retrieve(self, request, *args, **kwargs):
@@ -674,34 +706,3 @@ class ObjectVuetifyViewSet(ObjectLookupMixin, viewsets.ModelViewSet):
         except Exception:
             pass
         return response
-
-    @extend_schema(
-        summary='List objects (Vuetify table optimized)',
-        parameters=[
-            OpenApiParameter('page', int, OpenApiParameter.QUERY),
-            OpenApiParameter('limit', int, OpenApiParameter.QUERY),
-            OpenApiParameter('sortBy', str, OpenApiParameter.QUERY),
-            OpenApiParameter('sortDesc', bool, OpenApiParameter.QUERY),
-            OpenApiParameter('search', str, OpenApiParameter.QUERY),
-        ],
-    )
-    def list(self, request, *args, **kwargs):
-        queryset = self.get_queryset()
-        page = self.paginate_queryset(queryset)
-        if page is not None:
-            serializer = self.get_serializer(page, many=True)
-            resp = self.get_paginated_response(serializer.data)
-            try:
-                if request.user.is_anonymous:
-                    resp['Cache-Control'] = 'public, max-age=60'
-            except Exception:
-                pass
-            return resp
-        serializer = self.get_serializer(queryset, many=True)
-        resp = Response(serializer.data)
-        try:
-            if request.user.is_anonymous:
-                resp['Cache-Control'] = 'public, max-age=60'
-        except Exception:
-            pass
-        return resp

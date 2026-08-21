@@ -1,5 +1,4 @@
 from .analyze_fits_header import analyze_fits
-
 from .analyze_image_and_video_header import analyze_image, analyze_ser, analyze_video
 
 ############################################################################

@@ -1,12 +1,13 @@
-from django.core.management.base import BaseCommand
-from django.db.models import Q
-from obs_run.models import DataFile, ObservationRun
-from obs_run.analyze_fits_header import analyze_fits
-from utilities import evaluate_data_file
-from objects.models import Object
-from pathlib import Path
 import logging
 import time
+from pathlib import Path
+
+from django.core.management.base import BaseCommand
+from django.db.models import Q
+
+from obs_run.analyze_fits_header import analyze_fits
+from obs_run.models import DataFile
+from utilities import evaluate_data_file
 
 logger = logging.getLogger(__name__)
 

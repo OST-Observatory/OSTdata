@@ -1,14 +1,14 @@
-from django.core.management.base import BaseCommand
-from django.db import transaction
 import logging
 import math
 
+from django.core.management.base import BaseCommand
+
 from objects.models import Object
 from utilities import (
-    get_object_fov_radius,
-    detect_object_type_from_simbad_types,
-    update_object_from_simbad_result,
     _query_region_safe,
+    detect_object_type_from_simbad_types,
+    get_object_fov_radius,
+    update_object_from_simbad_result,
 )
 
 logger = logging.getLogger(__name__)
@@ -106,7 +106,7 @@ class Command(BaseCommand):
                 
                 # Skip if coordinates are invalid
                 if obj.ra == -1 or obj.dec == -1 or obj.ra == 0 or obj.dec == 0:
-                    self.stdout.write(self.style.WARNING(f'  Skipping: Invalid coordinates'))
+                    self.stdout.write(self.style.WARNING('  Skipping: Invalid coordinates'))
                     continue
                 
                 # Calculate FOV radius
@@ -144,7 +144,7 @@ class Command(BaseCommand):
                 self.stdout.write(f'  Using search radius: {radius_str}')
                 
                 # Query SIMBAD
-                self.stdout.write(f'  Querying SIMBAD...')
+                self.stdout.write('  Querying SIMBAD...')
                 result_table = _query_region_safe(
                     obj.ra,
                     obj.dec,

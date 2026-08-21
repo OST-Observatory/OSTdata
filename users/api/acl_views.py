@@ -7,7 +7,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from ostdata.openapi import EmptyObjectSerializer, JSON_OBJECT_RESPONSE
+from ostdata.openapi import JSON_OBJECT_RESPONSE, EmptyObjectSerializer
 from ostdata.permissions import HasPerm
 from users.models import User
 
@@ -103,7 +103,6 @@ def _ensure_acl_registry():
     Does not assign permissions to groups (safe to call on every API read/write).
     """
     ct = ContentType.objects.get_for_model(User)
-    existing = {p.codename: p for p in Permission.objects.filter(content_type=ct, codename__in=[c for c, _ in ACL_PERMISSIONS])}
     for codename, name in ACL_PERMISSIONS:
         perm, created = Permission.objects.get_or_create(
             codename=codename,
@@ -180,7 +179,7 @@ def _build_acl_payload():
         ).order_by('codename')
     )
     groups = list(Group.objects.filter(name__in=ACL_GROUPS).order_by('name'))
-    perm_ids = [p.id for p in perms]
+    perm_ids = [p.pk for p in perms]
     matrix = {}
     for g in groups:
         matrix[g.name] = list(
@@ -217,7 +216,7 @@ def admin_acl_set(request):
     new_matrix = body.get('matrix') or {}
     ct = ContentType.objects.get_for_model(User)
     valid_perms = {c for c, _ in ACL_PERMISSIONS}
-    perm_map = {p.codename: p.id for p in Permission.objects.filter(content_type=ct, codename__in=valid_perms)}
+    perm_map = {p.codename: p.pk for p in Permission.objects.filter(content_type=ct, codename__in=valid_perms)}
     for gname, codes in (new_matrix.items() if isinstance(new_matrix, dict) else []):
         if gname not in ACL_GROUPS:
             continue

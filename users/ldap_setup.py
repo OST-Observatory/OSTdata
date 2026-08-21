@@ -12,8 +12,6 @@ def configure_ldap_from_env(g, env):
         return
 
     connect_timeout = g.get('AUTH_LDAP_CONNECT_TIMEOUT', 5)
-    bind_dn = g.get('AUTH_LDAP_BIND_DN', '')
-    bind_password = g.get('AUTH_LDAP_BIND_PASSWORD', '')
     user_search_base = g.get('AUTH_LDAP_USER_SEARCH_BASE', '')
     group_search_base = g.get('AUTH_LDAP_GROUP_SEARCH_BASE', '')
     user_filter = g.get('AUTH_LDAP_USER_FILTER', '(uid=%(user)s)')
@@ -31,7 +29,7 @@ def configure_ldap_from_env(g, env):
             'django.contrib.auth.backends.ModelBackend',
         )
         g['AUTH_LDAP_CONNECTION_OPTIONS'] = {
-            ldap.OPT_NETWORK_TIMEOUT: connect_timeout,
+            getattr(ldap, 'OPT_NETWORK_TIMEOUT'): connect_timeout,
         }
         g['AUTH_LDAP_ALWAYS_UPDATE_USER'] = True
         g['AUTH_LDAP_USER_ATTR_MAP'] = {
@@ -44,13 +42,13 @@ def configure_ldap_from_env(g, env):
         if user_search_base:
             g['AUTH_LDAP_USER_SEARCH'] = LDAPSearch(
                 user_search_base,
-                ldap.SCOPE_SUBTREE,
+                getattr(ldap, 'SCOPE_SUBTREE'),
                 user_filter,
             )
         if group_search_base:
             g['AUTH_LDAP_GROUP_SEARCH'] = LDAPSearch(
                 group_search_base,
-                ldap.SCOPE_SUBTREE,
+                getattr(ldap, 'SCOPE_SUBTREE'),
                 '(objectClass=groupOfNames)',
             )
 
@@ -78,7 +76,7 @@ def configure_ldap_from_env(g, env):
                         if not uri:
                             return False
                         conn = ldap_module.initialize(uri)
-                        conn.set_option(ldap_module.OPT_REFERRALS, 0)
+                        conn.set_option(getattr(ldap_module, 'OPT_REFERRALS'), 0)
                         start_tls = bool(
                             getattr(django_settings, 'AUTH_LDAP_START_TLS', False)
                             or str(os.environ.get('LDAP_START_TLS', 'false')).lower() in ('1', 'true', 'yes')
@@ -102,9 +100,15 @@ def configure_ldap_from_env(g, env):
                     try:
                         import ldap as ldap_module
 
-                        result = conn.search_s(group_dn, ldap_module.SCOPE_BASE, '(objectClass=*)', ['memberUid'])
+                        result = conn.search_s(
+                            group_dn,
+                            getattr(ldap_module, 'SCOPE_BASE'),
+                            '(objectClass=*)',
+                            ['memberUid'],
+                        )
                         if result:
-                            _, group_vals = result[0]
+                            group_entry = result[0]
+                            group_vals = group_entry[1] if isinstance(group_entry, (tuple, list)) and len(group_entry) >= 2 else {}
                             member_uids = group_vals.get('memberUid', [])
                             member_uids_str = []
                             for uid in member_uids or []:
@@ -129,7 +133,9 @@ def configure_ldap_from_env(g, env):
 
             def _ldap_sync_custom_flags(sender, user=None, ldap_user=None, **kwargs):
                 try:
-                    dns = set(ldap_user.group_dns or [])
+                    if user is None or ldap_user is None:
+                        return
+                    dns = set(getattr(ldap_user, 'group_dns', None) or [])
                     dirty = False
                     user_uid = None
                     try:

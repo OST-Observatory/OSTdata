@@ -1,22 +1,21 @@
-from django.db import models
+from collections import OrderedDict
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
+from astropy.coordinates.angles import Angle
+from astropy.io import fits
 from django.conf import settings
-
+from django.db import models
 from simple_history.models import HistoricalRecords
 
-from collections import OrderedDict
-from typing import TYPE_CHECKING
-
-from astropy.io import fits
-from astropy.coordinates.angles import Angle
-
 # from users.models import get_sentinel_user
-
 from tags.models import Tag
 
 from .analyze_files import set_file_info
-from pathlib import Path
 
+if TYPE_CHECKING:
+    from django.db.models.fields.related_descriptors import RelatedManager
+    from django.db.models.manager import Manager
 
 ############################################################################
 
@@ -106,7 +105,12 @@ class ObservationRun(models.Model):
     aux_objects_started_at = models.DateTimeField(null=True, blank=True)
 
     #   Bookkeeping
-    history = HistoricalRecords()
+    if TYPE_CHECKING:
+        history: Manager[Any]
+        # Reverse FK from DataFile.observation_run
+        datafile_set: RelatedManager["DataFile"]
+    else:
+        history = HistoricalRecords()
 
     # added_on      = models.DateTimeField(auto_now_add=True)
     # last_modified = models.DateTimeField(auto_now=True)
@@ -276,7 +280,10 @@ class DataFile(models.Model):
     tags = models.ManyToManyField(Tag, blank=True)
 
     #   Bookkeeping
-    history = HistoricalRecords()
+    if TYPE_CHECKING:
+        history: Manager[Any]
+    else:
+        history = HistoricalRecords()
 
     #   Status
     parameter_status_possibilities = (
@@ -376,7 +383,7 @@ class DataFile(models.Model):
         if self.ra != -1:
             try:
                 a = Angle(float(self.ra), unit='degree').hms
-            except Exception as e:
+            except Exception:
                 # return self.ra
                 return '-'
             return "{:02.0f}:{:02.0f}:{:05.2f}".format(*a)
@@ -387,7 +394,7 @@ class DataFile(models.Model):
         if self.ra != -1:
             try:
                 a = Angle(float(self.dec), unit='degree').dms
-            except Exception as e:
+            except Exception:
                 # return self.dec
                 return '-'
             return "{:+03.0f}:{:02.0f}:{:05.2f}".format(
@@ -439,6 +446,14 @@ class DataFile(models.Model):
             self.exposure_type,
             self.obs_date,
         )
+
+    if TYPE_CHECKING:
+        from objects.models import Object
+
+        # Reverse of Object.datafiles M2M (basedpyright; django-stubs plugin normally provides this)
+        object_set: RelatedManager[Object]
+        # FK pk accessor
+        observation_run_id: int | None
 
     class Meta:
         indexes = [

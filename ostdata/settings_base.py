@@ -1,10 +1,15 @@
 """
 Django settings base for ostdata project (shared across environments).
 """
+# django-environ's runtime defaults are fine; its inferred stubs reject typed defaults.
+# pyright: reportArgumentType=false, reportOptionalMemberAccess=false, reportAttributeAccessIssue=false
 from pathlib import Path
-import platform
+
 import environ
+from celery.schedules import crontab
 from django.core.exceptions import ImproperlyConfigured
+
+from users.ldap_setup import configure_ldap_from_env
 
 # Initialise environment variables
 env = environ.Env()
@@ -14,7 +19,7 @@ environ.Env.read_env()
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = env("SECRET_KEY", default="")
+SECRET_KEY = env.str("SECRET_KEY", default="")
 
 _INSECURE_SECRET_PLACEHOLDERS = frozenset({
     "+some_kind_of_secret+",
@@ -22,7 +27,7 @@ _INSECURE_SECRET_PLACEHOLDERS = frozenset({
     "changeme",
     "django-insecure",
 })
-_django_env_for_secret = env('DJANGO_ENV', default='development').strip().lower()
+_django_env_for_secret = env.str('DJANGO_ENV', default='development').strip().lower()
 if _django_env_for_secret == 'production':
     if (
         not SECRET_KEY
@@ -184,7 +189,7 @@ USE_I18N = True
 USE_TZ = True
 
 # Static files
-STATIC_URL = env('STATIC_URL', default='/static/')
+STATIC_URL = env.str('STATIC_URL', default='/static/')
 STATIC_ROOT = BASE_DIR / 'static/'
 STATICFILES_DIRS = []
 _site_static = BASE_DIR / 'site_static'
@@ -220,11 +225,10 @@ AUX_OBJECTS_BATCH_SIZE = env.int('AUX_OBJECTS_BATCH_SIZE', default=5)
 AUX_OBJECTS_AUTO_ON_WCS = env.bool('AUX_OBJECTS_AUTO_ON_WCS', default=True)
 
 # Celery
-from celery.schedules import crontab
 CELERY_TASK_ALWAYS_EAGER = env.bool('CELERY_TASK_ALWAYS_EAGER', default=False)
 CELERY_TASK_EAGER_PROPAGATES = env.bool('CELERY_TASK_EAGER_PROPAGATES', default=True)
-CELERY_BROKER_URL = env('CELERY_BROKER_URL', default='redis://localhost:6379/0')
-CELERY_RESULT_BACKEND = env('CELERY_RESULT_BACKEND', default='redis://localhost:6379/1')
+CELERY_BROKER_URL = env.str('CELERY_BROKER_URL', default='redis://localhost:6379/0')
+CELERY_RESULT_BACKEND = env.str('CELERY_RESULT_BACKEND', default='redis://localhost:6379/1')
 CELERY_RESULT_EXTENDED = True
 CELERY_BEAT_SCHEDULE = {}
 if env.bool('ENABLE_FS_RECONCILE', default=False):
@@ -278,7 +282,7 @@ PLATE_SOLVING_RE_EVAL_COORD_THRESHOLD_ARCMIN = env.float(
 PLATE_SOLVING_RE_EVAL_BATCH_SIZE = env.int('PLATE_SOLVING_RE_EVAL_BATCH_SIZE', default=50)
 
 # Watney-specific settings
-WATNEY_SOLVE_PATH = env('WATNEY_SOLVE_PATH', default='watney-solve')
+WATNEY_SOLVE_PATH = env.str('WATNEY_SOLVE_PATH', default='watney-solve')
 # Supported file formats for Watney (comma-separated, lowercase, without dot)
 # Default: fits,fit,fts,tiff,tif (Watney does not support PNG)
 WATNEY_SUPPORTED_FORMATS = env.list('WATNEY_SUPPORTED_FORMATS', default=['fits', 'fit', 'fts', 'tiff', 'tif'])
@@ -356,7 +360,6 @@ LDAP_GROUP_SUPERUSER_DN = env.str('LDAP_GROUP_SUPERUSER_DN', default='')
 LDAP_GROUP_SUPERVISOR_DN = env.str('LDAP_GROUP_SUPERVISOR_DN', default='')
 LDAP_GROUP_STUDENT_DN = env.str('LDAP_GROUP_STUDENT_DN', default='')
 
-from users.ldap_setup import configure_ldap_from_env
 configure_ldap_from_env(globals(), env)
 
 # ML Model Configuration for Exposure Type Classification

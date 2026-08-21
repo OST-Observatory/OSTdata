@@ -1,26 +1,30 @@
 from __future__ import annotations
 
+import hashlib
+import json
+import logging
+import os
 import tempfile
 import zipfile
+from datetime import timedelta
 from pathlib import Path
-import hashlib
 
 from celery import shared_task
-import os
-import logging
-from django.utils import timezone
 from django.conf import settings
-from datetime import timedelta
-import json
+from django.utils import timezone
 
-from obs_run.models import DownloadJob, DataFile, ObservationRun
 from obs_run.datafile_filters import apply_datafile_filters
+from obs_run.models import DataFile, DownloadJob, ObservationRun
+from obs_run.plate_solving import PlateSolvingService, solve_and_update_datafile
 from obs_run.utils import should_allow_auto_update
 from utilities import (
-    add_new_data_file, get_effective_exposure_type_filter, annotate_effective_exposure_type,
-    evaluate_data_file, update_observation_run_photometry_spectroscopy, update_object_photometry_spectroscopy,
+    add_new_data_file,
+    annotate_effective_exposure_type,
+    evaluate_data_file,
+    get_effective_exposure_type_filter,
+    update_object_photometry_spectroscopy,
+    update_observation_run_photometry_spectroscopy,
 )
-from obs_run.plate_solving import PlateSolvingService, solve_and_update_datafile
 
 logger = logging.getLogger(__name__)
 
@@ -200,7 +204,7 @@ def build_zip_task(self, job_id: int):
         job.save(update_fields=['file_path', 'bytes_total', 'bytes_done'])
 
         # Compute total size and eligible paths
-        from obs_run.services.datafile_paths import safe_datafile_path, PathOutsideDataRoot
+        from obs_run.services.datafile_paths import PathOutsideDataRoot, safe_datafile_path
         total = 0
         paths: list[tuple[Path, int]] = []
         for df in files:
@@ -247,9 +251,9 @@ def build_zip_task(self, job_id: int):
                 arcname = f"{dfpk}_{p.name}"
                 # Stream file into zip to allow responsive cancellation and progress updates
                 try:
-                    file_size = p.stat().st_size
+                    _file_size = p.stat().st_size
                 except Exception:
-                    file_size = None
+                    _file_size = None
                 try:
                     with p.open('rb') as src, zf.open(arcname, 'w') as dst:
                         CHUNK = 1024 * 1024  # 1 MiB
@@ -713,6 +717,7 @@ def cleanup_orphan_objects(self, dry_run: bool = True):
     Also recalculates first_hjd for Objects that still have DataFiles.
     """
     from django.db.models import Count
+
     from objects.models import Object
     
     objects_checked = 0
@@ -747,7 +752,8 @@ def cleanup_orphan_objects(self, dry_run: bool = True):
             # Get the earliest HJD from associated DataFiles
             valid_files = obj.datafiles.filter(hjd__gt=2451545).order_by('hjd')
             if valid_files.exists():
-                new_first_hjd = valid_files.first().hjd
+                first_df = valid_files.first()
+                new_first_hjd = first_df.hjd if first_df is not None else 0.0
             else:
                 new_first_hjd = 0.0
             
@@ -928,7 +934,7 @@ def cleanup_orphans_and_hashcheck(self, dry_run: bool = True, fix_missing_hashes
             except Exception:
                 # skip hash errors but continue
                 pass
-        except Exception as e:
+        except Exception:
             # continue with next item
             continue
 
@@ -960,12 +966,14 @@ def refresh_dashboard_stats(self):
     - dashboard_stats_v3: Main stats (30 min TTL)
     - dashboard_storage_size: Storage size (2 hour TTL)
     """
+    from datetime import datetime, timedelta
+
+    import environ
     from django.core.cache import cache
     from django.db.models import Count, Q
-    from datetime import datetime, timedelta
     from django.utils.timezone import make_aware
+
     from objects.models import Object
-    import environ
     from obs_run.auxil import get_size_dir
     from obs_run.utils import count_history_created_since
     
@@ -1019,7 +1027,7 @@ def refresh_dashboard_stats(self):
         # === STORAGE SIZE ===
         env = environ.Env()
         environ.Env.read_env()
-        data_path = env("DATA_DIRECTORY", default='/archive/ftp/')
+        data_path = env.str("DATA_DIRECTORY", default='/archive/ftp/')
         try:
             storage_size = get_size_dir(data_path) * pow(1000, -4)
         except Exception:
@@ -1099,8 +1107,7 @@ def plate_solve_pending_files(self):
     
     Processes up to PLATE_SOLVING_BATCH_SIZE files per run (default: 10).
     """
-    from django.db.models import Q, Case, When, Value, F
-    from django.db.models import CharField
+    from django.db.models import Case, CharField, F, Q, Value, When
     
     try:
         from adminops.redis_helpers import plate_solving_task_enabled_get
@@ -1197,9 +1204,9 @@ def re_evaluate_plate_solved_files(self):
     Only processes files with re_evaluated_after_plate_solve=False (avoids double evaluation,
     independent of Redis persistence).
     """
-    from astropy.coordinates import SkyCoord
     import astropy.units as u
-    from django.db.models import Q, F, Case, When, Value, CharField
+    from astropy.coordinates import SkyCoord
+    from django.db.models import Case, CharField, F, Q, Value, When
 
     try:
         from adminops.redis_helpers import plate_solving_task_enabled_get
@@ -1249,8 +1256,8 @@ def re_evaluate_plate_solved_files(self):
             if not condition1 and datafile.wcs_ra is not None and datafile.wcs_dec is not None:
                 c_header = SkyCoord(ra=datafile.ra * u.deg, dec=datafile.dec * u.deg)
                 c_wcs = SkyCoord(ra=datafile.wcs_ra * u.deg, dec=datafile.wcs_dec * u.deg)
-                sep_arcmin = c_header.separation(c_wcs).arcmin
-                condition2 = sep_arcmin > threshold_arcmin
+                sep_arcmin = float(c_header.separation(c_wcs).arcmin)  # type: ignore[arg-type]
+                condition2 = sep_arcmin > float(threshold_arcmin)
 
             if condition1 or condition2:
                 if datafile.observation_run and datafile.wcs_ra is not None and datafile.wcs_dec is not None:
@@ -1354,6 +1361,7 @@ def compute_aux_objects_for_run(self, run_id: int, force: bool = False):
 def enqueue_aux_objects_for_run(run_id: int, *, force: bool = False) -> bool:
     """Mark run pending and enqueue Celery task. Returns True when enqueued."""
     from django.db import transaction
+
     from obs_run.aux_objects import mark_aux_objects_pending, should_enqueue_aux_objects_for_run
 
     if not getattr(settings, 'AUX_OBJECTS_ENABLED', False):
@@ -1376,7 +1384,11 @@ def enqueue_aux_objects_for_run(run_id: int, *, force: bool = False) -> bool:
     if getattr(settings, 'CELERY_TASK_ALWAYS_EAGER', False):
         compute_aux_objects_for_run(run_id, force=force)
     else:
-        compute_aux_objects_for_run.delay(run_id, force=force)
+        delay = getattr(compute_aux_objects_for_run, 'delay', None)
+        if callable(delay):
+            delay(run_id, force=force)
+        else:
+            compute_aux_objects_for_run(run_id, force=force)
     return True
 
 

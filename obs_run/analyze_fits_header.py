@@ -1,9 +1,10 @@
-import numpy as np
 import logging
 
-from astropy.time import Time
+import numpy as np
 from astropy.coordinates.angles import Angle
-from obs_run.utils import should_allow_auto_update, INSTRUMENT_CATALOG
+from astropy.time import Time
+
+from obs_run.utils import INSTRUMENT_CATALOG, should_allow_auto_update
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +63,7 @@ def extract_fits_header_info(header):
     except Exception:
         try:
             data['ra'] = Angle(header.get('OBJCTRA', 0.), unit='hour').degree
-        except:
+        except Exception:
             data['ra'] = 0.
 
     try:
@@ -70,7 +71,7 @@ def extract_fits_header_info(header):
     except Exception:
         try:
             data['dec'] = Angle(header.get('OBJCTDEC', 0.), unit='degree').degree
-        except:
+        except Exception:
             data['dec'] = 0.
 
     #   Telescope and instrument info
@@ -422,14 +423,17 @@ def analyze_fits(datafile):
         datafile.fov_y = -1
     
     # Check if we have the required values for FOV calculation
-    pixel_size_valid = datafile.pixel_size is not None and datafile.pixel_size > 0
-    focal_length_valid = datafile.focal_length is not None and datafile.focal_length > 0
+    pixel_size = datafile.pixel_size
+    focal_length = datafile.focal_length
+    pixel_size_valid = pixel_size is not None and pixel_size > 0
+    focal_length_valid = focal_length is not None and focal_length > 0
     naxis_valid = datafile.naxis1 > 0 and datafile.naxis2 > 0
     
     if pixel_size_valid and focal_length_valid and naxis_valid:
         try:
-            pixel_size_mm = float(datafile.pixel_size) / 1000.0
-            focal_length_mm = float(datafile.focal_length)
+            assert pixel_size is not None and focal_length is not None
+            pixel_size_mm = float(pixel_size) / 1000.0
+            focal_length_mm = float(focal_length)
             d = float(datafile.naxis1) * pixel_size_mm
             h = float(datafile.naxis2) * pixel_size_mm
 

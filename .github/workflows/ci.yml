@@ -1,0 +1,112 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements.txt
+      - name: Install system LDAP libs
+        run: sudo apt-get update && sudo apt-get install -y libldap2-dev libsasl2-dev
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install ruff pip-audit pre-commit
+          pip install -r requirements.txt
+      - name: Ruff
+        # Use pyproject.toml select/ignore (do not pass --select E,F,I — that re-enables E501).
+        run: ruff check .
+      - name: Django system checks (development)
+        env:
+          SECRET_KEY: test-secret-key-for-ci-only-not-for-production-use-1234567890
+          DJANGO_ENV: development
+          DATABASE_NAME: unused
+          DATABASE_USER: unused
+          DATABASE_PASSWORD: unused
+          DATABASE_HOST: localhost
+          DATABASE_PORT: '5432'
+          DEFAULT_FROM_EMAIL: ci@example.com
+          ALLOWED_HOSTS: localhost
+          TRUSTED_ORIGIN: http://localhost
+          DATA_DIRECTORY: /tmp/ostdata-ci-archive
+        run: python manage.py check
+      - name: Django deploy checks (production)
+        env:
+          SECRET_KEY: test-secret-key-for-ci-only-not-for-production-use-1234567890abcdefghijklmnop
+          DJANGO_ENV: production
+          DATABASE_NAME: unused
+          DATABASE_USER: unused
+          DATABASE_PASSWORD: unused
+          DATABASE_HOST: localhost
+          DATABASE_PORT: '5432'
+          DEFAULT_FROM_EMAIL: ci@example.com
+          ALLOWED_HOSTS: example.org
+          TRUSTED_ORIGIN: https://example.org
+          DATA_DIRECTORY: /tmp/ostdata-ci-archive
+          LDAP_SERVER_URI: ''
+        run: python manage.py check --deploy
+      - name: Migration check
+        env:
+          SECRET_KEY: test-secret-key-for-ci-only-not-for-production-use-1234567890
+          DJANGO_ENV: development
+          DATABASE_NAME: unused
+          DATABASE_USER: unused
+          DATABASE_PASSWORD: unused
+          DATABASE_HOST: localhost
+          DATABASE_PORT: '5432'
+          DEFAULT_FROM_EMAIL: ci@example.com
+          ALLOWED_HOSTS: localhost
+          TRUSTED_ORIGIN: http://localhost
+          DATA_DIRECTORY: /tmp/ostdata-ci-archive
+        run: python manage.py makemigrations --check --dry-run
+      - name: Tests
+        env:
+          SECRET_KEY: test-secret-key-for-ci-only-not-for-production-use-1234567890
+          DJANGO_ENV: development
+          DATABASE_NAME: unused
+          DATABASE_USER: unused
+          DATABASE_PASSWORD: unused
+          DATABASE_HOST: localhost
+          DATABASE_PORT: '5432'
+          DEFAULT_FROM_EMAIL: ci@example.com
+          ALLOWED_HOSTS: localhost
+          TRUSTED_ORIGIN: http://localhost
+          DATA_DIRECTORY: /tmp/ostdata-ci-archive
+        run: python manage.py test obs_run.tests users.tests ostdata.tests --verbosity=1
+      - name: pip check
+        run: pip check
+      - name: pip-audit
+        run: |
+          # Exclude the commit-pinned VCS ML dependency (not resolvable by pip-audit).
+          grep -v '^git+' requirements.txt > /tmp/requirements-audit.txt
+          pip-audit -r /tmp/requirements-audit.txt
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install
+        run: npm ci
+      - name: Security helper tests
+        run: node --test tests/security_notes_download.test.mjs
+      - name: npm audit
+        run: npm audit --audit-level=high
+      - name: Build
+        run: npm run build

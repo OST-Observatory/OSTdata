@@ -1,12 +1,14 @@
-from django.core.management.base import BaseCommand
-from django.db.models import Q, F
-from django.conf import settings
-from obs_run.models import DataFile
-from pathlib import Path
 import json
-import random
 import logging
+import random
 from collections import defaultdict
+from pathlib import Path
+
+from django.conf import settings
+from django.core.management.base import BaseCommand
+from django.db.models import F, Q
+
+from obs_run.models import DataFile
 
 logger = logging.getLogger(__name__)
 
@@ -73,7 +75,7 @@ class Command(BaseCommand):
         if seed is not None:
             random.seed(seed)
         
-        self.stdout.write(f'Starting export with parameters:')
+        self.stdout.write('Starting export with parameters:')
         self.stdout.write(f'  Output: {output_path}')
         self.stdout.write(f'  Max per class: {max_per_class}')
         self.stdout.write(f'  Min year: {min_year}')
@@ -85,11 +87,11 @@ class Command(BaseCommand):
             import environ
             env = environ.Env()
             environ.Env.read_env()
-            data_directory = env("DATA_DIRECTORY", default='/archive/ftp/')
+            data_directory = env.str("DATA_DIRECTORY", default='/archive/ftp/')
         except Exception:
             data_directory = getattr(settings, 'DATA_DIRECTORY', '/archive/ftp/')
         
-        data_directory = Path(data_directory).resolve()
+        data_directory = Path(str(data_directory)).resolve()
         self.stdout.write(f'  Data directory: {data_directory}')
         
         # Filter files:
@@ -221,7 +223,7 @@ class Command(BaseCommand):
             n = len(files)
             n_train = int(n * train_ratio)
             n_val = int(n * val_ratio)
-            n_test = n - n_train - n_val  # Remaining goes to test
+            _n_test = n - n_train - n_val  # Remaining goes to test
             
             result['train'][class_name] = [f['path'] for f in files[:n_train]]
             result['val'][class_name] = [f['path'] for f in files[n_train:n_train+n_val]]

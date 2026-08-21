@@ -1,17 +1,18 @@
 
-from django_filters import rest_framework as filters
-from django.db.models import Count, F, FloatField, ExpressionWrapper, Q
 import re
 
-from obs_run.models import ObservationRun, DataFile
-from obs_run.search import build_run_aux_objects_search_q, find_aux_object_search_match
-from tags.models import Tag
-from utilities import annotate_effective_exposure_type
+from django.db.models import Count, ExpressionWrapper, F, FloatField, Q
+from django_filters import rest_framework as filters
+from rest_framework.request import Request
 
+from obs_run.models import DataFile, ObservationRun
+from obs_run.search import build_run_aux_objects_search_q, find_aux_object_search_match
 from ostdata.custom_permissions import (
     get_allowed_model_to_view_for_user,
     get_allowed_run_objects_to_view_for_user,
-    )
+)
+from tags.models import Tag
+from utilities import annotate_effective_exposure_type
 
 # ===============================================================
 #   OBSERVATION RUNS
@@ -136,19 +137,25 @@ class RunFilter(filters.FilterSet):
     @property
     def qs(self):
         parent = super().qs
+        request = self.request
+        assert isinstance(request, Request)
 
         parent = get_allowed_model_to_view_for_user(
             parent,
-            self.request.user,
+            request.user,
             ObservationRun,
             )
 
         #   Get the column order from the GET dictionary
-        getter = self.request.query_params.get
-        if not getter('order[0][column]') is None:
-            order_column = int(getter('order[0][column]'))
+        getter = request.query_params.get
+        col = getter('order[0][column]')
+        if col is not None:
+            order_column = int(col)
             order_name = getter('columns[%i][data]' % order_column)
-            if getter('order[0][dir]') == 'desc': order_name = '-'+order_name
+            if not order_name:
+                return parent.order_by('name')
+            if getter('order[0][dir]') == 'desc':
+                order_name = '-' + order_name
 
             return parent.order_by(order_name)
         else:
@@ -269,15 +276,21 @@ class DataFileFilter(filters.FilterSet):
     @property
     def qs(self):
         parent = super().qs
+        request = self.request
+        assert isinstance(request, Request)
 
-        parent = get_allowed_run_objects_to_view_for_user(parent, self.request.user)
+        parent = get_allowed_run_objects_to_view_for_user(parent, request.user)
 
         #   Get the column order from the GET dictionary
-        getter = self.request.query_params.get
-        if not getter('order[0][column]') is None:
-            order_column = int(getter('order[0][column]'))
+        getter = request.query_params.get
+        col = getter('order[0][column]')
+        if col is not None:
+            order_column = int(col)
             order_name = getter('columns[%i][data]' % order_column)
-            if getter('order[0][dir]') == 'desc': order_name = '-'+order_name
+            if not order_name:
+                return parent.order_by('observation_run')
+            if getter('order[0][dir]') == 'desc':
+                order_name = '-' + order_name
 
             return parent.order_by(order_name)
         else:

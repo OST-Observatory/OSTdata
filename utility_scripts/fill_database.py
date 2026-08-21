@@ -3,22 +3,22 @@ import os
 import sys
 from pathlib import Path
 
-# Project root (OSTdata/) must be on sys.path for `ostdata` and `utilities`.
-ROOT = Path(__file__).resolve().parent.parent
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
-
 import django
 
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'ostdata.settings')
-django.setup()
 
-from objects.models import Object
-from obs_run.models import ObservationRun, DataFile
+def main():
+    # Project root (OSTdata/) must be on sys.path for `ostdata` and `utilities`.
+    root = Path(__file__).resolve().parent.parent
+    if str(root) not in sys.path:
+        sys.path.insert(0, str(root))
 
-from utilities import add_new_observation_run
+    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'ostdata.settings')
+    django.setup()
 
-if __name__ == '__main__':
+    from objects.models import Object
+    from obs_run.models import DataFile, ObservationRun
+    from utilities import add_new_observation_run
+
     if len(sys.argv) < 2:
         print('Usage: python utility_scripts/fill_database.py /path/to/DATA_DIRECTORY', file=sys.stderr)
         sys.exit(1)
@@ -45,3 +45,7 @@ if __name__ == '__main__':
             print_to_terminal=True,
             add_data_files=True,
         )
+
+
+if __name__ == '__main__':
+    main()

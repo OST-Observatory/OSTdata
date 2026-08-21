@@ -16,8 +16,8 @@ from django.utils import timezone
 
 from objects.models import Object
 from obs_run.models import DataFile, ObservationRun
-from obs_run.wcs_utils import build_wcs_from_datafile, filter_table_to_footprint
 from obs_run.simbad_rate_limit import wait_for_aux_simbad_query_slot
+from obs_run.wcs_utils import build_wcs_from_datafile, filter_table_to_footprint
 from utilities import (
     _query_region_safe,
     _radius_str_from_arcmin,

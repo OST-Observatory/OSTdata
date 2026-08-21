@@ -1,34 +1,31 @@
-import numpy as np
-
+import base64
 import datetime
+import io
 import os
-from zoneinfo import ZoneInfo
 from pathlib import Path
 
-from astroplan import Observer
+# Bokeh/Astropy/Numpy stubs disagree with runtime APIs used throughout this module.
+# pyright: reportArgumentType=false, reportAttributeAccessIssue=false, reportOperatorIssue=false, reportCallIssue=false, reportOptionalMemberAccess=false
+from zoneinfo import ZoneInfo
 
-from astropy import wcs
-from astropy.time import Time
 import astropy.units as u
+import matplotlib.pyplot as plt
+import numpy as np
+from astroplan import Observer
+from astropy import wcs
+from astropy.coordinates import AltAz, EarthLocation, SkyCoord, get_body
 from astropy.table import Table
+from astropy.time import Time
 from astropy.timeseries import TimeSeries, aggregate_downsample
-from astropy.coordinates import SkyCoord, AltAz, get_body, EarthLocation
-
-from skyfield.data import hipparcos
-from skyfield.api import load
-
 from bokeh import models as mpl
 from bokeh import plotting as bpl
-from bokeh.models import TabPanel, Tabs, ColumnDataSource, VBar
+from bokeh.models import ColumnDataSource, TabPanel, Tabs, VBar
+from skyfield.api import load
+from skyfield.data import hipparcos
 
-import matplotlib.pyplot as plt
-
-import io
-
-import base64
-
-from .models import ObservationRun, DataFile
+from .models import DataFile, ObservationRun
 from .wcs_utils import build_wcs_from_datafile
+
 try:
     from django.conf import settings as django_settings
 except Exception:
@@ -446,7 +443,7 @@ def plot_field_of_view(data_file_pk):
 
     #   Find the legend item magnitudes
     #   TODO: Check these "labels". They do not work anymore.
-    labels = np.arange(np.ceil(mag_min), np.floor(mag_max))
+    _labels = np.arange(np.ceil(mag_min), np.floor(mag_max))
     # print(mag_min, mag_max)
     # print(labels)
 
@@ -458,7 +455,7 @@ def plot_field_of_view(data_file_pk):
         fmt="{x:.0f}",
         func=size2mag,
     )
-    legend = ax.legend(
+    _legend = ax.legend(
         *scatter.legend_elements(**kw),
         loc='center left',
         bbox_to_anchor=(1.2, 0.5),

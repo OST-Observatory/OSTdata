@@ -1,26 +1,23 @@
 from __future__ import annotations
 
-from typing import Any, Optional
+from pathlib import Path
+from typing import Optional
 
 from django.utils import timezone
-
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema_field
 from rest_framework.serializers import (
     ModelSerializer,
-    SerializerMethodField,
     PrimaryKeyRelatedField,
+    SerializerMethodField,
 )
 
-from pathlib import Path
-
-from obs_run.models import ObservationRun, DataFile
-from obs_run.search import find_aux_object_search_match
-from tags.models import Tag
-from tags.api.serializers import TagSerializer
 from objects.api.simple_serializers import ObjectSimpleSerializer
-from obs_run.utils import normalize_alias, INSTRUMENT_ALIASES, TELESCOPE_ALIASES
-
+from obs_run.models import DataFile, ObservationRun
+from obs_run.search import find_aux_object_search_match
+from obs_run.utils import INSTRUMENT_ALIASES, TELESCOPE_ALIASES, normalize_alias
+from tags.api.serializers import TagSerializer
+from tags.models import Tag
 
 # ===============================================================
 #   OBSERVATION RUNS

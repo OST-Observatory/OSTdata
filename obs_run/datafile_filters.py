@@ -1,7 +1,7 @@
 """
 Shared DataFile queryset filters for list/download endpoints and Celery ZIP tasks.
 """
-from django.db.models import F, FloatField, ExpressionWrapper, Q
+from django.db.models import ExpressionWrapper, F, FloatField, Q
 
 from utilities import annotate_effective_exposure_type
 

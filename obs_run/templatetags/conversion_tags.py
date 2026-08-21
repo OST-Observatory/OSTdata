@@ -28,7 +28,7 @@ def lower(value):
 def dgr2hms(value):
     try:
         a = Angle(float(value), unit='degree').hms
-    except Exception as e:
+    except Exception:
         return value
     return "{:02.0f}:{:02.0f}:{:05.2f}".format(*a)
 
@@ -37,7 +37,7 @@ def dgr2hms(value):
 def dgr2dms(value):
     try:
         a = Angle(float(value), unit='degree').dms
-    except Exception as e:
+    except Exception:
         return value
     return "{:+03.0f}:{:02.0f}:{:05.2f}".format(a[0], abs(a[1]), abs(a[2]))
 

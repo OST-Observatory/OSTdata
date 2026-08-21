@@ -20,10 +20,11 @@ along with PSS.  If not, see <http://www.gnu.org/licenses/>.
 
 """
 
-import os
-import cv2
-import struct
 import datetime
+import os
+import struct
+
+import cv2
 import numpy as np
 
 SER_HEADER_SIZE = 178
@@ -397,8 +398,8 @@ class SERParser(object):
 
 if __name__ == "__main__":
 
-    import ser_parser
     import matplotlib
+    import ser_parser
     matplotlib.use('Agg')
     import matplotlib.pyplot as plt
 

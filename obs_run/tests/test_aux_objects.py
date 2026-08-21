@@ -5,8 +5,6 @@ from unittest.mock import patch
 
 import numpy as np
 from astropy.table import Table
-from astropy.table import Table
-from django.contrib.auth import get_user_model
 from django.test import override_settings
 from rest_framework import status
 from rest_framework.test import APITestCase
@@ -22,8 +20,7 @@ from obs_run.aux_objects import (
     normalize_simbad_objects,
 )
 from obs_run.models import DataFile, ObservationRun
-
-User = get_user_model()
+from users.models import User
 
 
 def _make_simbad_table():
@@ -38,12 +35,12 @@ def _make_simbad_table():
 
 class AuxObjectsComputeTest(APITestCase):
     def setUp(self):
-        self.run = ObservationRun.objects.create(name='2024-01-01_test', is_public=True, photometry=True)
+        self.obs_run = ObservationRun.objects.create(name='2024-01-01_test', is_public=True, photometry=True)
         self.tmp_dir = tempfile.mkdtemp()
         self.fits_path = Path(self.tmp_dir) / 'light.fits'
         self.fits_path.write_bytes(b'PLACEHOLDER')
         self.df = DataFile.objects.create(
-            observation_run=self.run,
+            observation_run=self.obs_run,
             datafile=str(self.fits_path),
             file_type='FITS',
             exposure_type='LI',
@@ -61,7 +58,7 @@ class AuxObjectsComputeTest(APITestCase):
 
     def test_find_representative_light_fits_prefers_plate_solved(self):
         other = DataFile.objects.create(
-            observation_run=self.run,
+            observation_run=self.obs_run,
             datafile=str(Path(self.tmp_dir) / 'other.fits'),
             file_type='FITS',
             exposure_type='LI',
@@ -69,7 +66,9 @@ class AuxObjectsComputeTest(APITestCase):
             ra=1.0,
             dec=2.0,
         )
-        rep = find_representative_light_fits(self.run)
+        rep = find_representative_light_fits(self.obs_run)
+        self.assertIsNotNone(rep)
+        assert rep is not None
         self.assertEqual(rep.pk, self.df.pk)
         self.assertNotEqual(rep.pk, other.pk)
 
@@ -99,7 +98,7 @@ class AuxObjectsComputeTest(APITestCase):
     @patch('obs_run.aux_objects._query_region_safe')
     def test_compute_aux_objects(self, query_mock, _filter_mock):
         query_mock.return_value = _make_simbad_table()
-        result = compute_aux_objects(self.run)
+        result = compute_aux_objects(self.obs_run)
         self.assertEqual(result['meta']['source_datafile_id'], self.df.pk)
         self.assertEqual(result['meta']['cluster_count'], 1)
         self.assertGreaterEqual(len(result['objects']), 1)
@@ -108,7 +107,7 @@ class AuxObjectsComputeTest(APITestCase):
     @override_settings(AUX_OBJECTS_CLUSTER_SEPARATION_DEG=1.0)
     def test_cluster_groups_nearby_pointings(self):
         near = DataFile.objects.create(
-            observation_run=self.run,
+            observation_run=self.obs_run,
             datafile=str(Path(self.tmp_dir) / 'near.fits'),
             file_type='FITS',
             exposure_type='LI',
@@ -125,7 +124,7 @@ class AuxObjectsComputeTest(APITestCase):
     @override_settings(AUX_OBJECTS_CLUSTER_SEPARATION_DEG=1.0)
     def test_cluster_splits_distant_pointings(self):
         far = DataFile.objects.create(
-            observation_run=self.run,
+            observation_run=self.obs_run,
             datafile=str(Path(self.tmp_dir) / 'far.fits'),
             file_type='FITS',
             exposure_type='LI',
@@ -147,6 +146,7 @@ class AuxObjectsComputeTest(APITestCase):
         )
         fov = _fov_from_chip_and_telescope(chip_df)
         self.assertIsNotNone(fov)
+        assert fov is not None
         fov_x, fov_y = fov
         self.assertGreater(fov_x, 0.1)
         self.assertGreater(fov_y, 0.1)
@@ -156,6 +156,8 @@ class AuxObjectsComputeTest(APITestCase):
         large_field = DataFile(fov_x=2.0, fov_y=2.0)
         threshold = _pair_cluster_threshold_deg(small_field, large_field)
         small_diam = _field_diameter_deg(small_field)
+        self.assertIsNotNone(small_diam)
+        assert small_diam is not None
         self.assertAlmostEqual(threshold, 0.5 * small_diam, places=5)
 
     @override_settings(AUX_OBJECTS_CLUSTER_SEPARATION_DEG=1.0)
@@ -164,7 +166,7 @@ class AuxObjectsComputeTest(APITestCase):
     def test_compute_aux_objects_multiple_clusters(self, query_mock, _filter_mock):
         query_mock.return_value = _make_simbad_table()
         DataFile.objects.create(
-            observation_run=self.run,
+            observation_run=self.obs_run,
             datafile=str(Path(self.tmp_dir) / 'field2.fits'),
             file_type='FITS',
             exposure_type='LI',
@@ -174,7 +176,7 @@ class AuxObjectsComputeTest(APITestCase):
             fov_x=0.5,
             fov_y=0.4,
         )
-        result = compute_aux_objects(self.run)
+        result = compute_aux_objects(self.obs_run)
         self.assertEqual(result['meta']['cluster_count'], 2)
         self.assertEqual(query_mock.call_count, 2)
 
@@ -187,7 +189,7 @@ class AuxObjectsComputeTest(APITestCase):
             'alltypes.otypes': ['*', '*'],
             'V': [10.0, 11.0],
         })
-        result = compute_aux_objects(self.run)
+        result = compute_aux_objects(self.obs_run)
         names = {obj['name'] for obj in result['objects']}
         self.assertIn('center', names)
         self.assertNotIn('far', names)
@@ -197,12 +199,12 @@ class AuxObjectsComputeTest(APITestCase):
 
 class AuxObjectsApiTest(APITestCase):
     def setUp(self):
-        self.run = ObservationRun.objects.create(name='2024-02-01_test', is_public=True, photometry=True)
+        self.obs_run = ObservationRun.objects.create(name='2024-02-01_test', is_public=True, photometry=True)
         self.tmp_dir = tempfile.mkdtemp()
         self.fits_path = Path(self.tmp_dir) / 'light.fits'
         self.fits_path.write_bytes(b'PLACEHOLDER')
         DataFile.objects.create(
-            observation_run=self.run,
+            observation_run=self.obs_run,
             datafile=str(self.fits_path),
             file_type='FITS',
             exposure_type='LI',
@@ -212,8 +214,9 @@ class AuxObjectsApiTest(APITestCase):
             fov_x=0.5,
             fov_y=0.4,
         )
-        self.url = f'/api/runs/runs/{self.run.pk}/aux-objects/'
+        self.url = f'/api/runs/runs/{self.obs_run.pk}/aux-objects/'
 
+    @override_settings(AUX_OBJECTS_ENABLED=False)
     @patch('obs_run.aux_objects.compute_aux_objects')
     def test_public_run_aux_objects_compute_and_cache(self, compute_mock):
         compute_mock.return_value = {
@@ -223,16 +226,18 @@ class AuxObjectsApiTest(APITestCase):
 
         resp1 = self.client.get(self.url)
         self.assertEqual(resp1.status_code, status.HTTP_200_OK)
-        self.assertEqual(resp1.data['status'], 'ready')
-        self.assertEqual(len(resp1.data['objects']), 1)
+        data1 = getattr(resp1, 'data')
+        self.assertEqual(data1['status'], 'ready')
+        self.assertEqual(len(data1['objects']), 1)
         compute_mock.assert_called_once()
 
         compute_mock.reset_mock()
         resp2 = self.client.get(self.url)
         self.assertEqual(resp2.status_code, status.HTTP_200_OK)
-        self.assertEqual(resp2.data['status'], 'ready')
+        self.assertEqual(getattr(resp2, 'data')['status'], 'ready')
         compute_mock.assert_not_called()
 
+    @override_settings(AUX_OBJECTS_ENABLED=False)
     @patch('obs_run.aux_objects.compute_aux_objects')
     def test_refresh_forces_recompute(self, compute_mock):
         compute_mock.return_value = {
@@ -245,11 +250,12 @@ class AuxObjectsApiTest(APITestCase):
         compute_mock.assert_called_once()
 
     def test_non_photometry_run_rejected(self):
-        self.run.photometry = False
-        self.run.save(update_fields=['photometry'])
+        self.obs_run.photometry = False
+        self.obs_run.save(update_fields=['photometry'])
         resp = self.client.get(self.url)
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
 
+    @override_settings(AUX_OBJECTS_ENABLED=False)
     @patch('obs_run.aux_objects.compute_aux_objects')
     def test_private_run_requires_read_permission(self, compute_mock):
         compute_mock.return_value = {'objects': [], 'meta': {}}

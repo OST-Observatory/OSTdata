@@ -1,34 +1,36 @@
+import logging
 import os
 from datetime import timedelta
 from pathlib import Path
+
 from django.conf import settings
+from django.http import Http404
 from django.utils import timezone
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import OpenApiExample, OpenApiParameter, extend_schema
+from rest_framework import serializers
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.exceptions import ValidationError
-from ostdata.permissions import HasPerm
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
-from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiExample
-from drf_spectacular.types import OpenApiTypes
-from rest_framework import serializers
-from django.http import Http404
-import logging
-logger = logging.getLogger(__name__)
+
+from obs_run.models import DownloadJob
+from obs_run.services.downloads import (
+    enqueue_download_job_bulk,
+    enqueue_download_job_for_run,
+    user_can_access_download_job,
+)
+from ostdata.custom_permissions import get_run_for_user_or_404
+from ostdata.openapi import JSON_OBJECT_RESPONSE, EmptyObjectSerializer
+from ostdata.permissions import HasPerm
 
 try:
     import redis as _redis
 except Exception:
     _redis = None
 
-from obs_run.models import DownloadJob
-from obs_run.services.downloads import (
-    enqueue_download_job_for_run,
-    enqueue_download_job_bulk,
-    user_can_access_download_job,
-)
-from ostdata.custom_permissions import get_run_for_user_or_404
-from ostdata.openapi import EmptyObjectSerializer, JSON_OBJECT_RESPONSE
+logger = logging.getLogger(__name__)
 
 
 class DownloadJobBulkRequestSerializer(serializers.Serializer):

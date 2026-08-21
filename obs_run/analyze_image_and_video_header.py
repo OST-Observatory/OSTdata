@@ -1,14 +1,13 @@
-from astropy.time import Time
-
-from datetime import datetime
 import os
-
-import pytz
+from datetime import datetime
 
 import exifread
+import pytz
+from astropy.time import Time
+
+from obs_run.utils import should_allow_auto_update
 
 from .ser_parser import SERParser
-from obs_run.utils import should_allow_auto_update
 
 ############################################################################
 
@@ -30,7 +29,7 @@ def analyze_image(datafile):
     #   Get observation time and date
     try:
         obs_date = tags['EXIF DateTimeOriginal'].values
-    except:
+    except Exception:
         obs_date = '2000:01:01 01:00:00'
 
     #   Local timezone
@@ -48,23 +47,23 @@ def analyze_image(datafile):
     #   Exposure time
     try:
         exptime = float(tags['EXIF ExposureTime'].values[0])
-    except:
+    except Exception:
         exptime = 0.
 
     #   Image size
     try:
         naxis1 = float(tags['EXIF ExifImageWidth'].values[0])
-    except:
+    except Exception:
         try:
             naxis1 = float(tags['Image ImageWidth'].values[0])
-        except:
+        except Exception:
             naxis1 = -1
     try:
         naxis2 = float(tags['EXIF ExifImageLength'].values[0])
-    except:
+    except Exception:
         try:
             naxis2 = float(tags['Image ImageLength'].values[0])
-        except:
+        except Exception:
             naxis2 = -1
 
     #   Set values (check override flag for exposure_type)
@@ -93,7 +92,8 @@ def analyze_video(datafile):
         jd = Time(obs_date, format='iso', scale='utc').jd
     else:
         t = Time(mtime, format='unix', scale='utc')
-        obs_date = t.to_datetime().strftime("%Y-%m-%d %H:%M:%S")
+        dt = t.to_datetime()
+        obs_date = getattr(dt, 'strftime', lambda *_a, **_k: str(dt))("%Y-%m-%d %H:%M:%S")
         jd = t.jd
 
     if should_allow_auto_update(datafile, 'exposure_type'):
@@ -126,8 +126,9 @@ def analyze_ser(datafile):
 
     #   Get observation time and date (fallbacks)
     dt = header.get('DateTime_UTC_Decoded') or header.get('DateTime_Decoded')
-    if dt is not None:
-        obs_date = dt.strftime("%Y-%m-%d %H:%M:%S")
+    strftime = getattr(dt, 'strftime', None)
+    if callable(strftime):
+        obs_date = strftime("%Y-%m-%d %H:%M:%S")
         jd = Time(obs_date, format='iso', scale='utc').jd
     else:
         obs_date = '2000-01-01 00:00:00'

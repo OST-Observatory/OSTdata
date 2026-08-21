@@ -1,42 +1,40 @@
 from django.urls import include, path
-
 from rest_framework import routers
 
+from adminops.api.views import banner_info
+
+from .jobs import (
+    batch_cancel_download_jobs,
+    batch_expire_jobs_now,
+    batch_extend_jobs_expiry,
+    cancel_download_job,
+    create_download_job,
+    create_download_job_bulk,
+    download_job_download,
+    download_job_status,
+    list_download_jobs,
+)
 from .runs import (
     RunViewSet,
-    getDashboardStats,
-    get_visibility_plot,
+    dark_finder_search,
+    get_instrument_catalog,
+    get_instruments,
     get_observing_conditions,
+    get_run_aux_objects,
     get_sky_fov,
     get_time_distribution,
-    dark_finder_search,
+    get_visibility_plot,
+    getDashboardStats,
     parse_fits_header,
-    get_instruments,
-    get_instrument_catalog,
-    get_run_aux_objects,
 )
 from .views import (
     DataFileViewSet,
-    getRunDataFile,
-    get_bokeh_version,
-    get_datafile_thumbnail,
-    get_datafile_header,
     download_datafile,
-    download_run_datafiles,
     download_datafiles_bulk,
+    download_run_datafiles,
+    get_datafile_header,
+    get_datafile_thumbnail,
 )
-from .jobs import (
-    create_download_job_bulk,
-    create_download_job,
-    download_job_status,
-    cancel_download_job,
-    download_job_download,
-    list_download_jobs,
-    batch_cancel_download_jobs,
-    batch_extend_jobs_expiry,
-    batch_expire_jobs_now,
-)
-from adminops.api.views import banner_info
 
 app_name = 'runs-api'
 

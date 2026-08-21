@@ -1,13 +1,9 @@
+import os
+from datetime import datetime, timedelta
 
 from django.contrib import messages
 from django.http import HttpResponseRedirect
 from django.shortcuts import reverse
-
-import os
-
-from datetime import timedelta
-
-from astropy.time import Time
 
 from .models import ObservationRun
 

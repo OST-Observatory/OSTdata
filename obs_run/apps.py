@@ -1,6 +1,7 @@
-from django.apps import AppConfig
-from django.db.models.signals import post_delete, m2m_changed
 import logging
+
+from django.apps import AppConfig
+from django.db.models.signals import m2m_changed, post_delete
 
 logger = logging.getLogger(__name__)
 
@@ -11,15 +12,19 @@ class RunConfig(AppConfig):
 
     def ready(self):
         """Register signal handlers when the app is ready."""
-        from .models import DataFile
         from objects.models import Object
+
+        from .models import DataFile
         
         # Signal handler for DataFile deletion
         def handle_datafile_deleted(sender, instance, **kwargs):
             """Update photometry/spectroscopy flags when a DataFile is deleted."""
             try:
                 # Import here to avoid circular import and django.setup() issues
-                from utilities import update_observation_run_photometry_spectroscopy, update_object_photometry_spectroscopy
+                from utilities import (
+                    update_object_photometry_spectroscopy,
+                    update_observation_run_photometry_spectroscopy,
+                )
                 
                 # Store observation_run and associated objects before deletion
                 observation_run = instance.observation_run
@@ -57,7 +62,10 @@ class RunConfig(AppConfig):
                         instance.save(update_fields=['exclude_from_orphan_cleanup'])
                 
                 # Import here to avoid circular import and django.setup() issues
-                from utilities import update_observation_run_photometry_spectroscopy, update_object_photometry_spectroscopy
+                from utilities import (
+                    update_object_photometry_spectroscopy,
+                    update_observation_run_photometry_spectroscopy,
+                )
                 
                 update_object_photometry_spectroscopy(instance)
                 

@@ -4,6 +4,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import numpy as np
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.test import override_settings
 from rest_framework import status
@@ -11,8 +12,7 @@ from rest_framework.test import APITestCase
 
 from obs_run.models import DataFile, ObservationRun
 from obs_run.ser_thumbnails import get_ser_thumbnail_png, is_ser_path, render_ser_frame_png
-
-User = get_user_model()
+from users.models import User
 
 
 class SerThumbnailHelpersTest(APITestCase):
@@ -64,12 +64,15 @@ class SerThumbnailHelpersTest(APITestCase):
 
 class SerThumbnailApiTest(APITestCase):
     def setUp(self):
-        self.run = ObservationRun.objects.create(name='2024-01-01_test', is_public=True)
-        self.tmp_dir = tempfile.mkdtemp()
+        self.obs_run = ObservationRun.objects.create(name='2024-01-01_test', is_public=True)
+        # Path jail requires files under DATA_DIRECTORY
+        root = Path(settings.DATA_DIRECTORY)
+        root.mkdir(parents=True, exist_ok=True)
+        self.tmp_dir = tempfile.mkdtemp(dir=root)
         self.ser_path = Path(self.tmp_dir) / 'clip.ser'
         self.ser_path.write_bytes(b'placeholder')
         self.df = DataFile.objects.create(
-            observation_run=self.run,
+            observation_run=self.obs_run,
             datafile=str(self.ser_path),
             file_type='SER',
             content_hash='hash123',

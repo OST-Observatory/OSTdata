@@ -7,14 +7,14 @@ Currently supports Watney, with extensibility for additional solvers.
 
 from __future__ import annotations
 
-import shutil
-import os
 import json
 import logging
+import os
+import shutil
 import subprocess
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Dict, Optional, List
+from typing import Dict, List, Optional
 
 from django.conf import settings
 from django.utils import timezone
@@ -165,7 +165,7 @@ class WatneySolver(PlateSolver):
                         return True
                     # Some tools may return non-zero but still be available (e.g., show help on stderr)
                     if result.stderr and ('help' in result.stderr.lower() or 'usage' in result.stderr.lower()):
-                        logger.debug(f"watney-solve appears available (help text found)")
+                        logger.debug("watney-solve appears available (help text found)")
                         return True
                 except subprocess.TimeoutExpired:
                     logger.warning(f"watney-solve {test_flag} timed out")

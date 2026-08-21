@@ -6,7 +6,6 @@ from django.test import override_settings
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from obs_run.aux_objects import mark_aux_objects_pending
 from obs_run.models import DataFile, ObservationRun
 from obs_run.tasks import enqueue_aux_objects_for_run, process_aux_objects_queue
 
