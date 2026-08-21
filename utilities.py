@@ -1,3 +1,5 @@
+# Astropy/Numpy/FITS stub mismatches are common in this analysis-heavy module.
+# pyright: reportOperatorIssue=false, reportOptionalMemberAccess=false, reportOptionalOperand=false, reportOptionalSubscript=false, reportCallIssue=false, reportArgumentType=false, reportAttributeAccessIssue=false, reportInvalidTypeForm=false
 import hashlib
 import logging
 import os
@@ -5,9 +7,6 @@ import re
 import time
 import warnings
 from pathlib import Path
-
-# Astropy/Numpy/FITS stub mismatches are common in this analysis-heavy module.
-# pyright: reportOperatorIssue=false, reportOptionalMemberAccess=false, reportOptionalOperand=false, reportOptionalSubscript=false, reportCallIssue=false, reportArgumentType=false, reportAttributeAccessIssue=false, reportInvalidTypeForm=false
 
 import astropy.units as u
 import matplotlib.pyplot as plt

@@ -5,7 +5,6 @@ from unittest.mock import MagicMock, patch
 
 import numpy as np
 from django.conf import settings
-from django.contrib.auth import get_user_model
 from django.test import override_settings
 from rest_framework import status
 from rest_framework.test import APITestCase

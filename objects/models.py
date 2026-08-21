@@ -1,11 +1,11 @@
+from typing import TYPE_CHECKING, Any
+
 from astropy.coordinates.angles import Angle
 from django.db import models
 from simple_history.models import HistoricalRecords
 
 from obs_run.models import DataFile, ObservationRun
 from tags.models import Tag
-
-from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from django.db.models.fields.related_descriptors import RelatedManager

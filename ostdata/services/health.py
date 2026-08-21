@@ -4,7 +4,8 @@ import json
 import os
 import sys
 import time as _time
-from datetime import datetime, timedelta, timezone as dt_timezone
+from datetime import datetime, timedelta
+from datetime import timezone as dt_timezone
 from pathlib import Path
 from typing import Any, Dict
 from urllib.parse import urlparse, urlunparse

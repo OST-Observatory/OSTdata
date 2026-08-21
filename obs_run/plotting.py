@@ -1,11 +1,10 @@
+# Bokeh/Astropy/Numpy stubs disagree with runtime APIs used throughout this module.
+# pyright: reportArgumentType=false, reportAttributeAccessIssue=false, reportOperatorIssue=false, reportCallIssue=false, reportOptionalMemberAccess=false
 import base64
 import datetime
 import io
 import os
 from pathlib import Path
-
-# Bokeh/Astropy/Numpy stubs disagree with runtime APIs used throughout this module.
-# pyright: reportArgumentType=false, reportAttributeAccessIssue=false, reportOperatorIssue=false, reportCallIssue=false, reportOptionalMemberAccess=false
 from zoneinfo import ZoneInfo
 
 import astropy.units as u
