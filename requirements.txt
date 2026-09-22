@@ -47,6 +47,9 @@ tornado==6.5.8
 pyasn1==0.6.4
 keras==3.15.1
 sqlparse==0.6.0
+# soupsieve: CVE-2026-85999 / CVE-2026-86000 (ReDoS in CSS selector parser, fixed in 2.9).
+# Transitive via astroquery -> beautifulsoup4 (>=1.6.1, no upper bound).
+soupsieve==2.9.2
 
 # Typing (IDE / basedpyright)
 django-stubs==6.1.0
