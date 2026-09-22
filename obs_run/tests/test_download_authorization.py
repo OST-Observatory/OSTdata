@@ -3,6 +3,7 @@ import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from rest_framework import status
 from rest_framework.test import APITestCase
@@ -38,7 +39,7 @@ class RunDownloadAuthorizationTest(APITestCase):
         self.client.force_login(user)
 
     def _csrf(self):
-        token = self.client.cookies.get('csrftoken')
+        token = self.client.cookies.get(settings.CSRF_COOKIE_NAME)
         return {'HTTP_X_CSRFTOKEN': token.value} if token else {}
 
     def test_sync_zip_is_gone(self):

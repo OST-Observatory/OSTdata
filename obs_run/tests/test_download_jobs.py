@@ -3,6 +3,7 @@ import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.test import override_settings
 from rest_framework import status
@@ -29,7 +30,7 @@ class DownloadJobFlowTest(APITestCase):
         self.client.get('/api/users/auth/csrf/')
 
     def _csrf(self):
-        token = self.client.cookies.get('csrftoken')
+        token = self.client.cookies.get(settings.CSRF_COOKIE_NAME)
         return {'HTTP_X_CSRFTOKEN': token.value} if token else {}
 
     @patch('obs_run.services.downloads.build_zip_task.delay')

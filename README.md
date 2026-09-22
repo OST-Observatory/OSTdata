@@ -471,7 +471,7 @@ Notes:
 After pulling a new release on the server (typical order):
 
 1. **Dependencies** — `pip install -r requirements.txt` (and rebuild frontend / `collectstatic` if the release includes UI changes).
-2. **Environment** — `DJANGO_ENV=production` in `ostdata/.env`; session cookies use `SESSION_COOKIE_PATH` / `CSRF_COOKIE_PATH` under `/data_archive` (see `.env.example`).
+2. **Environment** — `DJANGO_ENV=production` in `ostdata/.env`; session cookies use `SESSION_COOKIE_PATH` / `CSRF_COOKIE_PATH` under `/data_archive`, and app-specific `SESSION_COOKIE_NAME` / `CSRF_COOKIE_NAME` (see `.env.example`).
 3. **Database** — `python manage.py migrate` (applies all pending app migrations from the repo).
 4. **ACL permissions** — after releases that add new admin permissions:
    ```
@@ -996,6 +996,8 @@ Notes:
 The Vue SPA uses **Django session cookies** (HttpOnly) instead of DRF API tokens. The browser sends `credentials: include` on API requests; unsafe methods (`POST`, `PUT`, `PATCH`, `DELETE`) require a CSRF token from `GET /api/users/auth/csrf/` (`X-CSRFToken` header). Password changes invalidate the current session (re-login required). After deploy, users must sign in once; token-based API clients are no longer supported.
 
 Production serves the app under `/data_archive`; set `SESSION_COOKIE_PATH` and `CSRF_COOKIE_PATH` accordingly (see `.env.example`).
+
+Cookie names are app-specific (`ostdata_sessionid` / `ostdata_csrftoken`) because several Django projects share this host and the framework defaults (`sessionid` / `csrftoken`) would overwrite each other. They are set in `settings_base.py` and overridable via `SESSION_COOKIE_NAME` / `CSRF_COOKIE_NAME`. `CSRF_COOKIE_NAME` must stay in sync with the SPA build (`frontend/.env`: `VITE_CSRF_COOKIE_NAME`); renaming either cookie invalidates existing browser sessions once. Cookie `Path` is defence in depth only — it is not a security boundary against script access.
 
 OSTdata supports LDAP authentication for user login and group membership. The system supports both `memberOf` (standard LDAP/Active Directory) and `memberUid` (Posix groups) attributes for group membership determination.
 

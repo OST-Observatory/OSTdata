@@ -334,6 +334,11 @@ CORS_ALLOWED_ORIGINS = [
 CORS_ALLOW_CREDENTIALS = True
 
 # Session / CSRF cookies (SECURE flags overridden per environment)
+# Distinct cookie names per application: several Django projects share this host and
+# the defaults ('sessionid' / 'csrftoken') would overwrite each other across apps.
+# Keep in sync with the SPA (frontend VITE_CSRF_COOKIE_NAME).
+SESSION_COOKIE_NAME = env.str('SESSION_COOKIE_NAME', default='ostdata_sessionid')
+CSRF_COOKIE_NAME = env.str('CSRF_COOKIE_NAME', default='ostdata_csrftoken')
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = 'Lax'
 CSRF_COOKIE_SAMESITE = 'Lax'

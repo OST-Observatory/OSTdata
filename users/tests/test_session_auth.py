@@ -1,6 +1,7 @@
 """Session-based authentication tests (hard-cut from DRF tokens)."""
 from typing import ClassVar
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from rest_framework import status
 from rest_framework.test import APIClient, APITestCase
@@ -21,14 +22,14 @@ class SessionAuthTest(APITestCase):
 
     def _csrf_header(self):
         self.client.get(self.csrf_url)
-        token = self.client.cookies.get('csrftoken')
+        token = self.client.cookies.get(settings.CSRF_COOKIE_NAME)
         self.assertIsNotNone(token)
         return {'HTTP_X_CSRFTOKEN': token.value}
 
     def test_csrf_endpoint_sets_cookie(self):
         resp = self.client.get(self.csrf_url)
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
-        self.assertIn('csrftoken', self.client.cookies)
+        self.assertIn(settings.CSRF_COOKIE_NAME, self.client.cookies)
         self.assertFalse(resp.data['authenticated'])
         self.assertIn('csrfToken', resp.data)
         self.assertTrue(resp.data['csrfToken'])
@@ -83,7 +84,7 @@ class SessionAuthTest(APITestCase):
         client = APIClient(enforce_csrf_checks=True)
         client.force_login(self.user)
         client.get(self.csrf_url)
-        token = client.cookies.get('csrftoken')
+        token = client.cookies.get(settings.CSRF_COOKIE_NAME)
         resp = client.post(self.logout_url, HTTP_X_CSRFTOKEN=token.value)
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
 

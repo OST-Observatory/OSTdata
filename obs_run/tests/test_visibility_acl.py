@@ -2,6 +2,7 @@
 import tempfile
 from pathlib import Path
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Permission
 from django.contrib.contenttypes.models import ContentType
@@ -56,7 +57,7 @@ class VisibilityAclMatrixTest(APITestCase):
         self.client.get('/api/users/auth/csrf/')
 
     def _csrf(self):
-        token = self.client.cookies.get('csrftoken')
+        token = self.client.cookies.get(settings.CSRF_COOKIE_NAME)
         return {'HTTP_X_CSRFTOKEN': token.value} if token else {}
 
     def test_anonymous_lists_only_public_runs(self):

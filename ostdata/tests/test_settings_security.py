@@ -36,7 +36,9 @@ def _probe(django_env: str, extra_env: dict | None = None) -> str:
         'print(settings.SECURE_HSTS_SECONDS); '
         'print(settings.REST_FRAMEWORK["DEFAULT_RENDERER_CLASSES"]); '
         'print(settings.SPECTACULAR_SETTINGS.get("SERVE_PERMISSIONS")); '
-        'print(settings.DEBUG)'
+        'print(settings.DEBUG); '
+        'print(settings.SESSION_COOKIE_NAME); '
+        'print(settings.CSRF_COOKIE_NAME)'
     )
     proc = subprocess.run(
         [PYTHON, '-c', code],
@@ -52,6 +54,12 @@ def _probe(django_env: str, extra_env: dict | None = None) -> str:
 
 
 class SettingsSecurityTest(SimpleTestCase):
+    def _assert_app_specific_cookie_names(self, lines):
+        # Co-hosted Django projects must not share 'sessionid' / 'csrftoken'.
+        self.assertNotIn(lines[6], ('sessionid', 'csrftoken'))
+        self.assertNotIn(lines[7], ('sessionid', 'csrftoken'))
+        self.assertNotEqual(lines[6], lines[7])
+
     def test_production_applies_secure_cookies_and_renderers(self):
         out = _probe('production')
         lines = out.splitlines()
@@ -62,6 +70,7 @@ class SettingsSecurityTest(SimpleTestCase):
         self.assertNotIn('BrowsableAPIRenderer', lines[3])
         self.assertIn('IsAdminOrSuperuser', lines[4])
         self.assertEqual(lines[5], 'False')
+        self._assert_app_specific_cookie_names(lines)
 
     def test_development_keeps_insecure_cookies(self):
         out = _probe('development')
@@ -69,6 +78,7 @@ class SettingsSecurityTest(SimpleTestCase):
         self.assertEqual(lines[0], 'False')
         self.assertEqual(lines[1], 'False')
         self.assertEqual(lines[5], 'True')
+        self._assert_app_specific_cookie_names(lines)
 
     def test_unknown_django_env_raises(self):
         env = os.environ.copy()
