@@ -674,7 +674,9 @@ def cleanup_expired_downloads(self):
 
     A job is eligible when `expires_at` is set and is in the past.
     The task removes the file at `file_path` (if it exists), clears `file_path`,
-    and sets `status='expired'` when not already set.
+    and sets `status='expired'` when not already set. Rows whose `expires_at` is more
+    than DOWNLOAD_JOB_RETENTION_DAYS in the past are deleted (they hold user, run and
+    selection; see the central privacy policy, #data-archive).
     """
     now = timezone.now()
     qs = DownloadJob.objects.filter(expires_at__isnull=False, expires_at__lte=now)
@@ -702,8 +704,14 @@ def cleanup_expired_downloads(self):
         except Exception as e:
             logger.error("Cleanup: error processing job #%s: %s", getattr(job, 'pk', '?'), e)
 
-    logger.info("Cleanup expired downloads complete. cleaned=%d", cleaned)
-    result = {'cleaned': cleaned, 'checked': checked, 'freed_bytes': int(freed_bytes)}
+    retention_days = getattr(settings, 'DOWNLOAD_JOB_RETENTION_DAYS', 30)
+    deleted, _ = DownloadJob.objects.filter(
+        expires_at__lte=now - timedelta(days=retention_days),
+        file_path='',
+    ).delete()
+
+    logger.info("Cleanup expired downloads complete. cleaned=%d deleted=%d", cleaned, deleted)
+    result = {'cleaned': cleaned, 'checked': checked, 'freed_bytes': int(freed_bytes), 'deleted': deleted}
     _health_set('cleanup_expired_downloads', result)
     return result
 

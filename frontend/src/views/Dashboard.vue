@@ -306,6 +306,7 @@ import { api } from '@/services/api'
 import { getStatusColor } from '@/utils/status'
 import { useNotifyStore } from '@/store/notify'
 import { formatDateTime, jdToDate } from '@/utils/datetime'
+import { ensureBokeh } from '@/utils/bokeh'
 import { useQuerySync } from '@/composables/useQuerySync'
 
 export default {
@@ -555,18 +556,6 @@ export default {
       { title: 'Last 60 months', value: '60' },
       { title: 'Since start', value: 'all' },
     ]
-
-    const ensureBokeh = async () => {
-      if (window.Bokeh) return
-      await new Promise((resolve, reject) => {
-        const script = document.createElement('script')
-        const ver = import.meta.env.VITE_BOKEH_VERSION || '3.8.0'
-        script.src = `https://cdn.bokeh.org/bokeh/release/bokeh-${ver}.min.js`
-        script.onload = resolve
-        script.onerror = reject
-        document.head.appendChild(script)
-      })
-    }
 
     const loadTimeDistribution = async () => {
       timeDistError.value = ''

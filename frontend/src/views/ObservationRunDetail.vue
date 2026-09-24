@@ -1106,6 +1106,7 @@ import { buildDownloadPrepMessage } from '@/config/downloadJobs'
 import { pollDownloadJobUntilReady } from '@/utils/downloadJobPoll'
 import { formatDateTime } from '@/utils/datetime'
 import { getStatusColor } from '@/utils/status'
+import { ensureBokeh } from '@/utils/bokeh'
 
 const route = useRoute()
 const notify = useNotifyStore()
@@ -1877,18 +1878,6 @@ watch([run, dateString], () => {
   } catch {}
 })
 
-const ensureBokehLoaded = async () => {
-  if (window.Bokeh) return
-  await new Promise((resolve, reject) => {
-    const script = document.createElement('script')
-    const ver = import.meta.env.VITE_BOKEH_VERSION || '3.8.0'
-    script.src = `https://cdn.bokeh.org/bokeh/release/bokeh-${ver}.min.js`
-    script.onload = resolve
-    script.onerror = reject
-    document.head.appendChild(script)
-  })
-}
-
 const toHjd = (dateStr) => {
   if (!dateStr) return null
   const ms = new Date(dateStr).getTime()
@@ -1901,7 +1890,7 @@ const openVisibility = async (row) => {
   visibilityDialog.value = true
   try {
     visibilityLoading.value = true
-    await ensureBokehLoaded()
+    await ensureBokeh()
     const cacheKey = `${runId}:${row.id}`
     let item = visibilityCache.get(cacheKey)
     if (!item) {
@@ -1943,7 +1932,7 @@ const loadConditions = async () => {
       }
     } catch {}
 
-    await ensureBokehLoaded()
+    await ensureBokeh()
     const base = import.meta.env.VITE_API_BASE || '/api'
     let item = conditionsCache.get(String(runId))
     if (!item) {
@@ -2081,7 +2070,7 @@ const openSkyFov = async (row) => {
   fovError.value = ''
   try {
     fovLoading.value = true
-    await ensureBokehLoaded()
+    await ensureBokeh()
     const key = `${row.id}:${row.ra}:${row.dec}`
     let item = fovCache.get(key)
     if (!item) {

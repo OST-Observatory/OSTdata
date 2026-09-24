@@ -113,9 +113,6 @@
           <v-list-item :to="{ path: '/login', query: { next: route.fullPath } }" class="nav-item">
             <v-list-item-title class="text-primary">Log In</v-list-item-title>
           </v-list-item>
-          <v-list-item to="/reset-password" class="nav-item">
-            <v-list-item-title class="text-primary">Reset password</v-list-item-title>
-          </v-list-item>
         </v-list>
       </v-menu>
       </nav>
@@ -146,7 +143,6 @@
           </template>
           <template v-else>
             <v-list-item :to="{ path: '/login', query: { next: route.fullPath } }"><v-list-item-title>Log In</v-list-item-title></v-list-item>
-            <v-list-item to="/reset-password"><v-list-item-title>Reset password</v-list-item-title></v-list-item>
           </template>
         </v-list>
       </v-menu>
@@ -198,6 +194,10 @@
             <a href="https://github.com/OST-Observatory/ostdata" target="_blank" rel="noopener noreferrer" class="footer-link">
               source code
             </a>
+            <span class="mx-2">•</span>
+            <a href="/static/datenschutz.html#en-data-archive" class="footer-link">privacy</a>
+            <span class="mx-2">•</span>
+            <a href="/static/impressum.html" class="footer-link">legal notice (Impressum)</a>
           </div>
         </v-col>
       </v-row>

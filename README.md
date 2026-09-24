@@ -932,11 +932,22 @@ Frontend behavior (Data Files tables):
         ```
         ENABLE_DOWNLOAD_CLEANUP=true
         DOWNLOAD_JOB_TTL_HOURS=72
+        DOWNLOAD_JOB_RETENTION_DAYS=30
         ```
       
-      - Ensure Celery Beat is running (see service example above). Jobs completed by the worker are given an expiry based on `DOWNLOAD_JOB_TTL_HOURS`.
+      - Ensure Celery Beat is running (see service example above). Jobs completed by the worker are given an expiry based on `DOWNLOAD_JOB_TTL_HOURS`. The same task deletes job rows (user, run, selection) `DOWNLOAD_JOB_RETENTION_DAYS` after `expires_at`.
     
-    - Alternative: a cron job that deletes ZIPs older than N days in your temp directory.
+    - Alternative: a cron job that deletes ZIPs older than N days in your temp directory. The privacy policy states that ZIPs are deleted after 72 hours, so keep the built-in task enabled in production.
+
+- Data protection / retention (stated in the central privacy policy, landing page `static/datenschutz.html#data-archive`; change both together):
+  
+  - Enabled by default (`ENABLE_PERSONAL_DATA_RETENTION=true`), needs Celery Beat:
+    
+    - `users.tasks.clear_expired_sessions` (daily 4:40) deletes expired rows from `django_session`.
+    - `adminops.tasks.pseudonymise_old_audit_data` (daily 4:50): change-history rows (`django-simple-history`) and `AuditLogEntry` older than `PERSONAL_DATA_RETENTION_DAYS` (default 730 = 2 years) keep their content but lose the acting user (`history_user` / `user` set to NULL). Audit entries about user accounts (`user_role`) also lose the username and old/new profile values (e-mail, names, note).
+  
+  - Preview before the first run: `python manage.py pseudonymise_audit_data --dry-run`.
+  - Logs: Gunicorn access log and app logs go to journald; the server keeps the journal for 7 days, as the privacy policy states. If the host changes, set `MaxRetentionSec=7day` in `/etc/systemd/journald.conf` (or a drop-in) again.
   
   - Dashboard stats pre-computation (recommended for large archives):
     

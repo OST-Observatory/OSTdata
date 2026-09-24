@@ -264,6 +264,25 @@ if env.bool('ENABLE_ORPHANS_HASHCHECK', default=False):
     }
 
 DOWNLOAD_JOB_TTL_HOURS = env.int('DOWNLOAD_JOB_TTL_HOURS', default=72)
+# Expired DownloadJob rows are deleted this many days after `expires_at` (by cleanup_expired_downloads)
+DOWNLOAD_JOB_RETENTION_DAYS = env.int('DOWNLOAD_JOB_RETENTION_DAYS', default=30)
+
+# Data protection: retention stated in the central privacy policy (landing page, #data-archive).
+# History rows and AuditLogEntry keep their content but lose the link to the acting user after
+# PERSONAL_DATA_RETENTION_DAYS. On by default because the policy promises it.
+PERSONAL_DATA_RETENTION_DAYS = env.int('PERSONAL_DATA_RETENTION_DAYS', default=730)
+ENABLE_PERSONAL_DATA_RETENTION = env.bool('ENABLE_PERSONAL_DATA_RETENTION', default=True)
+if ENABLE_PERSONAL_DATA_RETENTION:
+    CELERY_BEAT_SCHEDULE['clear_expired_sessions'] = {
+        'task': 'users.tasks.clear_expired_sessions',
+        'schedule': crontab(minute=40, hour='4'),  # Daily at 4:40
+        'args': (),
+    }
+    CELERY_BEAT_SCHEDULE['pseudonymise_old_audit_data'] = {
+        'task': 'adminops.tasks.pseudonymise_old_audit_data',
+        'schedule': crontab(minute=50, hour='4'),  # Daily at 4:50
+        'kwargs': {'dry_run': False},
+    }
 
 # Plate Solving Configuration
 PLATE_SOLVING_ENABLED = env.bool('PLATE_SOLVING_ENABLED', default=False)

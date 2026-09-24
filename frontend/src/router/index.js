@@ -156,12 +156,6 @@ const routes = [
     meta: { title: 'Change Password', description: 'Change your account password.' }
   },
   {
-    path: '/reset-password',
-    name: 'reset-password',
-    component: () => import('../views/ResetPassword.vue'),
-    meta: { title: 'Reset Password', description: 'Request a password reset link by email.' }
-  },
-  {
     path: '/dark-finder',
     name: 'DarkFinder',
     component: () => import('../views/DarkFinder.vue'),

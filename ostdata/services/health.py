@@ -96,6 +96,7 @@ def gather_admin_health() -> Dict[str, Any]:
         data['features'] = {
             'fs_reconcile_enabled': bool(getattr(settings, 'ENABLE_FS_RECONCILE', False)),
             'download_cleanup_enabled': bool(getattr(settings, 'ENABLE_DOWNLOAD_CLEANUP', False)),
+            'personal_data_retention_enabled': bool(getattr(settings, 'ENABLE_PERSONAL_DATA_RETENTION', False)),
             'plate_solving_enabled': plate_solving_enabled,
             'scan_missing_enabled': bool(getattr(settings, 'ENABLE_SCAN_MISSING_FILESYSTEM', False)),
             'orphans_hashcheck_enabled': bool(getattr(settings, 'ENABLE_ORPHANS_HASHCHECK', False)),

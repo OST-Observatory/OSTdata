@@ -54,16 +54,17 @@
                 Login
               </v-btn>
             </v-form>
+            <p class="text-caption text-center text-medium-emphasis mt-4 mb-0">
+              Information on how your data is processed:
+              <a href="/static/datenschutz.html#en-data-archive">Privacy policy</a>
+            </p>
           </v-card-text>
           
           <v-card-actions class="justify-center pb-4">
-            <v-btn
-              variant="text"
-              to="/reset-password"
-              color="primary"
-            >
-              Forgot Password?
-            </v-btn>
+            <p class="text-caption text-center text-medium-emphasis mb-0">
+              Forgot your password? Observatory accounts are managed centrally &ndash;
+              please contact the observatory team.
+            </p>
           </v-card-actions>
         </v-card>
       </v-col>

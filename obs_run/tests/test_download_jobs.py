@@ -129,3 +129,30 @@ class DownloadJobFlowTest(APITestCase):
         self.client.force_login(other)
         resp = self.client.get(f'/api/runs/jobs/{job_id}/status')
         self.assertEqual(resp.status_code, status.HTTP_404_NOT_FOUND)
+
+
+@override_settings(DOWNLOAD_JOB_RETENTION_DAYS=30)
+class DownloadJobCleanupTest(APITestCase):
+    def test_cleanup_removes_zip_then_deletes_old_rows(self):
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        from obs_run.tasks import cleanup_expired_downloads
+
+        now = timezone.now()
+        zip_path = Path(tempfile.mkdtemp()) / 'job.zip'
+        zip_path.write_bytes(b'PK')
+        fresh = DownloadJob.objects.create(status='done', file_path=str(zip_path), expires_at=now - timedelta(hours=1))
+        old = DownloadJob.objects.create(status='expired', expires_at=now - timedelta(days=31))
+        active = DownloadJob.objects.create(status='done', expires_at=now + timedelta(hours=1))
+
+        result = cleanup_expired_downloads.apply().get()
+
+        self.assertEqual(result['deleted'], 1)
+        self.assertFalse(DownloadJob.objects.filter(pk=old.pk).exists())
+        fresh.refresh_from_db()
+        self.assertEqual(fresh.status, 'expired')
+        self.assertEqual(fresh.file_path, '')
+        self.assertFalse(zip_path.exists())
+        self.assertTrue(DownloadJob.objects.filter(pk=active.pk).exists())
