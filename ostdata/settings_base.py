@@ -283,6 +283,12 @@ if ENABLE_PERSONAL_DATA_RETENTION:
         'schedule': crontab(minute=50, hour='4'),  # Daily at 4:50
         'kwargs': {'dry_run': False},
     }
+    # No-op without LDAP; accounts removed from LDAP are deactivated and lose name/e-mail.
+    CELERY_BEAT_SCHEDULE['deactivate_departed_ldap_users'] = {
+        'task': 'users.tasks.deactivate_departed_ldap_users',
+        'schedule': crontab(minute=55, hour='4'),  # Daily at 4:55
+        'args': (),
+    }
 
 # Plate Solving Configuration
 PLATE_SOLVING_ENABLED = env.bool('PLATE_SOLVING_ENABLED', default=False)

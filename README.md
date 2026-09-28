@@ -946,7 +946,10 @@ Frontend behavior (Data Files tables):
     - `users.tasks.clear_expired_sessions` (daily 4:40) deletes expired rows from `django_session`.
     - `adminops.tasks.pseudonymise_old_audit_data` (daily 4:50): change-history rows (`django-simple-history`) and `AuditLogEntry` older than `PERSONAL_DATA_RETENTION_DAYS` (default 730 = 2 years) keep their content but lose the acting user (`history_user` / `user` set to NULL). Audit entries about user accounts (`user_role`) also lose the username and old/new profile values (e-mail, names, note).
   
+    - `users.tasks.deactivate_departed_ldap_users` (daily 4:55, no-op without LDAP): active LDAP accounts (no usable local password) whose entry is gone from `LDAP_USER_SEARCH_BASE` / `LDAP_USER_FILTER` are deactivated and lose first name, last name and e-mail; the username stays for history and audit log. Local accounts are never touched. Any LDAP error aborts without changes and fails the task; if more than half of the accounts (and more than 3) would be deactivated at once it stops as well — check the search settings, then run `python manage.py deactivate_departed_ldap_users --force` once by hand. Returning members are reactivated by an admin.
+  
   - Preview before the first run: `python manage.py pseudonymise_audit_data --dry-run`.
+  - Preview the departed-account check: `python manage.py deactivate_departed_ldap_users --dry-run`.
   - Logs: Gunicorn access log and app logs go to journald; the server keeps the journal for 7 days, as the privacy policy states. If the host changes, set `MaxRetentionSec=7day` in `/etc/systemd/journald.conf` (or a drop-in) again.
   
   - Dashboard stats pre-computation (recommended for large archives):
