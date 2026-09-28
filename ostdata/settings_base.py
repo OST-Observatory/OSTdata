@@ -362,7 +362,11 @@ SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = 'Lax'
 CSRF_COOKIE_SAMESITE = 'Lax'
 CSRF_COOKIE_HTTPONLY = False  # SPA reads csrfToken from cookie in development; production overrides to True
-SESSION_COOKIE_AGE = env.int('SESSION_COOKIE_AGE', default=1209600)  # 14 days
+# Login sessions last at most 12 h on all observatory services; the CSRF cookie lives only as long
+# as the browser session (Django default: one year). Both stated in the central privacy policy
+# (landing page, #data-archive) — change them together.
+SESSION_COOKIE_AGE = env.int('SESSION_COOKIE_AGE', default=60 * 60 * 12)
+CSRF_COOKIE_AGE = None
 
 # CORS: allow download job token header from SPA
 CORS_ALLOWED_HEADERS = [

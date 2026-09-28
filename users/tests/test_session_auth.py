@@ -34,6 +34,15 @@ class SessionAuthTest(APITestCase):
         self.assertIn('csrfToken', resp.data)
         self.assertTrue(resp.data['csrfToken'])
 
+    def test_cookie_lifetimes_match_privacy_policy(self):
+        # Central privacy policy (#data-archive): session ≤ 12 h, CSRF cookie per browser session.
+        self.assertLessEqual(settings.SESSION_COOKIE_AGE, 12 * 60 * 60)
+        self.assertIsNone(settings.CSRF_COOKIE_AGE)
+        self.client.get(self.csrf_url)
+        cookie = self.client.cookies[settings.CSRF_COOKIE_NAME]
+        self.assertEqual(cookie['max-age'], '')
+        self.assertEqual(cookie['expires'], '')
+
     def test_login_sets_session_without_token_field(self):
         resp = self.client.post(
             self.login_url,
