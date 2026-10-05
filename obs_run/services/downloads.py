@@ -87,7 +87,8 @@ def resolve_visible_datafiles(
 
     if user is None:
         user = AnonymousUser()
-    selected_ids = [int(x) for x in (selected_ids or []) if str(x).strip().lstrip('-').isdigit()]
+    raw_ids = list(selected_ids or [])
+    selected_ids = [int(x) for x in raw_ids if str(x).strip().lstrip('-').isdigit()]
     filters = dict(filters or {})
     qs = DataFile.objects.all().select_related('observation_run')
     if run is not None:
@@ -98,6 +99,8 @@ def resolve_visible_datafiles(
     elif not filters:
         # Empty bulk selection must not archive the whole catalog.
         if run is None:
+            if raw_ids:
+                raise ValidationError({'detail': 'ids must be integer data file ids'})
             raise ValidationError({'detail': 'ids or filters required for bulk download'})
     qs = apply_datafile_filters(qs, filters)
     return qs

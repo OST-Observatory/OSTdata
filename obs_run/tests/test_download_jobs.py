@@ -97,6 +97,19 @@ class DownloadJobFlowTest(APITestCase):
         delay.assert_not_called()
 
     @patch('obs_run.services.downloads.build_zip_task.delay')
+    def test_bulk_with_invalid_ids_says_so(self, delay):
+        # e.g. a frontend sending [null] instead of data file ids
+        resp = self.client.post(
+            '/api/runs/datafiles/download-jobs/',
+            {'ids': [None], 'filters': {}},
+            format='json',
+            **self._csrf(),
+        )
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('integer', str(resp.data.get('detail')))
+        delay.assert_not_called()
+
+    @patch('obs_run.services.downloads.build_zip_task.delay')
     @override_settings(DOWNLOAD_JOB_MAX_FILES=0)
     def test_quota_max_files(self, delay):
         resp = self.client.post(

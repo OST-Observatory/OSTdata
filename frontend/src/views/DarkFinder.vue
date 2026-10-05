@@ -499,7 +499,10 @@ const headers = [
   { title: 'Instrument', key: 'instrument' },
 ]
 
-const selectedIds = computed(() => selected.value.map(item => item.id))
+// v-data-table with item-value="id" (no return-object) stores the ids themselves
+const selectedIds = computed(() =>
+  selected.value.map(item => (item !== null && typeof item === 'object' ? item.id : item))
+)
 
 const loadInstruments = async () => {
   loadingInstruments.value = true
