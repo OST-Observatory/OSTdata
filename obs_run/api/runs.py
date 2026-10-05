@@ -641,12 +641,14 @@ getDashboardStats.throttle_scope = 'stats'
 
 
 @extend_schema(
-    summary='Find matching dark frames',
+    summary='Find matching dark or bias frames',
     request={
         'application/json': {
             'type': 'object',
             'properties': {
-                'exptime': {'type': 'number', 'description': 'Exposure time in seconds'},
+                'frame_type': {'type': 'string', 'enum': ['dark', 'bias'], 'default': 'dark',
+                               'description': 'Frame type to search (bias: exposure time is ignored)'},
+                'exptime': {'type': 'number', 'description': 'Exposure time in seconds (darks only)'},
                 'exptime_tolerance': {'type': 'number', 'default': 0, 'description': 'Tolerance for exposure time'},
                 'ccd_temp': {'type': 'number', 'description': 'CCD temperature in °C'},
                 'temp_tolerance': {'type': 'number', 'default': 2, 'description': 'Tolerance for temperature in °C'},
@@ -661,7 +663,7 @@ getDashboardStats.throttle_scope = 'stats'
                 'binning_y': {'type': 'integer', 'default': 1, 'description': 'Y-binning'},
                 'limit': {'type': 'integer', 'default': 20, 'maximum': 100, 'description': 'Maximum number of results'},
             },
-            'required': ['exptime', 'ccd_temp', 'instrument', 'naxis1', 'naxis2'],
+            'required': ['ccd_temp', 'instrument', 'naxis1', 'naxis2'],
         }
     },
     responses=JSON_OBJECT_RESPONSE,
@@ -671,14 +673,22 @@ getDashboardStats.throttle_scope = 'stats'
 @permission_classes([IsAuthenticated])
 def dark_finder_search(request):
     """
-    Find matching dark frames based on camera parameters.
+    Find matching dark (default) or bias frames based on camera parameters.
+    ``frame_type='bias'`` ignores the exposure time; darks require it.
     Uses INSTRUMENT_ALIASES for instrument name normalization.
     """
     try:
         data = request.data if hasattr(request, 'data') else {}
-        
+
+        frame_type = str(data.get('frame_type') or 'dark').strip().lower()
+        type_code = {'dark': 'DA', 'bias': 'BI'}.get(frame_type)
+        if type_code is None:
+            return Response({'error': "frame_type must be 'dark' or 'bias'"}, status=400)
+
         # Required parameters
-        exptime = float(data.get('exptime', 0))
+        exptime = float(data.get('exptime') or 0)
+        if frame_type == 'dark' and exptime <= 0:
+            return Response({'error': 'exptime is required for darks'}, status=400)
         ccd_temp = float(data.get('ccd_temp', -999))
         instrument = str(data.get('instrument', '')).strip()
         naxis1 = int(data.get('naxis1', 0))
@@ -698,10 +708,10 @@ def dark_finder_search(request):
         # Normalize instrument using INSTRUMENT_ALIASES
         normalized_instrument = normalize_alias(instrument, INSTRUMENT_ALIASES)
         
-        # Build query for dark frames (using effective exposure type)
+        # Build query for dark / bias frames (using effective exposure type)
         queryset = annotate_effective_exposure_type(
             DataFile.objects.filter(observation_run__is_public=True)
-        ).filter(annotated_effective_exposure_type='DA')
+        ).filter(annotated_effective_exposure_type=type_code)
         
         # Find all possible instrument variants
         possible_instruments = [normalized_instrument]
@@ -715,14 +725,15 @@ def dark_finder_search(request):
             Q(instrument__in=possible_instruments)
         )
         
-        # Filter by exposure time with tolerance
-        if exptime_tolerance > 0:
-            queryset = queryset.filter(
-                exptime__gte=exptime - exptime_tolerance,
-                exptime__lte=exptime + exptime_tolerance
-            )
-        else:
-            queryset = queryset.filter(exptime=exptime)
+        # Filter by exposure time with tolerance (darks only)
+        if frame_type == 'dark':
+            if exptime_tolerance > 0:
+                queryset = queryset.filter(
+                    exptime__gte=exptime - exptime_tolerance,
+                    exptime__lte=exptime + exptime_tolerance
+                )
+            else:
+                queryset = queryset.filter(exptime=exptime)
         
         # Filter by CCD temperature with tolerance
         queryset = queryset.filter(
@@ -754,6 +765,7 @@ def dark_finder_search(request):
         for df in queryset:
             results.append({
                 'id': df.pk,
+                'frame_type': frame_type,
                 'filename': Path(df.datafile).name,
                 'observation_run': df.observation_run.name if df.observation_run else None,
                 'observation_run_id': df.observation_run.pk if df.observation_run else None,
@@ -771,7 +783,7 @@ def dark_finder_search(request):
                 'file_size': df.file_size,
             })
         
-        return Response({'results': results, 'count': len(results)})
+        return Response({'results': results, 'count': len(results), 'frame_type': frame_type})
         
     except Exception as e:
         logger.exception("dark_finder_search failed: %s", e)

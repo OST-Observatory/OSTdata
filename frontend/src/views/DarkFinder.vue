@@ -1,6 +1,18 @@
 <template>
   <v-container fluid class="dark-finder">
-    <h1 class="text-h4 mb-4">Dark Finder</h1>
+    <h1 class="text-h4 mb-4">Dark / Bias Finder</h1>
+
+    <v-btn-toggle
+      v-model="frameType"
+      mandatory
+      color="primary"
+      variant="outlined"
+      density="comfortable"
+      class="mb-4"
+    >
+      <v-btn value="dark" prepend-icon="mdi-weather-night">Darks</v-btn>
+      <v-btn value="bias" prepend-icon="mdi-flash-outline">Bias</v-btn>
+    </v-btn-toggle>
 
     <v-tabs v-model="tab" class="mb-4">
       <v-tab value="manual">Manual Input</v-tab>
@@ -17,11 +29,12 @@
                 <v-text-field
                   v-model.number="params.exptime"
                   type="number"
-                  label="Exposure Time (s) *"
+                  :label="isBias ? 'Exposure Time (not used for bias)' : 'Exposure Time (s) *'"
                   variant="outlined"
                   density="comfortable"
-                  :rules="[v => (v != null && v !== '' && v > 0) || 'Must be positive']"
-                  required
+                  :disabled="isBias"
+                  :rules="[v => isBias || (v != null && v !== '' && v > 0) || 'Must be positive']"
+                  :required="!isBias"
                 />
               </v-col>
               <v-col cols="12" md="6">
@@ -31,6 +44,7 @@
                   label="Exposure Tolerance (s)"
                   variant="outlined"
                   density="comfortable"
+                  :disabled="isBias"
                   :rules="[v => (v == null || v === '' || v >= 0) || 'Must be non-negative']"
                 />
               </v-col>
@@ -168,7 +182,7 @@
               @click="searchDarks"
               class="mt-4"
             >
-              Search Darks
+              Search {{ frameLabel }}
             </v-btn>
           </v-card-text>
         </v-card>
@@ -221,6 +235,7 @@
                     label="Exposure Tolerance (s)"
                     variant="outlined"
                     density="comfortable"
+                    :disabled="isBias"
                   />
                 </v-col>
                 <v-col cols="12" md="6">
@@ -360,7 +375,7 @@
                 @click="searchDarksFromParsed"
                 class="mt-4"
               >
-                Search Darks
+                Search {{ frameLabel }}
               </v-btn>
             </div>
           </v-card-text>
@@ -371,7 +386,7 @@
     <!-- Results -->
     <v-card v-if="results.length > 0" class="mt-4">
       <v-card-title class="d-flex justify-space-between align-center">
-        <span>Results ({{ results.length }} matching darks)</span>
+        <span>Results ({{ results.length }} matching {{ frameLabel.toLowerCase() }})</span>
         <div>
           <v-btn
             color="primary"
@@ -449,6 +464,14 @@ const instrumentCatalog = ref([])
 const results = ref([])
 const selected = ref([])
 const parsedParams = ref(null)
+const frameType = ref('dark')
+const isBias = computed(() => frameType.value === 'bias')
+const frameLabel = computed(() => (isBias.value ? 'Bias' : 'Darks'))
+
+watch(frameType, () => {
+  results.value = []
+  selected.value = []
+})
 
 const params = ref({
   exptime: null,
@@ -576,7 +599,7 @@ const searchDarks = async () => {
   
   // Build list of missing fields for better error message
   const missing = []
-  if (isInvalid(exptime)) missing.push('Exposure Time')
+  if (!isBias.value && isInvalid(exptime)) missing.push('Exposure Time')
   if (isInvalid(ccd_temp)) missing.push('CCD Temperature')
   if (!instrument || instrument.trim() === '') missing.push('Instrument')
   if (isInvalid(naxis1)) missing.push('Width')
@@ -592,7 +615,7 @@ const searchDarks = async () => {
   const naxis1Num = Number(naxis1)
   const naxis2Num = Number(naxis2)
   
-  if (exptimeNum <= 0 || naxis1Num <= 0 || naxis2Num <= 0) {
+  if ((!isBias.value && exptimeNum <= 0) || naxis1Num <= 0 || naxis2Num <= 0) {
     notify.error('Exposure time and image dimensions must be positive')
     return
   }
@@ -605,7 +628,8 @@ const searchDarks = async () => {
   try {
     // Prepare params, converting values properly
     const searchParams = {
-      exptime: exptimeNum,
+      frame_type: frameType.value,
+      exptime: isBias.value ? 0 : exptimeNum,
       exptime_tolerance: params.value.exptime_tolerance != null && params.value.exptime_tolerance !== '' 
         ? Number(params.value.exptime_tolerance) : 0,
       ccd_temp: Number(ccd_temp),
@@ -633,10 +657,10 @@ const searchDarks = async () => {
     const data = await api.darkFinderSearch(searchParams)
     results.value = data.results || []
     if (results.value.length === 0) {
-      notify.info('No matching dark frames found')
+      notify.info(`No matching ${isBias.value ? 'bias' : 'dark'} frames found`)
     }
   } catch (e) {
-    searchError.value = e?.data?.error || 'Failed to search dark frames'
+    searchError.value = e?.data?.error || `Failed to search ${isBias.value ? 'bias' : 'dark'} frames`
     notify.error('Search failed')
   } finally {
     searching.value = false
@@ -659,7 +683,7 @@ const searchDarksFromParsed = async () => {
   
   // Build list of missing fields for better error message
   const missing = []
-  if (isInvalid(exptime)) missing.push('Exposure Time')
+  if (!isBias.value && isInvalid(exptime)) missing.push('Exposure Time')
   if (isInvalid(ccd_temp)) missing.push('CCD Temperature')
   if (!instrument || instrument.trim() === '') missing.push('Instrument')
   if (isInvalid(naxis1)) missing.push('Width')
@@ -675,7 +699,7 @@ const searchDarksFromParsed = async () => {
   const naxis1Num = Number(naxis1)
   const naxis2Num = Number(naxis2)
   
-  if (exptimeNum <= 0 || naxis1Num <= 0 || naxis2Num <= 0) {
+  if ((!isBias.value && exptimeNum <= 0) || naxis1Num <= 0 || naxis2Num <= 0) {
     notify.error('Exposure time and image dimensions must be positive')
     return
   }
@@ -688,7 +712,8 @@ const searchDarksFromParsed = async () => {
   try {
     // Prepare params, converting values properly
     const searchParams = {
-      exptime: exptimeNum,
+      frame_type: frameType.value,
+      exptime: isBias.value ? 0 : exptimeNum,
       exptime_tolerance: params.value.exptime_tolerance != null && params.value.exptime_tolerance !== '' 
         ? Number(params.value.exptime_tolerance) : 0,
       ccd_temp: Number(ccd_temp),
@@ -716,10 +741,10 @@ const searchDarksFromParsed = async () => {
     const data = await api.darkFinderSearch(searchParams)
     results.value = data.results || []
     if (results.value.length === 0) {
-      notify.info('No matching dark frames found')
+      notify.info(`No matching ${isBias.value ? 'bias' : 'dark'} frames found`)
     }
   } catch (e) {
-    searchError.value = e?.data?.error || 'Failed to search dark frames'
+    searchError.value = e?.data?.error || `Failed to search ${isBias.value ? 'bias' : 'dark'} frames`
     notify.error('Search failed')
   } finally {
     searching.value = false
