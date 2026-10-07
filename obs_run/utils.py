@@ -49,6 +49,7 @@ TELESCOPE_ALIASES = {
     'lx200': 'LX200',
     'sky-watcher': 'SkyWatcher',
     'Planewave CDK20': 'CDK20',
+    'OST CDK20': 'CDK20',
 }
 
 # Instrument catalog with pixel dimensions for detection and API endpoints
