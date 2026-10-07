@@ -453,7 +453,8 @@ class getObjectDatafileViewSet(viewsets.ModelViewSet):
         except Exception:
             return Response({"detail": "Not found"}, status=404)
         queryset = get_allowed_run_objects_to_view_for_user(
-            obj.datafiles.prefetch_related('object_set').all(),
+            obj.datafiles.select_related('observation_run')
+            .prefetch_related('object_set', 'tags').all(),
             request.user,
         )
         # Optional server-side binning filter from FITS headers

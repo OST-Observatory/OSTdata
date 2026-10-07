@@ -356,7 +356,9 @@ class DataFileViewSet(viewsets.ModelViewSet):
     """
         Returns a list of all stars/objects in the database
     """
-    queryset = DataFile.objects.select_related('observation_run').prefetch_related('object_set').all()
+    # object_set / tags are read per row by DataFileSerializer: prefetch them
+    queryset = (DataFile.objects.select_related('observation_run')
+                .prefetch_related('object_set', 'tags').all())
     serializer_class = DataFileSerializer
     pagination_class = DataFilesPagination
     permission_classes = [IsAuthenticatedOrReadOnly]

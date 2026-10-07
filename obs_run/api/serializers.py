@@ -552,20 +552,14 @@ class DataFileSerializer(ModelSerializer):
 
     @extend_schema_field(OpenApiTypes.STR)
     def get_binning(self, obj) -> str:
+        # Stored from the FITS header at ingestion (analyze_fits_header); reading
+        # the header here opened every file of a list page and made run
+        # listings time out.
+        bx = getattr(obj, 'binning_x', None) or 1
+        by = getattr(obj, 'binning_y', None) or 1
         try:
-            header = obj.get_fits_header()
-            bx = header.get('XBINNING') or header.get('XBIN') or header.get('BINX')
-            by = header.get('YBINNING') or header.get('YBIN') or header.get('BINY')
-            if (bx is None or by is None) and header.get('BINNING'):
-                import re
-                parts = [p for p in re.split(r"[^0-9]+", str(header.get('BINNING'))) if p]
-                if len(parts) >= 2:
-                    bx = parts[0]
-                    by = parts[1]
-            bx = int(str(bx)) if bx is not None else 1
-            by = int(str(by)) if by is not None else 1
-            return f"{bx}x{by}"
-        except Exception:
+            return f"{int(bx)}x{int(by)}"
+        except (TypeError, ValueError):
             return "1x1"
 
     @extend_schema_field(OpenApiTypes.STR)
@@ -575,7 +569,7 @@ class DataFileSerializer(ModelSerializer):
     @extend_schema_field({'type': 'array', 'items': {'type': 'integer'}})
     def get_object_ids(self, obj) -> list[int]:
         """List of object PKs this datafile is associated with."""
-        objs = obj.object_set.all().only('pk')
+        objs = obj.object_set.all()
         return [o.pk for o in objs]
 
     @extend_schema_field(OpenApiTypes.INT)
@@ -584,7 +578,7 @@ class DataFileSerializer(ModelSerializer):
         Object ID for linking when displaying main_target.
         Prefer object whose name matches main_target; else first object if only one.
         """
-        objs = list(obj.object_set.all().only('pk', 'name'))
+        objs = list(obj.object_set.all())
         if not objs:
             return None
         main_target = (obj.main_target or '').strip()
@@ -599,7 +593,7 @@ class DataFileSerializer(ModelSerializer):
     @extend_schema_field(OpenApiTypes.STR)
     def get_main_object_name(self, obj) -> Optional[str]:
         """Name of the object we link to (main_object_id)."""
-        objs = list(obj.object_set.all().only('pk', 'name'))
+        objs = list(obj.object_set.all())
         if not objs:
             return None
         main_target = (obj.main_target or '').strip()
