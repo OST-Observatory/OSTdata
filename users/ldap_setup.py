@@ -1,6 +1,5 @@
 """LDAP configuration extracted from Django settings."""
 import logging
-import os
 
 logger = logging.getLogger(__name__)
 
@@ -52,91 +51,33 @@ def configure_ldap_from_env(g, env):
                 '(objectClass=groupOfNames)',
             )
 
+        # django-auth-ldap needs AUTH_LDAP_GROUP_SEARCH for USER_FLAGS_BY_GROUP
+        # (ImproperlyConfigured at login otherwise). The populate_user handler
+        # below sets the flags in any case.
         user_flags = {}
-        if staff_dn:
-            user_flags['is_staff'] = staff_dn
-        if superuser_dn:
-            user_flags['is_superuser'] = superuser_dn
+        if group_search_base:
+            if staff_dn:
+                user_flags['is_staff'] = staff_dn
+            if superuser_dn:
+                user_flags['is_superuser'] = superuser_dn
+        elif staff_dn or superuser_dn:
+            logger.info('LDAP_GROUP_SEARCH_BASE not set; staff/superuser flags are synced via populate_user only')
         g['AUTH_LDAP_USER_FLAGS_BY_GROUP'] = user_flags
 
         if staff_dn or superuser_dn or supervisor_dn or student_dn:
             from django_auth_ldap.backend import populate_user
 
-            def _check_ldap_group_membership_via_memberuid(group_dn, user_uid, ldap_conn=None):
-                if not group_dn or not user_uid:
-                    return False
-                conn = ldap_conn
-                should_close = False
-                try:
-                    if conn is None:
-                        import ldap as ldap_module
-                        from django.conf import settings as django_settings
-
-                        uri = getattr(django_settings, 'AUTH_LDAP_SERVER_URI', None) or os.environ.get('LDAP_SERVER_URI')
-                        if not uri:
-                            return False
-                        conn = ldap_module.initialize(uri)
-                        conn.set_option(getattr(ldap_module, 'OPT_REFERRALS'), 0)
-                        start_tls = bool(
-                            getattr(django_settings, 'AUTH_LDAP_START_TLS', False)
-                            or str(os.environ.get('LDAP_START_TLS', 'false')).lower() in ('1', 'true', 'yes')
-                        )
-                        if start_tls:
-                            try:
-                                conn.start_tls_s()
-                            except Exception:
-                                logger.debug('LDAP STARTTLS failed', exc_info=True)
-                        bdn = getattr(django_settings, 'AUTH_LDAP_BIND_DN', None) or os.environ.get('LDAP_BIND_DN') or ''
-                        bpw = getattr(django_settings, 'AUTH_LDAP_BIND_PASSWORD', None) or os.environ.get('LDAP_BIND_PASSWORD') or ''
-                        try:
-                            if bdn:
-                                conn.simple_bind_s(bdn, bpw or '')
-                            else:
-                                conn.simple_bind_s()
-                        except Exception:
-                            logger.warning('LDAP bind failed during memberUid check', exc_info=True)
-                            return False
-                        should_close = True
-                    try:
-                        import ldap as ldap_module
-
-                        result = conn.search_s(
-                            group_dn,
-                            getattr(ldap_module, 'SCOPE_BASE'),
-                            '(objectClass=*)',
-                            ['memberUid'],
-                        )
-                        if result:
-                            group_entry = result[0]
-                            group_vals = group_entry[1] if isinstance(group_entry, (tuple, list)) and len(group_entry) >= 2 else {}
-                            member_uids = group_vals.get('memberUid', [])
-                            member_uids_str = []
-                            for uid in member_uids or []:
-                                try:
-                                    member_uids_str.append(
-                                        uid.decode('utf-8') if isinstance(uid, (bytes, bytearray)) else str(uid)
-                                    )
-                                except Exception:
-                                    member_uids_str.append(str(uid))
-                            return user_uid in member_uids_str
-                    except Exception:
-                        logger.debug('LDAP memberUid group read failed', exc_info=True)
-                except Exception:
-                    logger.debug('LDAP memberUid membership check failed', exc_info=True)
-                finally:
-                    if should_close and conn:
-                        try:
-                            conn.unbind_s()
-                        except Exception:
-                            pass
-                return False
+            from users.ldap_membership import ldap_group_membership
 
             def _ldap_sync_custom_flags(sender, user=None, ldap_user=None, **kwargs):
                 try:
                     if user is None or ldap_user is None:
                         return
-                    dns = set(getattr(ldap_user, 'group_dns', None) or [])
-                    dirty = False
+                    try:
+                        dns = set(ldap_user.group_dns or [])
+                    except Exception:
+                        # No AUTH_LDAP_GROUP_SEARCH configured or search failed
+                        dns = set()
                     user_uid = None
                     try:
                         user_uid = getattr(ldap_user, 'attrs', {}).get('uid', [None])[0]
@@ -144,7 +85,10 @@ def configure_ldap_from_env(g, env):
                             user_uid = user_uid.decode('utf-8') if isinstance(user_uid, (bytes, bytearray)) else str(user_uid)
                     except Exception:
                         pass
-                    ldap_conn = getattr(ldap_user, '_connection', None)
+                    try:
+                        ldap_conn = ldap_user.connection
+                    except Exception:
+                        ldap_conn = None
 
                     flag_specs = (
                         ('is_staff', staff_dn),
@@ -155,17 +99,20 @@ def configure_ldap_from_env(g, env):
                     for attr, group_dn in flag_specs:
                         if not group_dn:
                             continue
-                        new_val = any(d.lower() == group_dn.lower() for d in dns)
-                        if not new_val and user_uid:
-                            new_val = _check_ldap_group_membership_via_memberuid(group_dn, user_uid, ldap_conn)
-                        if getattr(user, attr, False) != new_val:
-                            setattr(user, attr, new_val)
-                            dirty = True
-
-                    if dirty:
-                        update_fields = [attr for attr, group_dn in flag_specs if group_dn]
-                        if update_fields:
-                            user.save(update_fields=update_fields)
+                        method = ldap_group_membership(
+                            ldap_conn,
+                            group_dn,
+                            user_dn=getattr(ldap_user, 'dn', None),
+                            user_uid=user_uid,
+                            known_group_dns=dns,
+                        )
+                        new_val = bool(method)
+                        logger.info(
+                            'LDAP flag %s for %s: %s%s',
+                            attr, user.get_username(), new_val, f' (via {method})' if method else '',
+                        )
+                        # The backend saves the user right after this signal
+                        setattr(user, attr, new_val)
                 except Exception:
                     logger.warning('LDAP custom flag sync failed', exc_info=True)
 

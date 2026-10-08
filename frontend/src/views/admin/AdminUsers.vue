@@ -70,10 +70,10 @@
           <div class="mt-2" v-if="ldapResult.groups && Object.keys(ldapResult.groups).length">
             <div class="text-caption text-medium-emphasis mb-1">Groups</div>
             <div class="d-flex flex-wrap" style="gap: 6px">
-              <v-chip size="small" :color="ldapResult.groups.staff ? 'primary' : 'default'" variant="flat">staff</v-chip>
-              <v-chip size="small" :color="ldapResult.groups.superuser ? 'primary' : 'default'" variant="flat">superuser</v-chip>
-              <v-chip size="small" :color="ldapResult.groups.supervisor ? 'primary' : 'default'" variant="flat">supervisor</v-chip>
-              <v-chip size="small" :color="ldapResult.groups.student ? 'primary' : 'default'" variant="flat">student</v-chip>
+              <v-chip size="small" :color="ldapResult.groups.staff ? 'primary' : 'default'" variant="flat" :title="ldapResult.groups_via?.staff ? 'matched via ' + ldapResult.groups_via.staff : 'not a member'">staff</v-chip>
+              <v-chip size="small" :color="ldapResult.groups.superuser ? 'primary' : 'default'" variant="flat" :title="ldapResult.groups_via?.superuser ? 'matched via ' + ldapResult.groups_via.superuser : 'not a member'">superuser</v-chip>
+              <v-chip size="small" :color="ldapResult.groups.supervisor ? 'primary' : 'default'" variant="flat" :title="ldapResult.groups_via?.supervisor ? 'matched via ' + ldapResult.groups_via.supervisor : 'not a member'">supervisor</v-chip>
+              <v-chip size="small" :color="ldapResult.groups.student ? 'primary' : 'default'" variant="flat" :title="ldapResult.groups_via?.student ? 'matched via ' + ldapResult.groups_via.student : 'not a member'">student</v-chip>
             </div>
           </div>
           <div class="mt-2 text-error text-caption" v-if="ldapResult.errors && Object.keys(ldapResult.errors).length">
