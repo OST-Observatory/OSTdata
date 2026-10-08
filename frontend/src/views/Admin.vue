@@ -35,6 +35,17 @@
             <v-card-subtitle class="text-wrap mt-2 opacity-90">
               {{ tile.description }}
             </v-card-subtitle>
+            <v-chip
+              v-if="tile.to === '/admin/health' && watchdogErrorCount > 0"
+              color="error"
+              size="small"
+              variant="tonal"
+              prepend-icon="mdi-alert-circle-outline"
+              class="mt-2"
+              :to="{ path: '/admin/health' }"
+            >
+              {{ watchdogErrorCount }} file watcher {{ watchdogErrorCount === 1 ? 'error' : 'errors' }}
+            </v-chip>
           </v-card-item>
 
           <v-spacer />
@@ -67,6 +78,26 @@
 </template>
 
 <script setup>
+import { ref, computed, onMounted } from 'vue'
+import { api } from '@/services/api'
+import { useAuthStore } from '@/store/auth'
+
+const auth = useAuthStore()
+const canViewHealth = computed(
+  () => auth.hasPerm('users.acl_system_health_view') || auth.hasPerm('acl_system_health_view'),
+)
+const watchdogErrorCount = ref(0)
+
+onMounted(async () => {
+  if (!canViewHealth.value) return
+  try {
+    const status = await api.adminWatchdogStatus(false)
+    watchdogErrorCount.value = status?.error_count || 0
+  } catch {
+    /* badge is optional */
+  }
+})
+
 const adminTiles = [
   {
     title: 'Users & Roles',

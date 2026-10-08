@@ -24,6 +24,7 @@ from adminops.redis_helpers import (
 from adminops.redis_helpers import (
     plate_solving_task_enabled_set as _plate_solving_task_enabled_set,
 )
+from adminops.watchdog_status import watchdog_errors_reset, watchdog_status_get
 from objects.models import Identifier, Object
 from obs_run.api.serializers import DataFileSerializer
 from obs_run.api.views import DataFilesPagination
@@ -198,6 +199,25 @@ def _banner_clear():
 def admin_health(request):
     data = gather_admin_health()
     return Response(data, status=200)
+
+
+@extend_schema(summary='Data directory watchdog status and error counter', tags=['Admin'],
+    responses=JSON_OBJECT_RESPONSE)
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, HasPerm('acl_system_health_view')])
+def admin_watchdog_status(request):
+    include_errors = str(request.query_params.get('errors', '1')).lower() not in ('0', 'false', 'no')
+    return Response(watchdog_status_get(include_errors=include_errors), status=200)
+
+
+@extend_schema(summary='Reset data directory watchdog error counter', tags=['Admin'],
+    request=None, responses=JSON_OBJECT_RESPONSE)
+@api_view(['POST'])
+@permission_classes([IsAuthenticated, HasPerm('acl_system_health_view')])
+def admin_watchdog_reset_errors(request):
+    if not watchdog_errors_reset():
+        return Response({'detail': 'Redis not available'}, status=503)
+    return Response(watchdog_status_get(include_errors=False), status=200)
 
 
 @extend_schema(

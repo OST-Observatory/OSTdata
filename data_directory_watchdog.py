@@ -15,6 +15,11 @@ from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
 from watchdog.observers.polling import PollingObserver
 
+from adminops.watchdog_status import (
+    RedisErrorHandler,
+    watchdog_heartbeat,
+    watchdog_mark_started,
+)
 from obs_run.models import DataFile, ObservationRun
 from utilities import (
     add_new_data_file,
@@ -51,6 +56,7 @@ WATCH_CREATED_DELAY_SECONDS = env.float('WATCH_CREATED_DELAY_SECONDS', default=2
 WATCH_STABILITY_SECONDS = env.float('WATCH_STABILITY_SECONDS', default=0.0)
 WATCH_USE_POLLING = env.bool('WATCH_USE_POLLING', default=False)
 WATCH_POLLING_INTERVAL = env.float('WATCH_POLLING_INTERVAL', default=1.0)  # Polling interval in seconds
+WATCH_HEARTBEAT_SECONDS = 30.0
 
 
 def add_new_observation_run_wrapper(data_path):
@@ -98,7 +104,13 @@ def add_new_data_file_wrapper(file_path, directory_to_monitor):
         except Exception as e:
             logger.warning(f"Stability check failed for {file_path}: {e}")
 
-    source_path = str(file_path).split(directory_to_monitor)[1].split('/')[0]
+    #   Top-level directory below the monitored base = observation run name.
+    #   Use relpath so it works with and without trailing slash in DATA_DIRECTORY.
+    rel_parts = Path(os.path.relpath(file_path, directory_to_monitor)).parts
+    if len(rel_parts) < 2 or rel_parts[0] in ('.', '..'):
+        logger.warning(f"Skipping {file_path}: not inside an observation run directory below {directory_to_monitor}")
+        return
+    source_path = rel_parts[0]
 
     # suffix = file_path.suffix
     # if suffix not in ['.filepart', '.bck', '.swp']:
@@ -190,6 +202,11 @@ class Watcher:
         logger.info("  Ignored suffixes: %s", WATCH_IGNORED_SUFFIXES)
         logger.info("=" * 60)
 
+        #   Count all ERROR logs of this process in Redis (shown on admin health page)
+        error_handler = RedisErrorHandler()
+        logging.getLogger().addHandler(error_handler)
+        watchdog_mark_started()
+
         event_handler = Handler(self.directory_to_watch)
         self.observer.schedule(
             event_handler,
@@ -200,12 +217,17 @@ class Watcher:
         logger.info("Watcher is now running and monitoring for changes...")
 
         try:
+            last_heartbeat = time.monotonic()
             while self.observer.is_alive():
                 self.observer.join(1)
+                if time.monotonic() - last_heartbeat >= WATCH_HEARTBEAT_SECONDS:
+                    watchdog_heartbeat()
+                    last_heartbeat = time.monotonic()
         finally:
             self.observer.stop()
             self.observer.join()
             logger.info("Watcher stopped.")
+            logging.getLogger().removeHandler(error_handler)
 
 
 class Handler(FileSystemEventHandler):

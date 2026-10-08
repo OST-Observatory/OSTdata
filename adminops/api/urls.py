@@ -49,6 +49,8 @@ from .views import (
     admin_update_exposure_type_user,
     admin_update_object_identifiers,
     admin_update_spectrograph,
+    admin_watchdog_reset_errors,
+    admin_watchdog_status,
     banner_info,
 )
 
@@ -57,6 +59,8 @@ app_name = 'adminops-api'
 urlpatterns = [
     path('audit-log/', admin_audit_log, name='audit_log'),
     path('health/', admin_health, name='health'),
+    path('watchdog/', admin_watchdog_status, name='watchdog_status'),
+    path('watchdog/reset-errors/', admin_watchdog_reset_errors, name='watchdog_reset_errors'),
     path('maintenance/cleanup-downloads/', admin_trigger_cleanup_downloads, name='cleanup_downloads'),
     path('maintenance/reconcile/', admin_trigger_reconcile, name='reconcile'),
     path('maintenance/orphans-hashcheck/', admin_trigger_orphans_hashcheck, name='orphans_hashcheck'),

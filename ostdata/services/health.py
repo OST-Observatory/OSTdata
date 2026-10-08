@@ -220,6 +220,13 @@ def gather_admin_health() -> Dict[str, Any]:
     except Exception as e:
         data['periodic'] = {'error': str(e)}
 
+    # Data directory watchdog (separate process; reports via Redis)
+    try:
+        from adminops.watchdog_status import watchdog_status_get
+        data['watchdog'] = watchdog_status_get(include_errors=True)
+    except Exception as e:
+        data['watchdog'] = {'available': False, 'error': str(e)}
+
     # AladinLite availability (simple HTTP ping to CDN)
     try:
         import urllib.request  # type: ignore

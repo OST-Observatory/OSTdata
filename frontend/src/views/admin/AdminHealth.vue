@@ -83,6 +83,49 @@
           </v-card-text>
         </v-card>
 
+        <v-card
+          v-if="watchdogErrorCount > 0 || watchdogRecentErrors.length"
+          variant="outlined"
+          class="admin-health-card mb-3"
+        >
+          <v-card-title class="health-section-title text-subtitle-2 d-flex align-center">
+            <v-icon icon="mdi-alert-circle-outline" size="18" color="error" class="mr-1" />
+            File watcher errors
+            <v-chip color="error" size="x-small" variant="flat" class="ml-2">{{ watchdogErrorCount }}</v-chip>
+            <v-spacer />
+            <v-btn
+              size="small"
+              variant="text"
+              prepend-icon="mdi-counter"
+              :loading="watchdogResetting"
+              @click="resetWatchdogErrors"
+            >
+              Reset counter
+            </v-btn>
+          </v-card-title>
+          <v-card-text class="health-section-body pt-0">
+            <p class="text-caption text-medium-emphasis mb-2">
+              Errors logged by the data directory watchdog since
+              {{ health.watchdog?.errors_reset_at ? formatRelative(health.watchdog.errors_reset_at) : 'the counter was created' }}.
+              Showing the {{ watchdogRecentErrors.length }} most recent; see the watcher log for details.
+            </p>
+            <v-table density="compact" class="health-periodic-table bg-transparent">
+              <thead>
+                <tr>
+                  <th style="width: 110px">When</th>
+                  <th>Message</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="(err, idx) in watchdogRecentErrors" :key="idx">
+                  <td class="text-caption text-medium-emphasis" :title="err.ts">{{ formatRelative(err.ts) }}</td>
+                  <td class="text-caption health-error-msg">{{ err.message }}</td>
+                </tr>
+              </tbody>
+            </v-table>
+          </v-card-text>
+        </v-card>
+
         <v-row dense class="mb-3">
           <v-col cols="12" md="8">
             <v-card variant="outlined" class="admin-health-card h-100">
@@ -237,6 +280,36 @@ let intervalId = null
 
 const healthLoaded = computed(() => Object.keys(health.value || {}).length > 0)
 
+const watchdogResetting = ref(false)
+// Watcher writes a heartbeat every 30s; consider it stale after a few missed beats
+const WATCHDOG_STALE_SECONDS = 120
+
+const watchdogErrorCount = computed(() => health.value.watchdog?.error_count || 0)
+const watchdogRecentErrors = computed(() => health.value.watchdog?.recent_errors || [])
+
+const watchdogState = computed(() => {
+  const w = health.value.watchdog
+  if (!w || !w.available) return { statusColor: 'secondary', statusLabel: 'UNKNOWN' }
+  if (!w.last_heartbeat) return { statusColor: 'secondary', statusLabel: 'NOT SEEN' }
+  if ((w.heartbeat_age_seconds ?? 0) > WATCHDOG_STALE_SECONDS) {
+    return { statusColor: 'error', statusLabel: 'STALE' }
+  }
+  if (w.error_count > 0) return { statusColor: 'warning', statusLabel: `${w.error_count} ERRORS` }
+  return { statusColor: 'success', statusLabel: 'RUNNING' }
+})
+
+const resetWatchdogErrors = async () => {
+  watchdogResetting.value = true
+  try {
+    await api.adminWatchdogResetErrors()
+    await fetchHealth()
+  } catch {
+    notify.error('Failed to reset watcher error counter')
+  } finally {
+    watchdogResetting.value = false
+  }
+}
+
 const jobStatuses = ['queued', 'running', 'done', 'failed', 'cancelled', 'expired']
 
 const periodicTaskNames = [
@@ -299,6 +372,12 @@ const overallStatus = computed(() => {
   ]
   if (checks.some((v) => v === false)) {
     return { color: 'error', label: 'Issues detected' }
+  }
+  if (watchdogState.value.statusLabel === 'STALE') {
+    return { color: 'warning', label: 'File watcher not responding' }
+  }
+  if (watchdogErrorCount.value > 0) {
+    return { color: 'warning', label: `File watcher: ${watchdogErrorCount.value} errors` }
   }
   if (checks.some((v) => v !== true)) {
     return { color: 'warning', label: 'Partially unknown' }
@@ -399,6 +478,29 @@ const serviceCards = computed(() => {
         },
       ],
       error: h.storage?.error,
+    },
+    {
+      key: 'watchdog',
+      title: 'File watcher',
+      icon: 'mdi-folder-eye-outline',
+      avatarColor: 'teal',
+      ...watchdogState.value,
+      hint: '',
+      rows: [
+        {
+          label: 'Heartbeat',
+          value: h.watchdog?.last_heartbeat
+            ? formatRelative(h.watchdog.last_heartbeat, h.watchdog.heartbeat_age_seconds)
+            : '—',
+        },
+        { label: 'Started', value: h.watchdog?.started_at ? formatRelative(h.watchdog.started_at) : '—' },
+        { label: 'Errors', value: h.watchdog?.available ? (h.watchdog.error_count ?? 0) : '—' },
+        {
+          label: 'Last error',
+          value: h.watchdog?.last_error_at ? formatRelative(h.watchdog.last_error_at) : '—',
+        },
+      ],
+      error: h.watchdog?.available === false ? (h.watchdog?.error || 'Redis not available') : '',
     },
     {
       key: 'ldap',
@@ -658,6 +760,11 @@ onBeforeUnmount(() => {
 .health-kv--dense {
   gap: 1px 8px;
   font-size: 0.75rem;
+}
+
+.health-error-msg {
+  word-break: break-word;
+  font-family: monospace;
 }
 
 .health-jobs-inline {

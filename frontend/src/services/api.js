@@ -378,6 +378,8 @@ export const api = {
 
   // Admin - System Health & Maintenance (moved under /api/admin)
   adminHealth: () => fetchWithAuth('/admin/health/'),
+  adminWatchdogStatus: (includeErrors = true) => fetchWithAuth('/admin/watchdog/', { params: { errors: includeErrors ? 1 : 0 } }),
+  adminWatchdogResetErrors: () => fetchWithAuth('/admin/watchdog/reset-errors/', { method: 'POST' }),
   adminAuditLog: (params = {}) => fetchWithAuth('/admin/audit-log/', { params }),
   adminMaintenanceCleanup: () => fetchWithAuth('/admin/maintenance/cleanup-downloads/', { method: 'POST' }),
   adminMaintenanceReconcile: (dryRun = true) => fetchWithAuth('/admin/maintenance/reconcile/', { method: 'POST', body: JSON.stringify({ dry_run: !!dryRun }) }),
