@@ -196,34 +196,36 @@
         </template>
 
         <template #item.actions="{ item }">
-          <v-menu>
-            <template #activator="{ props }">
-              <v-btn v-bind="props" icon="mdi-dots-vertical" size="x-small" variant="text" :loading="isActionLoading(item)" :aria-label="`Actions for ${item.file_name}`" />
-            </template>
-            <v-list density="compact" min-width="200">
-              <v-list-item prepend-icon="mdi-eye" title="Preview thumbnail" @click="openPreview(item)" />
-              <v-list-item prepend-icon="mdi-code-tags" title="FITS header" @click="openHeader(item)" />
-              <v-list-item prepend-icon="mdi-crosshairs-gps" title="WCS information" @click="openWcs(item)" />
-              <template v-if="canExposureTypeUser || canSpectrograph || canLinkObject || canUnlinkObject || canReEvaluate || canPlateSolve || canClearOverrides">
-                <v-divider />
+          <div class="d-flex align-center flex-nowrap" style="gap: 2px">
+            <v-btn icon="mdi-eye" size="x-small" variant="text" title="Preview thumbnail" :aria-label="`Preview ${item.file_name}`" @click="openPreview(item)" />
+            <v-btn icon="mdi-code-tags" size="x-small" variant="text" title="FITS header" :aria-label="`View header for ${item.file_name}`" @click="openHeader(item)" />
+            <v-menu>
+              <template #activator="{ props }">
+                <v-btn v-bind="props" icon="mdi-dots-vertical" size="x-small" variant="text" :loading="isActionLoading(item)" :aria-label="`More actions for ${item.file_name}`" />
               </template>
-              <v-list-item v-if="canExposureTypeUser" prepend-icon="mdi-pencil" title="Set exposure type" @click="openExposureTypeDialog(item)" />
-              <v-list-item v-if="canSpectrograph" prepend-icon="mdi-telescope" title="Set spectrograph" @click="openSpectrographDialog(item)" />
-              <template v-if="canLinkObject || canUnlinkObject || canReEvaluate">
+              <v-list density="compact" min-width="200">
+                <v-list-item prepend-icon="mdi-crosshairs-gps" title="WCS information" @click="openWcs(item)" />
+                <template v-if="canExposureTypeUser || canSpectrograph || canLinkObject || canUnlinkObject || canReEvaluate || canPlateSolve || canClearOverrides">
+                  <v-divider />
+                </template>
+                <v-list-item v-if="canExposureTypeUser" prepend-icon="mdi-pencil" title="Set exposure type" @click="openExposureTypeDialog(item)" />
+                <v-list-item v-if="canSpectrograph" prepend-icon="mdi-telescope" title="Set spectrograph" @click="openSpectrographDialog(item)" />
+                <template v-if="canLinkObject || canUnlinkObject || canReEvaluate">
+                  <v-divider />
+                </template>
+                <v-list-item v-if="canLinkObject" prepend-icon="mdi-link" title="Link to object" @click="openLinkObjectDialog(item)" />
+                <v-list-item v-if="canUnlinkObject" prepend-icon="mdi-link-off" title="Unlink from objects" @click="openUnlinkConfirm(item)" />
+                <v-list-item v-if="canReEvaluate" prepend-icon="mdi-refresh" title="Re-evaluate object" @click="reEvaluateSingle(item)" />
+                <template v-if="canPlateSolve || canClearOverrides">
+                  <v-divider />
+                </template>
+                <v-list-item v-if="canPlateSolve" prepend-icon="mdi-star-four-points" title="Trigger plate solve" @click="triggerPlateSolveSingle(item)" />
+                <v-list-item v-if="canClearOverrides" prepend-icon="mdi-flag-off" title="Clear override flags" @click="clearOverrideSingleItem(item)" />
                 <v-divider />
-              </template>
-              <v-list-item v-if="canLinkObject" prepend-icon="mdi-link" title="Link to object" @click="openLinkObjectDialog(item)" />
-              <v-list-item v-if="canUnlinkObject" prepend-icon="mdi-link-off" title="Unlink from objects" @click="openUnlinkConfirm(item)" />
-              <v-list-item v-if="canReEvaluate" prepend-icon="mdi-refresh" title="Re-evaluate object" @click="reEvaluateSingle(item)" />
-              <template v-if="canPlateSolve || canClearOverrides">
-                <v-divider />
-              </template>
-              <v-list-item v-if="canPlateSolve" prepend-icon="mdi-star-four-points" title="Trigger plate solve" @click="triggerPlateSolveSingle(item)" />
-              <v-list-item v-if="canClearOverrides" prepend-icon="mdi-flag-off" title="Clear override flags" @click="clearOverrideSingleItem(item)" />
-              <v-divider />
-              <v-list-item prepend-icon="mdi-download" title="Download" :href="api.getDataFileDownloadUrl(item.pk)" target="_blank" rel="noopener" />
-            </v-list>
-          </v-menu>
+                <v-list-item prepend-icon="mdi-download" title="Download" :href="api.getDataFileDownloadUrl(item.pk)" target="_blank" rel="noopener" />
+              </v-list>
+            </v-menu>
+          </div>
         </template>
       </v-data-table>
 
@@ -447,7 +449,7 @@ const headers = [
   { title: 'Exp. Time', key: 'exptime', sortable: true },
   { title: 'Plate', key: 'plate_solved', sortable: true },
   { title: 'Spectr.', key: 'spectrograph', sortable: true },
-  { title: 'Actions', key: 'actions', sortable: false, width: '60px' },
+  { title: 'Actions', key: 'actions', sortable: false, width: '110px' },
 ]
 
 const busy = ref({ plateSolve: false, reEvaluate: false, clearOverrides: false, linkObject: false, unlinkObject: false, download: false })
