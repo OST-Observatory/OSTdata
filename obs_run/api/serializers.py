@@ -514,8 +514,8 @@ class DataFileSerializer(ModelSerializer):
 
     @extend_schema_field(OpenApiTypes.STR)
     def get_exposure_type_display(self, obj) -> Optional[str]:
-        # Return effective exposure type display instead of raw exposure_type
-        return obj.get_effective_exposure_type_display()
+        # Label of the header-based exposure_type (effective: effective_exposure_type_display)
+        return obj.get_exposure_type_display()
 
     @extend_schema_field(OpenApiTypes.STR)
     def get_effective_exposure_type(self, obj) -> Optional[str]:

@@ -1110,7 +1110,7 @@
                     {{ formatDate(item.obs_date) }}
                   </template>
                   <template v-slot:item.main_target="{ item }">
-                    <template v-if="(item.effective_exposure_type || item.exposure_type_display === 'Light' || (item.exposure_type || '').toUpperCase() === 'LI')">
+                    <template v-if="(item.effective_exposure_type || item.effective_exposure_type_display === 'Light' || (item.exposure_type || '').toUpperCase() === 'LI')">
                       <template v-if="item.header_target_name && item.header_target_name.trim() && item.header_target_name !== '-'">
                         {{ item.header_target_name }}
                         <template v-if="item.main_target && item.main_target.trim() && item.main_target !== '-'">
@@ -1145,9 +1145,9 @@
                       {{ item.instrument || '—' }}
                     </template>
                   </template>
-                  <template v-slot:item.exposure_type_display="{ item }">
+                  <template v-slot:item.effective_exposure_type_display="{ item }">
                     <v-chip size="small" :color="getExposureTypeColor(item.effective_exposure_type || item.exposure_type)" variant="flat">
-                      {{ item.exposure_type_display || item.exposure_type || '—' }}
+                      {{ item.effective_exposure_type_display || item.exposure_type || '—' }}
                     </v-chip>
                   </template>
                   <template v-slot:item.exptime="{ item }">
@@ -1780,7 +1780,7 @@ const objectDataFileHeaders = [
   { title: 'File Type', key: 'file_type', sortable: true },
   { title: 'Binning', key: 'binning', sortable: true },
   { title: 'Instrument', key: 'instrument', sortable: true },
-  { title: 'Exposure Type', key: 'exposure_type_display', sortable: true },
+  { title: 'Exposure Type', key: 'effective_exposure_type_display', sortable: true },
   { title: 'Exp. Time', key: 'exptime', sortable: true },
   { title: 'Plate', key: 'plate_solved', sortable: true },
   { title: 'Tools', key: 'tools', sortable: false, align: 'end' },
@@ -2373,9 +2373,9 @@ const sortDataFiles = (items, sortBy) => {
         return match ? parseInt(match[1], 10) * parseInt(match[2], 10) : 0
       }
       cmp = parseBinning(a.binning) - parseBinning(b.binning)
-    } else if (key === 'exposure_type_display') {
-      const aVal = a.exposure_type_display || a.exposure_type || ''
-      const bVal = b.exposure_type_display || b.exposure_type || ''
+    } else if (key === 'effective_exposure_type_display') {
+      const aVal = a.effective_exposure_type_display || a.exposure_type || ''
+      const bVal = b.effective_exposure_type_display || b.exposure_type || ''
       cmp = String(aVal).localeCompare(String(bVal))
     } else if (key === 'plate_solved') {
       cmp = (a.plate_solved ? 1 : 0) - (b.plate_solved ? 1 : 0)

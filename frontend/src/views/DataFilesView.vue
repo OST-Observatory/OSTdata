@@ -528,7 +528,7 @@ function getMainObjectDisplayName(item) {
 
 function isLight(df) {
   const code = (df?.effective_exposure_type || df?.exposure_type || '').toUpperCase()
-  return code === 'LI' || df?.exposure_type_display === 'Light'
+  return code === 'LI' || df?.effective_exposure_type_display === 'Light'
 }
 
 function isActionLoading(item) {

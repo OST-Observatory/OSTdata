@@ -826,9 +826,9 @@
                   {{ item.instrument || '—' }}
                 </template>
               </template>
-              <template v-slot:item.exposure_type_display="{ item }">
+              <template v-slot:item.effective_exposure_type_display="{ item }">
                 <v-chip size="small" :color="getExposureTypeColor(item.effective_exposure_type || item.exposure_type)" variant="flat">
-                  {{ item.exposure_type_display || item.exposure_type || '—' }}
+                  {{ item.effective_exposure_type_display || item.exposure_type || '—' }}
                 </v-chip>
               </template>
               <template v-slot:item.exptime="{ item }">
@@ -1513,9 +1513,9 @@ const sortDataFiles = (items, sortBy) => {
       }
       aVal = parseBinning(a.binning)
       bVal = parseBinning(b.binning)
-    } else if (key === 'exposure_type_display') {
-      aVal = a.exposure_type_display || a.exposure_type || ''
-      bVal = b.exposure_type_display || b.exposure_type || ''
+    } else if (key === 'effective_exposure_type_display') {
+      aVal = a.effective_exposure_type_display || a.exposure_type || ''
+      bVal = b.effective_exposure_type_display || b.exposure_type || ''
     } else if (key === 'main_target') {
       // For sorting by target, use main_target if available, otherwise header_target_name
       aVal = (a.main_target && a.main_target !== '-') ? a.main_target : (a.header_target_name || '')
@@ -1755,7 +1755,7 @@ const getObjectIdByTargetName = (name) => {
 
 const isLight = (df) => {
   const code = (df?.effective_exposure_type || df?.exposure_type || '').toUpperCase()
-  return code === 'LI' || df?.exposure_type_display === 'Light'
+  return code === 'LI' || df?.effective_exposure_type_display === 'Light'
 }
 
 const fetchRunDataFiles = async () => {
@@ -1855,7 +1855,7 @@ const runDataFileHeaders = [
   { title: 'File Type', key: 'file_type', sortable: true },
   { title: 'Binning', key: 'binning', sortable: true },
   { title: 'Instrument', key: 'instrument', sortable: true },
-  { title: 'Exposure Type', key: 'exposure_type_display', sortable: true },
+  { title: 'Exposure Type', key: 'effective_exposure_type_display', sortable: true },
   { title: 'Exp. Time', key: 'exptime', sortable: true },
   { title: 'Plate', key: 'plate_solved', sortable: true },
   { title: 'Tools', key: 'tools', sortable: false, align: 'end' },
