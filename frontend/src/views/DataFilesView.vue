@@ -196,7 +196,7 @@
         </template>
 
         <template #item.actions="{ item }">
-          <div class="d-flex align-center flex-nowrap" style="gap: 2px">
+          <div class="d-flex align-center flex-nowrap" style="gap: 6px">
             <v-btn icon="mdi-eye" size="x-small" variant="text" title="Preview thumbnail" :aria-label="`Preview ${item.file_name}`" @click="openPreview(item)" />
             <v-btn icon="mdi-code-tags" size="x-small" variant="text" title="FITS header" :aria-label="`View header for ${item.file_name}`" @click="openHeader(item)" />
             <v-menu>
@@ -449,7 +449,7 @@ const headers = [
   { title: 'Exp. Time', key: 'exptime', sortable: true },
   { title: 'Plate', key: 'plate_solved', sortable: true },
   { title: 'Spectr.', key: 'spectrograph', sortable: true },
-  { title: 'Actions', key: 'actions', sortable: false, width: '110px' },
+  { title: 'Actions', key: 'actions', sortable: false, width: '120px' },
 ]
 
 const busy = ref({ plateSolve: false, reEvaluate: false, clearOverrides: false, linkObject: false, unlinkObject: false, download: false })
