@@ -713,17 +713,19 @@ def dark_finder_search(request):
             DataFile.objects.filter(observation_run__is_public=True)
         ).filter(annotated_effective_exposure_type=type_code)
         
-        # Find all possible instrument variants
-        possible_instruments = [normalized_instrument]
+        # Find all possible instrument variants (alias keys are stored lowercased,
+        # DataFile.instrument holds the raw INSTRUME header value, e.g. 'QHY600M')
+        possible_instruments = {normalized_instrument, instrument}
         for key, value in INSTRUMENT_ALIASES.items():
             if value == normalized_instrument:
-                possible_instruments.append(key)
-        
-        # Filter by instrument (case-insensitive)
-        queryset = queryset.filter(
-            Q(instrument__iexact=normalized_instrument) |
-            Q(instrument__in=possible_instruments)
-        )
+                possible_instruments.add(key)
+
+        # Filter by instrument (case-insensitive for every variant)
+        instrument_q = Q()
+        for name in possible_instruments:
+            if name:
+                instrument_q |= Q(instrument__iexact=name)
+        queryset = queryset.filter(instrument_q)
         
         # Filter by exposure time with tolerance (darks only)
         if frame_type == 'dark':

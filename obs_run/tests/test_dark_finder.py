@@ -54,3 +54,11 @@ class DarkFinderTest(APITestCase):
         self.assertEqual(self._post({**SETUP, 'frame_type': 'flat'}).status_code,
                          status.HTTP_400_BAD_REQUEST)
         self.assertEqual(self._post(dict(SETUP)).status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_matches_raw_header_instrument_names(self):
+        # Ingest stores the raw INSTRUME value; alias keys are lowercased
+        self.dark.instrument = 'QHY600M'
+        self.dark.save(update_fields=['instrument'])
+        resp = self._post({**SETUP, 'exptime': 120.0})
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertEqual([r['id'] for r in resp.data['results']], [self.dark.pk])
