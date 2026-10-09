@@ -116,6 +116,12 @@ def configure_ldap_from_env(g, env):
                 except Exception:
                     logger.warning('LDAP custom flag sync failed', exc_info=True)
 
-            populate_user.connect(_ldap_sync_custom_flags)
+            # weak=False: the receiver is a local closure and would otherwise be
+            # garbage-collected as soon as this function returns (never called).
+            populate_user.connect(
+                _ldap_sync_custom_flags,
+                weak=False,
+                dispatch_uid='ostdata_ldap_sync_custom_flags',
+            )
     except Exception:
         logger.warning('LDAP configuration failed', exc_info=True)

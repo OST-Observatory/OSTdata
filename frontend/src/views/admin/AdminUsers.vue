@@ -18,16 +18,6 @@
               variant="outlined"
             />
           </v-col>
-          <v-col cols="12" sm="6" md="4">
-            <v-text-field
-              v-model="ldapFilter"
-              label="Override filter (optional)"
-              prepend-inner-icon="mdi-filter"
-              hide-details
-              density="comfortable"
-              variant="outlined"
-            />
-          </v-col>
           <v-col cols="12" sm="12" md="4">
             <v-btn color="primary" prepend-icon="mdi-play" :loading="ldapLoading" @click="runLdapTest">
               Run test
@@ -250,7 +240,6 @@ const items = ref([])
 const search = ref('')
 const notify = useNotifyStore()
 const ldapUser = ref('')
-const ldapFilter = ref('')
 const ldapLoading = ref(false)
 const ldapResult = ref(null)
 const auth = useAuthStore()
@@ -363,7 +352,6 @@ const runLdapTest = async () => {
   try {
     const payload = {}
     if (ldapUser.value) payload.username = ldapUser.value
-    if (ldapFilter.value) payload.filter = ldapFilter.value
     const res = await api.adminLdapTest(payload)
     ldapResult.value = res
     if (!res?.configured) {
@@ -378,7 +366,7 @@ const runLdapTest = async () => {
       notify.success('LDAP test OK')
     }
   } catch (e) {
-    notify.error('LDAP test error')
+    notify.error(e?.data?.detail ? `LDAP test: ${e.data.detail}` : 'LDAP test error')
   } finally {
     ldapLoading.value = false
   }
