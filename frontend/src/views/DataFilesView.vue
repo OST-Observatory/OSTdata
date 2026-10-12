@@ -43,10 +43,10 @@
                     <v-expansion-panel-title density="compact">Exposure & Type</v-expansion-panel-title>
                     <v-expansion-panel-text>
                       <v-select v-model="filters.effective_exposure_type" :items="exposureTypeItems" item-title="label" item-value="value" label="Effective Type" density="comfortable" variant="outlined" hide-details clearable multiple chips class="mb-2" />
-                      <v-select v-model="filters.exposure_type" :items="exposureTypeItems" item-title="label" item-value="value" label="Exposure Type" density="comfortable" variant="outlined" hide-details clearable multiple chips class="mb-2" />
-                      <v-select v-model="filters.exposure_type_ml" :items="exposureTypeItems" item-title="label" item-value="value" label="ML Type" density="comfortable" variant="outlined" hide-details clearable multiple chips class="mb-2" />
-                      <v-select v-model="filters.exposure_type_user" :items="exposureTypeItems" item-title="label" item-value="value" label="User Type" density="comfortable" variant="outlined" hide-details clearable multiple chips class="mb-2" />
-                      <v-select v-model="filters.has_user_type" :items="[{ title: 'Yes', value: true }, { title: 'No', value: false }]" item-title="title" item-value="value" label="Has User Exposure Type" density="comfortable" variant="outlined" hide-details clearable class="mb-2" />
+                      <v-select v-model="filters.exposure_type" :items="exposureTypeItems" item-title="label" item-value="value" label="Exposure Type (Header)" density="comfortable" variant="outlined" hide-details clearable multiple chips class="mb-2" />
+                      <v-select v-model="filters.exposure_type_ml" :items="exposureTypeItems" item-title="label" item-value="value" label="Exposure Type (Classifier)" density="comfortable" variant="outlined" hide-details clearable multiple chips class="mb-2" />
+                      <v-select v-model="filters.exposure_type_user" :items="exposureTypeItems" item-title="label" item-value="value" label="Exposure Type (Manual)" density="comfortable" variant="outlined" hide-details clearable multiple chips class="mb-2" />
+                      <v-select v-model="filters.has_user_type" :items="[{ title: 'Yes', value: true }, { title: 'No', value: false }]" item-title="title" item-value="value" label="Has Manual Exposure Type" density="comfortable" variant="outlined" hide-details clearable class="mb-2" />
                       <v-text-field v-model.number="filters.exptime_min" label="Exp. Time Min" type="number" density="comfortable" variant="outlined" hide-details clearable class="mb-2" />
                       <v-text-field v-model.number="filters.exptime_max" label="Exp. Time Max" type="number" density="comfortable" variant="outlined" hide-details clearable />
                     </v-expansion-panel-text>
@@ -85,7 +85,7 @@
         <div class="text-body-2">{{ selectedCount }} selected</div>
         <div class="d-flex align-center flex-wrap" style="gap: 8px">
           <v-btn v-if="canPlateSolve" color="primary" variant="outlined" prepend-icon="mdi-star-four-points" :loading="busy.plateSolve" @click="bulkPlateSolve">Trigger Plate Solve</v-btn>
-          <v-btn v-if="canExposureTypeUser" color="primary" variant="outlined" prepend-icon="mdi-pencil" @click="openBulkExposureTypeDialog">Set User Type</v-btn>
+          <v-btn v-if="canExposureTypeUser" color="primary" variant="outlined" prepend-icon="mdi-pencil" @click="openBulkExposureTypeDialog">Set Manual Exposure Type</v-btn>
           <v-btn v-if="canSpectrograph" color="primary" variant="outlined" prepend-icon="mdi-telescope" @click="openBulkSpectrographDialog">Set Spectrograph</v-btn>
           <v-btn v-if="canReEvaluate" color="primary" variant="outlined" prepend-icon="mdi-refresh" :loading="busy.reEvaluate" @click="bulkReEvaluate">Re-evaluate</v-btn>
           <v-btn v-if="canClearOverrides" color="secondary" variant="outlined" prepend-icon="mdi-flag-off" :loading="busy.clearOverrides" @click="bulkClearOverrides">Clear Overrides</v-btn>
@@ -208,7 +208,7 @@
                 <template v-if="canExposureTypeUser || canSpectrograph || canLinkObject || canUnlinkObject || canReEvaluate || canPlateSolve || canClearOverrides">
                   <v-divider />
                 </template>
-                <v-list-item v-if="canExposureTypeUser" prepend-icon="mdi-pencil" title="Set exposure type" @click="openExposureTypeDialog(item)" />
+                <v-list-item v-if="canExposureTypeUser" prepend-icon="mdi-pencil" title="Set manual exposure type" @click="openExposureTypeDialog(item)" />
                 <v-list-item v-if="canSpectrograph" prepend-icon="mdi-telescope" title="Set spectrograph" @click="openSpectrographDialog(item)" />
                 <template v-if="canLinkObject || canUnlinkObject || canReEvaluate">
                   <v-divider />
@@ -299,9 +299,12 @@
     <!-- Exposure Type dialog -->
     <v-dialog v-model="exposureTypeDialog" max-width="500">
       <v-card>
-        <v-card-title>{{ exposureTypeDialogBulk ? `Set User Type (${selectedCount})` : 'Set User Exposure Type' }}</v-card-title>
+        <v-card-title>{{ exposureTypeDialogBulk ? `Set Manual Exposure Type (${selectedCount} files)` : 'Set Manual Exposure Type' }}</v-card-title>
         <v-card-text>
-          <v-select v-model="exposureTypeForm.exposure_type_user" :items="exposureTypeItems" item-title="label" item-value="value" label="Exposure Type" variant="outlined" clearable class="mb-2" />
+          <p class="text-body-2 text-medium-emphasis mb-3">
+            A manually set exposure type takes precedence over the header and classifier values. Clear it to fall back to them.
+          </p>
+          <v-select v-model="exposureTypeForm.exposure_type_user" :items="exposureTypeItems" item-title="label" item-value="value" label="Exposure Type (Manual)" variant="outlined" clearable class="mb-2" />
           <v-checkbox v-model="exposureTypeForm.exposure_type_user_override" label="Set override flag" />
         </v-card-text>
         <v-card-actions><v-spacer /><v-btn variant="text" @click="exposureTypeDialog = false">Cancel</v-btn><v-btn color="primary" :loading="exposureTypeSaving" @click="saveExposureType">Save</v-btn></v-card-actions>
@@ -440,12 +443,12 @@ const exposureTypeItems = [
 const headers = [
   { title: 'File Name', key: 'file_name', sortable: true },
   { title: 'Run', key: 'observation_run_name', sortable: true },
-  { title: 'Type', key: 'file_type', sortable: true },
+  { title: 'File Type', key: 'file_type', sortable: true },
   { title: 'Target', key: 'main_target', sortable: true },
   { title: 'Instrument', key: 'instrument', sortable: true },
-  { title: 'Exp. Type', key: 'exposure_type', sortable: true },
-  { title: 'ML Type', key: 'exposure_type_ml', sortable: true },
-  { title: 'User Type', key: 'exposure_type_user', sortable: true },
+  { title: 'Exp. Type (Header)', key: 'exposure_type', sortable: true },
+  { title: 'Exp. Type (Classifier)', key: 'exposure_type_ml', sortable: true },
+  { title: 'Exp. Type (Manual)', key: 'exposure_type_user', sortable: true },
   { title: 'Exp. Time', key: 'exptime', sortable: true },
   { title: 'Plate', key: 'plate_solved', sortable: true },
   { title: 'Spectr.', key: 'spectrograph', sortable: true },
