@@ -53,6 +53,8 @@ sqlparse==0.6.0
 soupsieve==2.9.2
 # urllib3: PYSEC-2026-4175 / 4176 / 4177 (fixed in 2.8.0). Transitive via requests.
 urllib3==2.8.0
+# werkzeug: CVE-2026-102598 (fixed in 3.1.9). Transitive via tensorflow -> tensorboard (>=1.0.1, no upper bound).
+werkzeug==3.1.9
 
 # Typing (IDE / basedpyright)
 django-stubs==6.1.0
