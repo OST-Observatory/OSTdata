@@ -1,0 +1,89 @@
+"""exposure_type_report: cause classification of manual labels and the UK backlog."""
+import json
+import tempfile
+from io import StringIO
+from pathlib import Path
+
+from django.core.management import call_command
+from django.test import TestCase
+
+from obs_run.models import DataFile, ObservationRun
+
+
+class ExposureTypeReportTest(TestCase):
+    def setUp(self):
+        self.run = ObservationRun.objects.create(name='2026-03-17')
+        self.n = 0
+
+    def _file(self, header, ml=None, confidence=0.95, abstained=False, user=None, **kwargs):
+        self.n += 1
+        return DataFile.objects.create(
+            observation_run=self.run, datafile=f'/tmp/f{self.n}.fit', file_type='FITS',
+            obs_date='2026-03-17T20:00:00', exposure_type=header,
+            exposure_type_ml=ml, exposure_type_ml_confidence=confidence if ml else None,
+            exposure_type_ml_abstained=abstained, exposure_type_user=user, **kwargs,
+        )
+
+    def _report(self, *args):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'report.json'
+            call_command('exposure_type_report', '--json', str(path), *args, stdout=StringIO())
+            return json.loads(path.read_text())
+
+    def test_manual_label_causes(self):
+        self._file('UK', ml='LI', user='LI')
+        self._file('UK', ml='UK', abstained=True, user='DA')
+        self._file('DA', ml='UK', abstained=True, user='DA')
+        self._file('DA', ml='LI', user='DA')
+        self._file('LI', ml='FL', user='FL')
+        self._file('LI', ml='LI', user='LI')
+        self._file('UK', user='WA')
+
+        causes = self._report()['manual_labels']['causes']
+
+        self.assertEqual(causes, {
+            'header_uk_ml_correct': 1,
+            'header_uk_ml_abstained': 1,
+            'header_correct_ml_abstained': 1,
+            'header_correct_ml_wrong': 1,
+            'header_wrong_ml_correct': 1,
+            'confirmation': 1,
+            'ml_not_run': 1,
+        })
+
+    def test_backlog_and_overrides(self):
+        self._file('UK', ml='LI', confidence=0.995)
+        self._file('UK', ml='UK', abstained=True)
+        self._file('DA', ml='UK', abstained=True)
+        self._file('DA', ml='LI')
+        self._file('LI', ml='LI')  # agrees -> not in backlog
+        self._file('FL', ml='FL', exposure_type_override=True)
+        self._file('DA', ml='LI', exposure_type_override=True)
+
+        report = self._report()
+
+        self.assertEqual(report['backlog_effective_uk']['categories'], {
+            'header_uk_ml_confident': 1,
+            'header_uk_ml_abstained': 1,
+            'header_set_ml_abstained': 1,
+            'header_ml_disagree': 1,
+        })
+        self.assertEqual(
+            report['backlog_effective_uk']['ml_confidence']['header_uk_ml_confident'],
+            {'0.99-1.00': 1},
+        )
+        self.assertEqual(report['backlog_effective_uk']['header_to_ml_disagreements'], {'DA -> LI': 1})
+        self.assertEqual(report['header_field_overrides'], {'ml_correct': 1, 'ml_wrong': 1})
+        self.assertEqual(report['totals']['header_field_overridden'], 2)
+
+    def test_format_filter(self):
+        self._file('UK', ml='LI', user='LI')
+        DataFile.objects.create(
+            observation_run=self.run, datafile='/tmp/x.jpg', file_type='JPG',
+            exposure_type='UK', exposure_type_user='LI',
+        )
+
+        report = self._report('--formats', 'jpg')
+
+        self.assertEqual(report['totals']['files'], 1)
+        self.assertEqual(report['manual_labels']['causes'], {'ml_not_run': 1})
