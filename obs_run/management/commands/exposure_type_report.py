@@ -1,6 +1,5 @@
 import json
 import random
-import re
 from collections import Counter, defaultdict
 from pathlib import Path
 
@@ -8,6 +7,12 @@ from astropy.io import fits
 from django.core.management.base import BaseCommand
 
 from obs_run.exposure_type import RULES, effective_exposure_type, effective_exposure_type_expression, get_rule
+from obs_run.management.commands._spectrograph_report import (
+    SpectrographAnalysis,
+    indicative_tokens,
+    path_tokens,
+    print_spectrograph_report,
+)
 from obs_run.models import DataFile
 
 UNKNOWN = DataFile.UNKNOWN
@@ -44,13 +49,6 @@ SIMULATION_DESCRIPTIONS = {
     'review': 'rule result UK (file lands in the review queue)',
     'wrong': 'rule result is a different type (silent error)',
 }
-
-TOKEN_PATTERN = re.compile(r'[a-z]{3,}')
-
-
-def path_tokens(path):
-    """Lower-case letter tokens (>= 3 chars) from directory names and file stem."""
-    return set(TOKEN_PATTERN.findall(str(Path(path or '').with_suffix('')).lower()))
 
 
 def _bucket(confidence):
@@ -175,6 +173,18 @@ class Command(BaseCommand):
             help='Path token analysis: minimum share of the dominant label (default: 0.95)',
         )
         parser.add_argument(
+            '--run-min-files',
+            type=int,
+            default=5,
+            help='Spectrograph run heuristic: minimum LI/FL/WA files per run (default: 5)',
+        )
+        parser.add_argument(
+            '--run-majority-share',
+            type=float,
+            default=0.8,
+            help='Spectrograph run heuristic: minimum share of the majority spectrograph (default: 0.8)',
+        )
+        parser.add_argument(
             '--json',
             type=str,
             default=None,
@@ -211,11 +221,12 @@ class Command(BaseCommand):
         token_labels = defaultdict(Counter)
         token_runs = defaultdict(set)
         problem_files = []
+        spectrograph = SpectrographAnalysis(options)
 
         fields = (
             'pk', 'datafile', 'observation_run_id', 'file_type', 'instrument', 'obs_date', 'exposure_type',
             'exposure_type_ml', 'exposure_type_ml_confidence', 'exposure_type_ml_abstained',
-            'exposure_type_user', 'exposure_type_override', 'spectrograph_override',
+            'exposure_type_user', 'exposure_type_override', 'spectrograph', 'spectrograph_override',
             'annotated_effective_exposure_type',
         )
         for row in queryset.values(*fields).iterator(chunk_size=2000):
@@ -284,6 +295,10 @@ class Command(BaseCommand):
                     token_runs[token].add(row['observation_run_id'])
             if effective_exposure_type(header, row['exposure_type_ml'], None, rule) == UNKNOWN:
                 problem_files.append((tokens, user or None, file_type))
+            spectrograph.add(
+                row, user or row['annotated_effective_exposure_type'], ml_ran, ml_abstained, ml_type, tokens,
+                instrument, year,
+            )
 
             if options['read_headers'] and file_type == 'FITS':
                 corrected = truth is not None and (row['exposure_type_override'] or truth != row['exposure_type'])
@@ -320,6 +335,7 @@ class Command(BaseCommand):
             },
             'raw_headers': raw_headers,
             'path_tokens': path_token_analysis,
+            'spectrograph': spectrograph.finish(),
         }
 
         self._options = options
@@ -336,16 +352,10 @@ class Command(BaseCommand):
         Find path tokens that reliably indicate one exposure type, then estimate how many files the
         combination rule leaves at UK could be resolved by them (and how often correctly).
         """
-        indicative = {}
-        for token, labels in token_labels.items():
-            support = sum(labels.values())
-            label, count = labels.most_common(1)[0]
-            if (support >= options['token_min_support'] and len(token_runs[token]) >= options['token_min_runs']
-                    and count / support >= options['token_min_purity']):
-                indicative[token] = {
-                    'label': label, 'purity': round(count / support, 4), 'support': support,
-                    'runs': len(token_runs[token]),
-                }
+        indicative = indicative_tokens(
+            token_labels, token_runs, options['token_min_support'], options['token_min_runs'],
+            options['token_min_purity'],
+        )
 
         outcome = Counter()
         outcome_by_file_type = defaultdict(Counter)
@@ -362,7 +372,7 @@ class Command(BaseCommand):
             outcome_by_file_type[file_type][result] += 1
 
         return {
-            'indicative_tokens': dict(sorted(indicative.items(), key=lambda kv: -kv[1]['support'])),
+            'indicative_tokens': indicative,
             'rule_uk_files': len(problem_files),
             'rule_uk_outcome': dict(outcome),
             'rule_uk_outcome_by_file_type': {k: dict(v) for k, v in outcome_by_file_type.items()},
@@ -522,3 +532,5 @@ class Command(BaseCommand):
                 for value, labels in values[:top]:
                     detail = ', '.join(f'{lbl}: {n}' for lbl, n in Counter(labels).most_common())
                     self.stdout.write(f'    {value!r:<32}  {detail}')
+
+        print_spectrograph_report(self, report['spectrograph'], top)

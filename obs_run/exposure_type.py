@@ -89,3 +89,24 @@ def effective_exposure_type_expression(field_prefix='', rule=None):
 def effective_exposure_type_q(exposure_type_code, field_prefix='', rule=None):
     """Q object matching files whose effective type is ``exposure_type_code`` (usable in Count filters)."""
     return Q(Exact(effective_exposure_type_expression(field_prefix, rule), Value(exposure_type_code)))
+
+
+# Classifier classes (ost_image_classification) by (exposure type, spectrograph)
+CLASSIFIER_CLASSES = {
+    ('BI', 'N'): 'bias',
+    ('DA', 'N'): 'darks',
+    ('FL', 'N'): 'flats',
+    ('FL', 'D'): 'flat_dados',
+    ('FL', 'B'): 'flat_baches',
+    ('LI', 'N'): 'deep_sky',
+    ('LI', 'D'): 'spectrum_dados',
+    ('LI', 'B'): 'spectrum_baches',
+    ('LI', 'E'): 'einsteinturm',
+    ('WA', 'D'): 'wavelength_calibration_dados',
+    ('WA', 'B'): 'wavelength_calibration_baches',
+}
+
+
+def classifier_class_name(exposure_type, spectrograph):
+    """Classifier class for an exposure type/spectrograph pair, None if the combination is not valid."""
+    return CLASSIFIER_CLASSES.get((exposure_type, spectrograph or 'N'))

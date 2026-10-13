@@ -8,6 +8,7 @@ from django.core.management import call_command
 from django.test import TestCase
 
 from obs_run.models import DataFile, ObservationRun
+from ostdata.history_reason import REASON_ADMIN_SPECTROGRAPH, save_with_reason
 
 
 class ExposureTypeReportTest(TestCase):
@@ -122,3 +123,68 @@ class ExposureTypeReportTest(TestCase):
 
         self.assertEqual(report['totals']['files'], 1)
         self.assertEqual(report['manual_labels']['causes'], {'ml_not_run': 1})
+
+
+class SpectrographReportTest(TestCase):
+    def setUp(self):
+        self.n = 0
+
+    def _file(self, run, spectrograph, header='LI', ml='LI', directory='spectra', **kwargs):
+        self.n += 1
+        return DataFile.objects.create(
+            observation_run=run, datafile=f'/archive/{run.name}/{directory}/f{self.n}.fit', file_type='FITS',
+            exposure_type=header, exposure_type_ml=ml, exposure_type_ml_confidence=0.9,
+            spectrograph=spectrograph, **kwargs,
+        )
+
+    @staticmethod
+    def _correct(datafile, spectrograph):
+        datafile.spectrograph = spectrograph
+        datafile.spectrograph_override = True
+        save_with_reason(datafile, REASON_ADMIN_SPECTROGRAPH, update_fields=['spectrograph', 'spectrograph_override'])
+
+    def _report(self, *args):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'report.json'
+            call_command('exposure_type_report', '--json', str(path), *args, stdout=StringIO())
+            return json.loads(path.read_text())['spectrograph']
+
+    def test_corrections_and_run_majority(self):
+        run = ObservationRun.objects.create(name='dados-run')
+        for _ in range(12):
+            self._file(run, 'D')
+        corrected = self._file(run, 'N')  # classifier missed the spectrograph, fixed manually
+        self._correct(corrected, 'D')
+        confirmed = self._file(run, 'D')
+        self._correct(confirmed, 'D')
+        self._file(run, 'N')  # uncorrected outlier
+        self._file(run, 'N', header='WA', ml='WA')  # invalid combination
+
+        report = self._report()
+
+        self.assertEqual(report['corrections'], {'N -> D': 1, 'confirmed': 1})
+        self.assertEqual(report['class_confusion'], {
+            'deep_sky -> spectrum_dados': 1,
+            'spectrum_dados -> spectrum_dados': 1,
+        })
+        self.assertEqual(report['correction_detection_run_majority'], {'flagged_correct': 1})
+        self.assertEqual(report['suspicious_run_majority'], {'N (run majority D)': 2})
+        self.assertEqual(report['invalid_combinations'], {'WA/N': {'automatic': 1}})
+
+    def test_path_tokens(self):
+        for i in range(3):
+            run = ObservationRun.objects.create(name=f'night-{i}')
+            for _ in range(10):
+                self._file(run, 'B', directory='baches')
+                self._file(run, 'N', directory='lights')
+        run = ObservationRun.objects.create(name='night-x')
+        corrected = self._file(run, 'N', directory='baches')
+        self._correct(corrected, 'B')
+        self._file(run, 'N', directory='baches')  # uncorrected, contradicts the token
+
+        report = self._report('--token-min-support', '10')
+
+        self.assertEqual(report['indicative_tokens']['baches']['label'], 'B')
+        self.assertEqual(report['indicative_tokens']['lights']['label'], 'N')
+        self.assertEqual(report['correction_prediction_tokens'], {'correct': 1})
+        self.assertEqual(report['suspicious_tokens'], {'N (token says B)': 1})

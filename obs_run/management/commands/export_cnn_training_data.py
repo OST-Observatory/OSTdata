@@ -8,6 +8,7 @@ from django.conf import settings
 from django.core.management.base import BaseCommand
 from django.db.models import F, Q
 
+from obs_run.exposure_type import classifier_class_name
 from obs_run.models import DataFile
 
 logger = logging.getLogger(__name__)
@@ -254,35 +255,7 @@ class Command(BaseCommand):
     def _get_class_name(self, exposure_type, spectrograph):
         """
         Map exposure_type and spectrograph to CNN class name.
-        
+
         Returns None if the combination doesn't match any class.
         """
-        spec = spectrograph or 'N'
-        
-        if exposure_type == 'BI':
-            return 'bias'
-        elif exposure_type == 'DA':
-            return 'darks'
-        elif exposure_type == 'FL':
-            if spec == 'N':
-                return 'flats'
-            elif spec == 'D':
-                return 'flat_dados'
-            elif spec == 'B':
-                return 'flat_baches'
-        elif exposure_type == 'LI':
-            if spec == 'N':
-                return 'deep_sky'  # or 'light'
-            elif spec == 'D':
-                return 'spectrum_dados'
-            elif spec == 'B':
-                return 'spectrum_baches'
-            elif spec == 'E':
-                return 'einsteinturm'
-        elif exposure_type == 'WA':
-            if spec == 'D':
-                return 'wavelength_calibration_dados'
-            elif spec == 'B':
-                return 'wavelength_calibration_baches'
-        
-        return None
+        return classifier_class_name(exposure_type, spectrograph)
