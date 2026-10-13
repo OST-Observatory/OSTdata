@@ -5,8 +5,9 @@ from io import StringIO
 from pathlib import Path
 
 from django.core.management import call_command
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
+from obs_run.management.commands._spectrograph_report import indicative_tokens
 from obs_run.models import DataFile, ObservationRun
 from ostdata.history_reason import REASON_ADMIN_SPECTROGRAPH, save_with_reason
 
@@ -105,7 +106,7 @@ class ExposureTypeReportTest(TestCase):
         self._file('UK', ml='UK', abstained=True, user='DA', path='/archive/new/darks/x.fit')
         self._file('UK', ml='UK', abstained=True, path='/archive/new/lights/y.fit')
 
-        tokens = self._report('--token-min-support', '10')['path_tokens']
+        tokens = self._report('--token-min-support', '10', '--token-max-run-share', '1')['path_tokens']
 
         self.assertEqual(tokens['indicative_tokens']['darks']['label'], 'DA')
         self.assertEqual(tokens['indicative_tokens']['lights']['label'], 'LI')
@@ -171,6 +172,26 @@ class SpectrographReportTest(TestCase):
         self.assertEqual(report['suspicious_run_majority'], {'N (run majority D)': 2})
         self.assertEqual(report['invalid_combinations'], {'WA/N': {'automatic': 1}})
 
+    @override_settings(SPECTROGRAPH_IMAGING_ONLY_INSTRUMENTS=[r'qhy\s*600m'])
+    def test_rule_simulation(self):
+        run = ObservationRun.objects.create(name='rules')
+        dark = self._file(run, 'B', header='DA', ml='DA')
+        self._correct(dark, 'N')  # fixed by the exposure type rule
+        imaging = self._file(run, 'D', instrument='QHY 600M')
+        self._correct(imaging, 'N')  # fixed by the instrument rule
+        spectrum = self._file(run, 'N', instrument='QHY268M')
+        self._correct(spectrum, 'D')  # rules cannot help
+        self._file(run, 'E', header='BI', ml='BI')  # uncorrected, rule would change it
+
+        report = self._report()
+
+        self.assertEqual(report['rule_simulation_on_corrections'], {
+            'fixed (exposure_type)': 1,
+            'fixed (instrument)': 1,
+            'unchanged': 1,
+        })
+        self.assertEqual(report['rule_changes_uncorrected'], {'E -> N (exposure_type)': 1})
+
     def test_path_tokens(self):
         for i in range(3):
             run = ObservationRun.objects.create(name=f'night-{i}')
@@ -182,9 +203,23 @@ class SpectrographReportTest(TestCase):
         self._correct(corrected, 'B')
         self._file(run, 'N', directory='baches')  # uncorrected, contradicts the token
 
-        report = self._report('--token-min-support', '10')
+        report = self._report('--token-min-support', '10', '--token-max-run-share', '1')
 
         self.assertEqual(report['indicative_tokens']['baches']['label'], 'B')
         self.assertEqual(report['indicative_tokens']['lights']['label'], 'N')
         self.assertEqual(report['correction_prediction_tokens'], {'correct': 1})
         self.assertEqual(report['suspicious_tokens'], {'N (token says B)': 1})
+
+
+class IndicativeTokensTest(TestCase):
+    def test_generic_path_components_are_ignored(self):
+        from collections import Counter
+        token_labels = {
+            'mnt': Counter({'N': 97, 'D': 3}),  # in every run, only mirrors the base rate
+            'dados': Counter({'D': 30}),
+        }
+        token_runs = {'mnt': set(range(10)), 'dados': {1, 2, 3}}
+
+        result = indicative_tokens(token_labels, token_runs, 10, 3, 0.95, 0.5)
+
+        self.assertEqual(list(result), ['dados'])

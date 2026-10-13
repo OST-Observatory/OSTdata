@@ -24,6 +24,7 @@ from scipy import ndimage, signal
 from objects.models import Object
 from obs_run.exposure_type import effective_exposure_type_expression, effective_exposure_type_q
 from obs_run.models import DataFile, ObservationRun
+from obs_run.spectrograph import automatic_spectrograph
 from obs_run.utils import object_has_any_override, should_allow_auto_update
 
 logger = logging.getLogger(__name__)
@@ -1240,22 +1241,14 @@ def add_new_data_file(path_to_file, observation_run, print_to_terminal=False):
                     data_file.exposure_type_ml = result.get('exposure_type_ml')
                     data_file.exposure_type_ml_confidence = result.get('exposure_type_ml_confidence')
                     data_file.exposure_type_ml_abstained = result.get('exposure_type_ml_abstained', False)
-                    # Set spectrograph if ML detected one and no override is set
-                    spectrograph_ml = result.get('spectrograph_ml')
-                    if spectrograph_ml and not data_file.spectrograph_override:
-                        data_file.spectrograph = spectrograph_ml
-                        data_file.save(update_fields=[
-                            'exposure_type_ml',
-                            'exposure_type_ml_confidence',
-                            'exposure_type_ml_abstained',
-                            'spectrograph',
-                        ])
-                    else:
-                        data_file.save(update_fields=[
-                            'exposure_type_ml',
-                            'exposure_type_ml_confidence',
-                            'exposure_type_ml_abstained',
-                        ])
+                    # ML spectrograph, constrained by exposure type/instrument (keeps manual values)
+                    data_file.spectrograph = automatic_spectrograph(data_file, result.get('spectrograph_ml'))
+                    data_file.save(update_fields=[
+                        'exposure_type_ml',
+                        'exposure_type_ml_confidence',
+                        'exposure_type_ml_abstained',
+                        'spectrograph',
+                    ])
                     
                     if print_to_terminal:
                         print(f'ML Classification: {result.get("exposure_type_ml")} '

@@ -8,6 +8,7 @@ from django.db.models import Q
 
 from obs_run.ml_classification import ExposureTypeClassifier
 from obs_run.models import DataFile
+from obs_run.spectrograph import automatic_spectrograph
 from utilities import update_object_photometry_spectroscopy, update_observation_run_photometry_spectroscopy
 
 logger = logging.getLogger(__name__)
@@ -167,17 +168,14 @@ class Command(BaseCommand):
                     df.exposure_type_ml = result.get('exposure_type_ml')
                     df.exposure_type_ml_confidence = result.get('exposure_type_ml_confidence')
                     df.exposure_type_ml_abstained = result.get('exposure_type_ml_abstained', False)
-                    # Set spectrograph if ML detected one and no override is set
-                    spectrograph_ml = result.get('spectrograph_ml')
-                    update_fields = [
+                    # ML spectrograph, constrained by exposure type/instrument (keeps manual values)
+                    df.spectrograph = automatic_spectrograph(df, result.get('spectrograph_ml'))
+                    df.save(update_fields=[
                         'exposure_type_ml',
                         'exposure_type_ml_confidence',
                         'exposure_type_ml_abstained',
-                    ]
-                    if spectrograph_ml and not df.spectrograph_override:
-                        df.spectrograph = spectrograph_ml
-                        update_fields.append('spectrograph')
-                    df.save(update_fields=update_fields)
+                        'spectrograph',
+                    ])
                     
                     # Automatically update photometry/spectroscopy flags for associated observation runs and objects
                     # Update observation run

@@ -173,6 +173,12 @@ class Command(BaseCommand):
             help='Path token analysis: minimum share of the dominant label (default: 0.95)',
         )
         parser.add_argument(
+            '--token-max-run-share',
+            type=float,
+            default=0.25,
+            help='Path token analysis: ignore tokens found in more than this share of all runs (default: 0.25)',
+        )
+        parser.add_argument(
             '--run-min-files',
             type=int,
             default=5,
@@ -354,7 +360,7 @@ class Command(BaseCommand):
         """
         indicative = indicative_tokens(
             token_labels, token_runs, options['token_min_support'], options['token_min_runs'],
-            options['token_min_purity'],
+            options['token_min_purity'], options['token_max_run_share'],
         )
 
         outcome = Counter()

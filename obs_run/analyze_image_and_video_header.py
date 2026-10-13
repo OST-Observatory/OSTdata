@@ -5,6 +5,7 @@ import exifread
 import pytz
 from astropy.time import Time
 
+from obs_run.exposure_type import format_default_exposure_type
 from obs_run.utils import should_allow_auto_update
 
 from .ser_parser import SERParser
@@ -68,7 +69,7 @@ def analyze_image(datafile):
 
     #   Set values (check override flag for exposure_type)
     if should_allow_auto_update(datafile, 'exposure_type'):
-        datafile.exposure_type = 'UK'
+        datafile.exposure_type = format_default_exposure_type(datafile.file_type)
     datafile.hjd = jd
     datafile.obs_date = obs_date
     datafile.exptime = exptime
@@ -97,7 +98,7 @@ def analyze_video(datafile):
         jd = t.jd
 
     if should_allow_auto_update(datafile, 'exposure_type'):
-        datafile.exposure_type = 'UK'
+        datafile.exposure_type = format_default_exposure_type(datafile.file_type)
     datafile.hjd = jd
     datafile.obs_date = obs_date
     datafile.exptime = -1.
@@ -140,7 +141,7 @@ def analyze_ser(datafile):
 
     #   Set values (check override flag for exposure_type)
     if should_allow_auto_update(datafile, 'exposure_type'):
-        datafile.exposure_type = 'UK'
+        datafile.exposure_type = format_default_exposure_type(datafile.file_type)
     datafile.hjd = jd
     datafile.obs_date = obs_date
     datafile.exptime = -1.

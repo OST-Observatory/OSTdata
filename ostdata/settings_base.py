@@ -408,6 +408,16 @@ ML_EXPOSURE_TYPE_ENABLED = env.bool('ML_EXPOSURE_TYPE_ENABLED', default=False)
 # How header, ML and user label combine into the effective exposure type (see obs_run/exposure_type.py):
 # 'header_first' (header wins, ML fills header gaps, disagreement -> UK) or 'agree' (legacy: ML must equal header)
 EXPOSURE_TYPE_EFFECTIVE_RULE = env.str('EXPOSURE_TYPE_EFFECTIVE_RULE', default='header_first')
+# Formats without exposure type metadata that default to Light instead of Unknown
+EXPOSURE_TYPE_LIGHT_DEFAULT_FORMATS = env.list(
+    'EXPOSURE_TYPE_LIGHT_DEFAULT_FORMATS', default=['JPG', 'CR2', 'SER', 'AVI', 'MOV'],
+)
+# Instruments (regex, case-insensitive) never used as main camera at a spectrograph -> spectrograph 'N'
+# (see obs_run/spectrograph.py). ZWO: guiding/solar/planetary only so far. Remove or narrow the ZWO
+# pattern when a ZWO camera becomes main camera at a spectrograph (planned for UVEX)!
+SPECTROGRAPH_IMAGING_ONLY_INSTRUMENTS = env.list(
+    'SPECTROGRAPH_IMAGING_ONLY_INSTRUMENTS', default=[r'qhy\s*600m', r'zwo'],
+)
 
 # Observatory Location Configuration for Solar System Object Detection
 # These coordinates are used when FITS headers don't contain observatory location information

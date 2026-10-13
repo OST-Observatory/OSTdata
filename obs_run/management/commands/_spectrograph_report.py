@@ -12,6 +12,7 @@ from pathlib import Path
 
 from obs_run.exposure_type import UNKNOWN, classifier_class_name
 from obs_run.models import DataFile
+from obs_run.spectrograph import constrained_spectrograph
 
 TOKEN_PATTERN = re.compile(r'[a-z]{3,}')
 
@@ -25,6 +26,14 @@ CORRECTION_DETECTION_DESCRIPTIONS = {
     'flagged_correct': 'run majority heuristic flags the file and suggests the corrected value',
     'flagged_wrong': 'run majority heuristic flags the file but suggests another value',
     'not_flagged': 'run majority heuristic does not flag the file',
+}
+
+RULE_SIMULATION_DESCRIPTIONS = {
+    'fixed': 'spectrograph rules produce the manually corrected value',
+    'unchanged': 'rules keep the wrong automatic value (correction still needed)',
+    'changed_wrong': 'rules change the value, but not to the corrected one',
+    'kept': 'confirmed automatic value is kept',
+    'broken': 'rules change a value that was confirmed as correct',
 }
 
 TOKEN_PREDICTION_DESCRIPTIONS = {
@@ -41,13 +50,20 @@ def path_tokens(path):
     return tuple(sorted({sys.intern(t) for t in tokens}))
 
 
-def indicative_tokens(token_labels, token_runs, min_support, min_runs, min_purity):
-    """Tokens whose files carry (almost) always the same label, across several runs."""
+def indicative_tokens(token_labels, token_runs, min_support, min_runs, min_purity, max_run_share):
+    """
+    Tokens whose files carry (almost) always the same label, across several runs. Tokens found in more
+    than ``max_run_share`` of all runs are generic path components (e.g. the archive mount point) and only
+    mirror the overall label distribution, so they are ignored.
+    """
+    all_runs = set().union(*token_runs.values()) if token_runs else set()
+    max_runs = max_run_share * len(all_runs)
     indicative = {}
     for token, labels in token_labels.items():
         support = sum(labels.values())
         label, count = labels.most_common(1)[0]
-        if support >= min_support and len(token_runs[token]) >= min_runs and count / support >= min_purity:
+        runs = len(token_runs[token])
+        if support >= min_support and min_runs <= runs <= max_runs and count / support >= min_purity:
             indicative[token] = {
                 'label': label, 'purity': round(count / support, 4), 'support': support,
                 'runs': len(token_runs[token]),
@@ -111,6 +127,7 @@ class SpectrographAnalysis:
         self.files = []
         # pk -> details of manually corrected files
         self.overridden = {}
+        self.rule_changes = Counter()
 
     def add(self, row, exposure_type, ml_ran, ml_abstained, ml_type, tokens, instrument, year):
         """``exposure_type``: manual label if set, else the effective type."""
@@ -121,10 +138,15 @@ class SpectrographAnalysis:
         self.by_type[exposure_type][spectrograph] += 1
         if exposure_type != UNKNOWN and classifier_class_name(exposure_type, spectrograph) is None:
             self.invalid[f'{exposure_type}/{spectrograph}']['manual' if override else 'automatic'] += 1
+        if not override:
+            value, reason = constrained_spectrograph(exposure_type, row['instrument'], spectrograph)
+            if value != spectrograph:
+                self.rule_changes[f'{spectrograph} -> {value} ({reason})'] += 1
         if override:
             self.overridden[row['pk']] = {
                 'spectrograph': spectrograph, 'exposure_type': exposure_type, 'ml_ran': ml_ran,
                 'ml_abstained': ml_abstained, 'ml_type': ml_type, 'instrument': instrument, 'year': year,
+                'raw_instrument': row['instrument'],
             }
         if exposure_type not in SPECTROGRAPH_RELEVANT:
             return
@@ -141,8 +163,16 @@ class SpectrographAnalysis:
         corrections_by = defaultdict(lambda: defaultdict(Counter))
         confusion = Counter()
         class_accuracy = defaultdict(Counter)
+        rule_simulation = Counter()
         for pk, info in self.overridden.items():
             before, after = auto.get(pk, 'unknown'), info['spectrograph']
+            if before != 'unknown':
+                result, reason = constrained_spectrograph(info['exposure_type'], info['raw_instrument'], before)
+                if before != after:
+                    outcome = 'fixed' if result == after else 'unchanged' if result == before else 'changed_wrong'
+                else:
+                    outcome = 'kept' if result == after else 'broken'
+                rule_simulation[outcome + (f' ({reason})' if reason else '')] += 1
             key = 'confirmed' if before == after else f'{before} -> {after}'
             corrections[key] += 1
             for dim in ('instrument', 'year', 'exposure_type'):
@@ -171,7 +201,7 @@ class SpectrographAnalysis:
         correction_detection = Counter()
         indicative = indicative_tokens(
             self.token_labels, self.token_runs, self.options['token_min_support'],
-            self.options['token_min_runs'], self.options['token_min_purity'],
+            self.options['token_min_runs'], self.options['token_min_purity'], self.options['token_max_run_share'],
         )
         token_suspicious = Counter()
         token_prediction = Counter()
@@ -212,6 +242,8 @@ class SpectrographAnalysis:
             'corrections_by': {dim: _nested(by) for dim, by in corrections_by.items()},
             'class_confusion': dict(confusion),
             'class_accuracy': _nested(class_accuracy),
+            'rule_simulation_on_corrections': dict(rule_simulation),
+            'rule_changes_uncorrected': dict(self.rule_changes),
             'correction_detection_run_majority': dict(correction_detection),
             'suspicious_run_majority': dict(run_suspicious),
             'indicative_tokens': indicative,
@@ -248,6 +280,14 @@ def print_spectrograph_report(cmd, report, top):
     cmd._counter_table(mismatches, top=top)
     cmd._section('Classifier accuracy per true class (spectrograph-corrected files)')
     cmd._breakdown_table(report['class_accuracy'], ['correct', 'wrong'], top)
+
+    cmd._section('Spectrograph rules (obs_run/spectrograph.py) simulated on past corrections')
+    descriptions = {
+        key: RULE_SIMULATION_DESCRIPTIONS.get(key.split(' (')[0], '') for key in report['rule_simulation_on_corrections']
+    }
+    cmd._counter_table(report['rule_simulation_on_corrections'], descriptions)
+    cmd._section('Spectrograph rules: changes to uncorrected files (apply_spectrograph_rules)')
+    cmd._counter_table(report['rule_changes_uncorrected'], top=top)
 
     cmd._section(
         f"Run majority heuristic (runs >= {options['run_min_files']} LI/FL/WA files, "

@@ -110,3 +110,12 @@ CLASSIFIER_CLASSES = {
 def classifier_class_name(exposure_type, spectrograph):
     """Classifier class for an exposure type/spectrograph pair, None if the combination is not valid."""
     return CLASSIFIER_CLASSES.get((exposure_type, spectrograph or 'N'))
+
+
+def format_default_exposure_type(file_type):
+    """
+    Exposure type for formats without exposure type metadata: 'LI' for the formats in
+    ``EXPOSURE_TYPE_LIGHT_DEFAULT_FORMATS`` (manually labelled as light in ~97 % of cases), else UK.
+    """
+    formats = getattr(settings, 'EXPOSURE_TYPE_LIGHT_DEFAULT_FORMATS', [])
+    return 'LI' if (file_type or '').upper() in {f.upper() for f in formats} else UNKNOWN

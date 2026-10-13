@@ -30,6 +30,7 @@ from obs_run.api.serializers import DataFileSerializer
 from obs_run.api.views import DataFilesPagination
 from obs_run.models import DataFile, ObservationRun
 from obs_run.plate_solving import PlateSolvingService, solve_and_update_datafile
+from obs_run.spectrograph import automatic_spectrograph
 from obs_run.tasks import (
     cleanup_expired_downloads,
     cleanup_orphan_objects,
@@ -1318,12 +1319,20 @@ def admin_update_exposure_type_user(request, pk):
     if isinstance(exposure_type_user_override, bool):
         datafile.exposure_type_user_override = exposure_type_user_override
 
+    # Bias/dark frames carry no spectrograph (manually set spectrographs are kept)
+    spectrograph_before = datafile.spectrograph
+    datafile.spectrograph = automatic_spectrograph(datafile)
+
     from ostdata.history_reason import REASON_ADMIN_EXPOSURE_TYPE_USER, save_with_reason
     save_with_reason(
         datafile,
         REASON_ADMIN_EXPOSURE_TYPE_USER,
-        update_fields=['exposure_type_user', 'exposure_type_user_override'],
+        update_fields=['exposure_type_user', 'exposure_type_user_override', 'spectrograph'],
     )
+    if datafile.spectrograph != spectrograph_before and datafile.observation_run:
+        update_observation_run_photometry_spectroscopy(datafile.observation_run)
+        for obj in datafile.object_set.all():
+            update_object_photometry_spectroscopy(obj)
 
     # Re-evaluate object association when set to Light (LI) so coordinate-based
     # resolution can run for files that were previously misclassified
