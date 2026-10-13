@@ -18,10 +18,11 @@ from astropy.time import Time
 from astropy.visualization import simple_norm
 from astroquery.simbad import Simbad
 from django.conf import settings
-from django.db.models import Case, CharField, ExpressionWrapper, F, FloatField, Q, Value, When
+from django.db.models import ExpressionWrapper, F, FloatField
 from scipy import ndimage, signal
 
 from objects.models import Object
+from obs_run.exposure_type import effective_exposure_type_expression, effective_exposure_type_q
 from obs_run.models import DataFile, ObservationRun
 from obs_run.utils import object_has_any_override, should_allow_auto_update
 
@@ -186,109 +187,39 @@ def detect_object_type_from_simbad_types(types_str: str):
 def annotate_effective_exposure_type(queryset):
     """
     Annotate a DataFile queryset with annotated_effective_exposure_type field.
-    
-    This implements the priority logic:
-    1. exposure_type_user (if set, not None, not empty string)
-    2. exposure_type_ml (if set AND matches exposure_type header value)
-    3. 'UK' (Unknown) if exposure_type_ml is set but doesn't match exposure_type
-    4. exposure_type (header-based, fallback)
-    
+    Rules: see obs_run/exposure_type.py (setting EXPOSURE_TYPE_EFFECTIVE_RULE).
+
     Parameters
     ----------
     queryset : QuerySet
         DataFile queryset to annotate
-    
+
     Returns
     -------
     QuerySet
         Annotated queryset with annotated_effective_exposure_type field
     """
-    return queryset.annotate(
-        annotated_effective_exposure_type=Case(
-            # Priority 1: User-set type
-            When(
-                Q(exposure_type_user__isnull=False) & ~Q(exposure_type_user=''),
-                then='exposure_type_user'
-            ),
-            # Priority 2: ML type matches header type
-            When(
-                Q(exposure_type_ml__isnull=False) & 
-                ~Q(exposure_type_ml='') & 
-                Q(exposure_type_ml=F('exposure_type')),
-                then='exposure_type_ml'
-            ),
-            # Priority 3: ML type doesn't match header type -> Unknown
-            When(
-                Q(exposure_type_ml__isnull=False) & ~Q(exposure_type_ml=''),
-                then=Value('UK')
-            ),
-            # Priority 4: Header-based type
-            default='exposure_type',
-            output_field=CharField(max_length=2)
-        )
-    )
+    return queryset.annotate(annotated_effective_exposure_type=effective_exposure_type_expression())
 
 
 def get_effective_exposure_type_filter(exposure_type_code, field_prefix=''):
     """
     Create a Q filter for filtering by effective exposure type.
     This can be used in Count filters and other aggregations.
-    
+
     Parameters
     ----------
     exposure_type_code : str
         Exposure type code to filter for (e.g., 'LI', 'FL', 'DA')
     field_prefix : str, optional
         Prefix for field names (e.g., 'datafile__' for related fields)
-    
+
     Returns
     -------
     Q
         Django Q object for filtering by effective exposure type
     """
-    # This creates a filter that matches the effective_exposure_type logic
-    # Priority 1: exposure_type_user matches
-    # Priority 2: exposure_type_ml matches AND equals exposure_type
-    # Priority 3: exposure_type_ml doesn't match exposure_type -> 'UK' (only if code is 'UK')
-    # Priority 4: exposure_type matches
-    
-    # Build field names with prefix
-    user_field = f'{field_prefix}exposure_type_user' if field_prefix else 'exposure_type_user'
-    ml_field = f'{field_prefix}exposure_type_ml' if field_prefix else 'exposure_type_ml'
-    type_field = f'{field_prefix}exposure_type' if field_prefix else 'exposure_type'
-    
-    if exposure_type_code == 'UK':
-        # For Unknown: exposure_type_ml is set but doesn't match exposure_type
-        return Q(
-            Q(**{f'{ml_field}__isnull': False}) & 
-            ~Q(**{ml_field: ''}) & 
-            ~Q(**{ml_field: F(type_field)})
-        )
-    else:
-        # For other types: check all priority levels
-        return (
-            # Priority 1: exposure_type_user matches
-            Q(**{user_field: exposure_type_code}) & 
-            Q(**{f'{user_field}__isnull': False}) & 
-            ~Q(**{user_field: ''})
-        ) | (
-            # Priority 2: exposure_type_ml matches AND equals exposure_type
-            Q(**{ml_field: exposure_type_code}) & 
-            Q(**{f'{ml_field}__isnull': False}) & 
-            ~Q(**{ml_field: ''}) & 
-            Q(**{ml_field: F(type_field)})
-        ) | (
-            # Priority 4: exposure_type matches AND (no user type OR no ML type OR ML matches)
-            Q(**{type_field: exposure_type_code}) & 
-            (
-                Q(**{f'{user_field}__isnull': True}) | Q(**{user_field: ''})
-            ) & 
-            (
-                Q(**{f'{ml_field}__isnull': True}) | 
-                Q(**{ml_field: ''}) | 
-                Q(**{ml_field: F(type_field)})
-            )
-        )
+    return effective_exposure_type_q(exposure_type_code, field_prefix)
 
 
 def get_object_fov_radius(obj, fallback_arcmin=10.0, min_arcmin=1.0, max_arcmin=60.0):

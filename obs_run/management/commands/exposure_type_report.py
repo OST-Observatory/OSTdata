@@ -1,13 +1,14 @@
 import json
 import random
+import re
 from collections import Counter, defaultdict
 from pathlib import Path
 
 from astropy.io import fits
 from django.core.management.base import BaseCommand
 
+from obs_run.exposure_type import RULES, effective_exposure_type, effective_exposure_type_expression, get_rule
 from obs_run.models import DataFile
-from utilities import annotate_effective_exposure_type
 
 UNKNOWN = DataFile.UNKNOWN
 
@@ -18,10 +19,10 @@ CONFIDENCE_BUCKETS = [0.5, 0.7, 0.9, 0.97, 0.99, 1.0]
 CAUSE_DESCRIPTIONS = {
     'ml_not_run': 'ML never ran on the file (format not supported or not yet classified)',
     'confirmation': 'header == ML == user (user only confirmed, no correction needed)',
-    'header_uk_ml_correct': 'header UK, ML correct -> discarded by the agree-or-UK rule',
+    'header_uk_ml_correct': 'header UK, ML correct -> solved if ML may fill header gaps',
     'header_uk_ml_abstained': 'header UK, ML abstained',
     'header_uk_ml_wrong': 'header UK, ML wrong',
-    'header_correct_ml_abstained': 'header correct, ML abstained -> veto turned it into UK',
+    'header_correct_ml_abstained': 'header correct, ML abstained -> solved if abstaining is no veto',
     'header_correct_ml_wrong': 'header correct, ML wrong -> veto turned it into UK',
     'header_wrong_ml_correct': 'header wrong, ML correct -> ML cannot override the header',
     'header_wrong_ml_abstained': 'header wrong, ML abstained',
@@ -36,6 +37,20 @@ BACKLOG_DESCRIPTIONS = {
     'header_set_ml_abstained': 'header has a type, ML abstained -> resolvable without the abstain veto',
     'header_ml_disagree': 'header and ML disagree',
 }
+
+# What a combination rule would have produced for a manually labelled file
+SIMULATION_DESCRIPTIONS = {
+    'correct': 'rule result == manual label (no manual work needed)',
+    'review': 'rule result UK (file lands in the review queue)',
+    'wrong': 'rule result is a different type (silent error)',
+}
+
+TOKEN_PATTERN = re.compile(r'[a-z]{3,}')
+
+
+def path_tokens(path):
+    """Lower-case letter tokens (>= 3 chars) from directory names and file stem."""
+    return set(TOKEN_PATTERN.findall(str(Path(path or '').with_suffix('')).lower()))
 
 
 def _bucket(confidence):
@@ -136,6 +151,30 @@ class Command(BaseCommand):
             help='Random seed for the --read-headers sample',
         )
         parser.add_argument(
+            '--rule',
+            choices=RULES,
+            default=None,
+            help='Combination rule for the backlog and the path token analysis (default: current setting)',
+        )
+        parser.add_argument(
+            '--token-min-support',
+            type=int,
+            default=30,
+            help='Path token analysis: minimum labelled files containing a token (default: 30)',
+        )
+        parser.add_argument(
+            '--token-min-runs',
+            type=int,
+            default=3,
+            help='Path token analysis: minimum observation runs containing a token (default: 3)',
+        )
+        parser.add_argument(
+            '--token-min-purity',
+            type=float,
+            default=0.95,
+            help='Path token analysis: minimum share of the dominant label (default: 0.95)',
+        )
+        parser.add_argument(
             '--json',
             type=str,
             default=None,
@@ -146,11 +185,12 @@ class Command(BaseCommand):
         formats = [f.upper() for f in options['formats']] if options['formats'] else None
         top = options['top']
         rng = random.Random(options['seed'])
+        rule = options['rule'] or get_rule()
 
         queryset = DataFile.objects.all()
         if formats:
             queryset = queryset.filter(file_type__in=formats)
-        queryset = annotate_effective_exposure_type(queryset)
+        queryset = queryset.annotate(annotated_effective_exposure_type=effective_exposure_type_expression(rule=rule))
 
         totals = Counter()
         effective = Counter()
@@ -165,9 +205,15 @@ class Command(BaseCommand):
         backlog_confidence = defaultdict(Counter)
         backlog_pairs = Counter()
         header_candidates = []
+        user_by_file_type = defaultdict(Counter)
+        simulation = {r: Counter() for r in RULES}
+        simulation_by_file_type = {r: defaultdict(Counter) for r in RULES}
+        token_labels = defaultdict(Counter)
+        token_runs = defaultdict(set)
+        problem_files = []
 
         fields = (
-            'pk', 'datafile', 'file_type', 'instrument', 'obs_date', 'exposure_type',
+            'pk', 'datafile', 'observation_run_id', 'file_type', 'instrument', 'obs_date', 'exposure_type',
             'exposure_type_ml', 'exposure_type_ml_confidence', 'exposure_type_ml_abstained',
             'exposure_type_user', 'exposure_type_override', 'spectrograph_override',
             'annotated_effective_exposure_type',
@@ -178,6 +224,8 @@ class Command(BaseCommand):
             year = _year(row['obs_date'])
             ml_ran, ml_abstained, ml_type = _ml_state(row)
             user = (row['exposure_type_user'] or '').strip()
+            header = row['exposure_type'] or UNKNOWN
+            tokens = path_tokens(row['datafile'])
 
             totals['files'] += 1
             totals[f'file_type:{file_type}'] += 1
@@ -195,6 +243,12 @@ class Command(BaseCommand):
                 for dim, value in (('file_type', file_type), ('instrument', instrument), ('year', year)):
                     causes_by[dim][value][cause] += 1
                 header_to_user[f"{row['exposure_type'] or UNKNOWN} -> {user}"] += 1
+                user_by_file_type[file_type][user] += 1
+                for r in RULES:
+                    result = effective_exposure_type(header, row['exposure_type_ml'], None, r)
+                    outcome = 'correct' if result == user else 'review' if result == UNKNOWN else 'wrong'
+                    simulation[r][outcome] += 1
+                    simulation_by_file_type[r][file_type][outcome] += 1
                 if ml_ran:
                     ml_to_user[f"{ml_type} -> {user}"] += 1
                     if not ml_abstained:
@@ -222,6 +276,15 @@ class Command(BaseCommand):
                 if ml_ran and not ml_abstained:
                     backlog_confidence[category][_bucket(row['exposure_type_ml_confidence'])] += 1
 
+            # Trusted label for the path token analysis: manual label or header/ML agreement
+            token_truth = user or (header if header != UNKNOWN and row['exposure_type_ml'] == header else None)
+            if token_truth:
+                for token in tokens:
+                    token_labels[token][token_truth] += 1
+                    token_runs[token].add(row['observation_run_id'])
+            if effective_exposure_type(header, row['exposure_type_ml'], None, rule) == UNKNOWN:
+                problem_files.append((tokens, user or None, file_type))
+
             if options['read_headers'] and file_type == 'FITS':
                 corrected = truth is not None and (row['exposure_type_override'] or truth != row['exposure_type'])
                 if row['exposure_type'] == UNKNOWN or corrected:
@@ -229,9 +292,11 @@ class Command(BaseCommand):
                     header_candidates.append((row['datafile'], label, 'manual' if truth else 'ml'))
 
         raw_headers = self._read_raw_headers(header_candidates, options['read_headers'], rng)
+        path_token_analysis = self._analyse_path_tokens(token_labels, token_runs, problem_files, options)
 
         report = {
             'filter_formats': formats,
+            'rule': rule,
             'totals': dict(totals),
             'effective_exposure_type': dict(effective),
             'manual_labels': {
@@ -239,6 +304,11 @@ class Command(BaseCommand):
                 'by': {dim: {k: dict(v) for k, v in values.items()} for dim, values in causes_by.items()},
                 'header_to_user': dict(header_to_user),
                 'ml_to_user': dict(ml_to_user),
+                'user_by_file_type': {k: dict(v) for k, v in user_by_file_type.items()},
+                'rule_simulation': {r: dict(v) for r, v in simulation.items()},
+                'rule_simulation_by_file_type': {
+                    r: {k: dict(v) for k, v in by.items()} for r, by in simulation_by_file_type.items()
+                },
             },
             'header_field_overrides': dict(overrides),
             'ml_confidence_vs_truth': {k: dict(v) for k, v in ml_confidence.items()},
@@ -249,8 +319,10 @@ class Command(BaseCommand):
                 'header_to_ml_disagreements': dict(backlog_pairs),
             },
             'raw_headers': raw_headers,
+            'path_tokens': path_token_analysis,
         }
 
+        self._options = options
         self._print_report(report, top)
 
         if options['json']:
@@ -258,6 +330,43 @@ class Command(BaseCommand):
             out.parent.mkdir(parents=True, exist_ok=True)
             out.write_text(json.dumps(report, indent=2, ensure_ascii=False))
             self.stdout.write(self.style.SUCCESS(f'\nReport written to {out}'))
+
+    def _analyse_path_tokens(self, token_labels, token_runs, problem_files, options):
+        """
+        Find path tokens that reliably indicate one exposure type, then estimate how many files the
+        combination rule leaves at UK could be resolved by them (and how often correctly).
+        """
+        indicative = {}
+        for token, labels in token_labels.items():
+            support = sum(labels.values())
+            label, count = labels.most_common(1)[0]
+            if (support >= options['token_min_support'] and len(token_runs[token]) >= options['token_min_runs']
+                    and count / support >= options['token_min_purity']):
+                indicative[token] = {
+                    'label': label, 'purity': round(count / support, 4), 'support': support,
+                    'runs': len(token_runs[token]),
+                }
+
+        outcome = Counter()
+        outcome_by_file_type = defaultdict(Counter)
+        for tokens, truth, file_type in problem_files:
+            labels = {indicative[t]['label'] for t in tokens if t in indicative}
+            if not labels:
+                result = 'no_token'
+            elif len(labels) > 1:
+                result = 'conflicting_tokens'
+            else:
+                label = labels.pop()
+                result = 'unverified' if truth is None else 'correct' if label == truth else 'wrong'
+            outcome[result] += 1
+            outcome_by_file_type[file_type][result] += 1
+
+        return {
+            'indicative_tokens': dict(sorted(indicative.items(), key=lambda kv: -kv[1]['support'])),
+            'rule_uk_files': len(problem_files),
+            'rule_uk_outcome': dict(outcome),
+            'rule_uk_outcome_by_file_type': {k: dict(v) for k, v in outcome_by_file_type.items()},
+        }
 
     def _read_raw_headers(self, candidates, limit, rng):
         if not limit or not candidates:
@@ -341,6 +450,13 @@ class Command(BaseCommand):
         self._section('Manual labels: ML -> user')
         self._counter_table(manual['ml_to_user'], top=top)
 
+        self._section('Manual labels: label by file type')
+        self._breakdown_table(manual['user_by_file_type'], ['LI', 'DA', 'FL', 'BI', 'WA', 'UK'], top)
+        for r in RULES:
+            self._section(f'Rule simulation on manual labels: {r}')
+            self._counter_table(manual['rule_simulation'][r], SIMULATION_DESCRIPTIONS)
+            self._breakdown_table(manual['rule_simulation_by_file_type'][r], list(SIMULATION_DESCRIPTIONS), top)
+
         self._section('Header field edited manually (no exposure_type_user): ML vs. corrected value')
         self._counter_table(report['header_field_overrides'])
 
@@ -357,7 +473,7 @@ class Command(BaseCommand):
             self.stdout.write('  (none)')
 
         backlog = report['backlog_effective_uk']
-        self._section('Backlog: effectively UK, not yet corrected')
+        self._section(f"Backlog: effectively UK under rule '{report['rule']}', not yet corrected")
         self._counter_table(backlog['categories'], BACKLOG_DESCRIPTIONS)
         for dim in ('file_type', 'instrument', 'year'):
             self._section(f'Backlog by {dim}')
@@ -371,6 +487,28 @@ class Command(BaseCommand):
                 self.stdout.write(f'    {bucket:<10}  {buckets[bucket]:>8}')
         if not backlog['ml_confidence']:
             self.stdout.write('  (none)')
+
+        tokens = report['path_tokens']
+        self._section(
+            f"Path tokens indicating one type (support >= {self._options['token_min_support']}, "
+            f"runs >= {self._options['token_min_runs']}, purity >= {self._options['token_min_purity']:.0%})"
+        )
+        for token, info in list(tokens['indicative_tokens'].items())[:top]:
+            self.stdout.write(
+                f"  {token:<24}  {info['label']}  purity {info['purity']:6.1%}  "
+                f"files {info['support']:>8}  runs {info['runs']:>5}"
+            )
+        if not tokens['indicative_tokens']:
+            self.stdout.write('  (none)')
+        self._section(
+            f"Path tokens applied to the {tokens['rule_uk_files']} files rule '{report['rule']}' leaves at UK "
+            '(correct/wrong vs. manual label)'
+        )
+        self._counter_table(tokens['rule_uk_outcome'])
+        self._breakdown_table(
+            tokens['rule_uk_outcome_by_file_type'],
+            ['correct', 'wrong', 'unverified', 'conflicting_tokens', 'no_token'], top,
+        )
 
         raw = report['raw_headers']
         if raw:

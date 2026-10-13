@@ -5,7 +5,7 @@ from urllib.parse import urlparse
 
 from django.conf import settings
 from django.db import transaction
-from django.db.models import Case, CharField, Count, F, Q, Value, When
+from django.db.models import Count, F, Q
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import serializers
 from rest_framework.decorators import api_view, permission_classes
@@ -1493,31 +1493,7 @@ def admin_get_unsolved_plate_files(request):
     ).select_related('observation_run')
     
     # Annotate with effective_exposure_type and filter for Light frames only
-    # Use a different annotation name to avoid conflict with the property
-    queryset = queryset.annotate(
-        annotated_effective_exposure_type=Case(
-            # Priority 1: User-set type
-            When(
-                Q(exposure_type_user__isnull=False) & ~Q(exposure_type_user=''),
-                then='exposure_type_user'
-            ),
-            # Priority 2: ML type matches header type
-            When(
-                Q(exposure_type_ml__isnull=False) & 
-                ~Q(exposure_type_ml='') & 
-                Q(exposure_type_ml=F('exposure_type')),
-                then='exposure_type_ml'
-            ),
-            # Priority 3: ML type doesn't match header type -> Unknown
-            When(
-                Q(exposure_type_ml__isnull=False) & ~Q(exposure_type_ml=''),
-                then=Value('UK')
-            ),
-            # Priority 4: Header-based type
-            default='exposure_type',
-            output_field=CharField(max_length=2)
-        )
-    )
+    queryset = annotate_effective_exposure_type(queryset)
     queryset = queryset.filter(annotated_effective_exposure_type='LI')
     
     # Apply additional filters (after annotation so they work correctly)

@@ -12,6 +12,7 @@ from simple_history.models import HistoricalRecords
 from tags.models import Tag
 
 from .analyze_files import set_file_info
+from .exposure_type import effective_exposure_type as _effective_exposure_type
 
 if TYPE_CHECKING:
     from django.db.models.fields.related_descriptors import RelatedManager
@@ -409,25 +410,10 @@ class DataFile(models.Model):
     @property
     def effective_exposure_type(self):
         """
-        Determine the effective exposure type based on priority:
-        1. exposure_type_user (if set, not None, not empty string)
-        2. exposure_type_ml (if set AND matches exposure_type header value)
-        3. 'UK' (Unknown) if exposure_type_ml is set but doesn't match exposure_type
-        4. exposure_type (header-based, fallback)
+        Effective exposure type combining header, ML and user label.
+        Rules: see obs_run/exposure_type.py (setting EXPOSURE_TYPE_EFFECTIVE_RULE).
         """
-        # Priority 1: User-set type
-        if self.exposure_type_user and self.exposure_type_user.strip():
-            return self.exposure_type_user
-        
-        # Priority 2 & 3: ML type
-        if self.exposure_type_ml and self.exposure_type_ml.strip():
-            if self.exposure_type_ml == self.exposure_type:
-                return self.exposure_type_ml
-            else:
-                return self.UNKNOWN  # 'UK'
-        
-        # Priority 4: Header-based type
-        return self.exposure_type
+        return _effective_exposure_type(self.exposure_type, self.exposure_type_ml, self.exposure_type_user)
 
     def get_effective_exposure_type_display(self):
         """

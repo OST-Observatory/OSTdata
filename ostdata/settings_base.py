@@ -405,6 +405,9 @@ ML_EXPOSURE_TYPE_ABSTAIN_UNKNOWN = env.bool('ML_EXPOSURE_TYPE_ABSTAIN_UNKNOWN', 
 ML_EXPOSURE_TYPE_SUPPORTED_FORMATS = env.list('ML_EXPOSURE_TYPE_SUPPORTED_FORMATS', default=['FITS', 'TIFF'])
 ML_EXPOSURE_TYPE_TARGET_SIZE = env.list('ML_EXPOSURE_TYPE_TARGET_SIZE', default=[448, 448])  # [width, height]
 ML_EXPOSURE_TYPE_ENABLED = env.bool('ML_EXPOSURE_TYPE_ENABLED', default=False)
+# How header, ML and user label combine into the effective exposure type (see obs_run/exposure_type.py):
+# 'header_first' (header wins, ML fills header gaps, disagreement -> UK) or 'agree' (legacy: ML must equal header)
+EXPOSURE_TYPE_EFFECTIVE_RULE = env.str('EXPOSURE_TYPE_EFFECTIVE_RULE', default='header_first')
 
 # Observatory Location Configuration for Solar System Object Detection
 # These coordinates are used when FITS headers don't contain observatory location information

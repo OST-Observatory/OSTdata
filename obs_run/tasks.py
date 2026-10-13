@@ -1115,7 +1115,7 @@ def plate_solve_pending_files(self):
     
     Processes up to PLATE_SOLVING_BATCH_SIZE files per run (default: 10).
     """
-    from django.db.models import Case, CharField, F, Q, Value, When
+    from django.db.models import Q
     
     try:
         from adminops.redis_helpers import plate_solving_task_enabled_get
@@ -1138,31 +1138,7 @@ def plate_solve_pending_files(self):
         )
         
         # Annotate with effective_exposure_type and filter for Light frames
-        # Use a different annotation name to avoid conflict with the property
-        queryset = queryset.annotate(
-            annotated_effective_exposure_type=Case(
-                # Priority 1: User-set type
-                When(
-                    Q(exposure_type_user__isnull=False) & ~Q(exposure_type_user=''),
-                    then='exposure_type_user'
-                ),
-                # Priority 2: ML type matches header type
-                When(
-                    Q(exposure_type_ml__isnull=False) & 
-                    ~Q(exposure_type_ml='') & 
-                    Q(exposure_type_ml=F('exposure_type')),
-                    then='exposure_type_ml'
-                ),
-                # Priority 3: ML type doesn't match header type -> Unknown
-                When(
-                    Q(exposure_type_ml__isnull=False) & ~Q(exposure_type_ml=''),
-                    then=Value('UK')
-                ),
-                # Priority 4: Header-based type
-                default='exposure_type',
-                output_field=CharField(max_length=2)
-            )
-        )
+        queryset = annotate_effective_exposure_type(queryset)
         queryset = queryset.filter(annotated_effective_exposure_type='LI')
         
         # Limit to batch size
@@ -1214,7 +1190,6 @@ def re_evaluate_plate_solved_files(self):
     """
     import astropy.units as u
     from astropy.coordinates import SkyCoord
-    from django.db.models import Case, CharField, F, Q, Value, When
 
     try:
         from adminops.redis_helpers import plate_solving_task_enabled_get
@@ -1239,18 +1214,7 @@ def re_evaluate_plate_solved_files(self):
         spectrograph='N',
         spectroscopy=False,
     ).select_related('observation_run')
-    queryset = queryset.annotate(
-        annotated_effective_exposure_type=Case(
-            When(Q(exposure_type_user__isnull=False) & ~Q(exposure_type_user=''), then='exposure_type_user'),
-            When(
-                Q(exposure_type_ml__isnull=False) & ~Q(exposure_type_ml='') & Q(exposure_type_ml=F('exposure_type')),
-                then='exposure_type_ml'
-            ),
-            When(Q(exposure_type_ml__isnull=False) & ~Q(exposure_type_ml=''), then=Value('UK')),
-            default='exposure_type',
-            output_field=CharField(max_length=2)
-        )
-    )
+    queryset = annotate_effective_exposure_type(queryset)
     queryset = queryset.filter(annotated_effective_exposure_type='LI')
 
     evaluated = 0
