@@ -7,13 +7,9 @@ from astropy.io import fits
 from django.core.management.base import BaseCommand
 
 from obs_run.exposure_type import RULES, effective_exposure_type, effective_exposure_type_expression, get_rule
-from obs_run.management.commands._spectrograph_report import (
-    SpectrographAnalysis,
-    indicative_tokens,
-    path_tokens,
-    print_spectrograph_report,
-)
+from obs_run.management.commands._spectrograph_report import SpectrographAnalysis, print_spectrograph_report
 from obs_run.models import DataFile
+from obs_run.spectrograph_heuristics import indicative_tokens, path_tokens
 
 UNKNOWN = DataFile.UNKNOWN
 

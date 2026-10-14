@@ -7,6 +7,15 @@
       </v-btn>
     </div>
 
+    <!-- Presets: predefined filter sets for classification review (filters can be refined afterwards) -->
+    <v-chip-group v-model="activePreset" selected-class="text-primary" class="mb-2" @update:model-value="applyPreset">
+      <v-chip v-for="preset in visiblePresets" :key="preset.key" :value="preset.key" :prepend-icon="preset.icon" variant="outlined" filter>
+        {{ preset.label }}
+      </v-chip>
+    </v-chip-group>
+
+    <SpectrographSuggestionPanel v-if="activePreset === 'spectrograph_suggestions' && canSpectrograph" ref="suggestionPanel" />
+
     <!-- Collapsible Filters -->
     <v-card class="mb-3">
       <v-expansion-panels variant="accordion">
@@ -46,7 +55,9 @@
                       <v-select v-model="filters.exposure_type" :items="exposureTypeItems" item-title="label" item-value="value" label="Exposure Type (Header)" density="comfortable" variant="outlined" hide-details clearable multiple chips class="mb-2" />
                       <v-select v-model="filters.exposure_type_ml" :items="exposureTypeItems" item-title="label" item-value="value" label="Exposure Type (Classifier)" density="comfortable" variant="outlined" hide-details clearable multiple chips class="mb-2" />
                       <v-select v-model="filters.exposure_type_user" :items="exposureTypeItems" item-title="label" item-value="value" label="Exposure Type (Manual)" density="comfortable" variant="outlined" hide-details clearable multiple chips class="mb-2" />
-                      <v-select v-model="filters.has_user_type" :items="[{ title: 'Yes', value: true }, { title: 'No', value: false }]" item-title="title" item-value="value" label="Has Manual Exposure Type" density="comfortable" variant="outlined" hide-details clearable class="mb-2" />
+                      <v-select v-model="filters.has_user_type" :items="yesNoItems" item-title="title" item-value="value" label="Has Manual Exposure Type" density="comfortable" variant="outlined" hide-details clearable class="mb-2" />
+                      <v-select v-model="filters.exposure_disagreement" :items="yesNoItems" item-title="title" item-value="value" label="Header ≠ Classifier" density="comfortable" variant="outlined" hide-details clearable class="mb-2" />
+                      <v-select v-model="filters.ml_abstained" :items="yesNoItems" item-title="title" item-value="value" label="Classifier Abstained" density="comfortable" variant="outlined" hide-details clearable class="mb-2" />
                       <v-text-field v-model.number="filters.exptime_min" label="Exp. Time Min" type="number" density="comfortable" variant="outlined" hide-details clearable class="mb-2" />
                       <v-text-field v-model.number="filters.exptime_max" label="Exp. Time Max" type="number" density="comfortable" variant="outlined" hide-details clearable />
                     </v-expansion-panel-text>
@@ -62,7 +73,10 @@
                       <v-text-field v-model="filters.telescope" label="Telescope" density="comfortable" variant="outlined" hide-details clearable class="mb-2" />
                       <v-text-field v-model="filters.main_target" label="Main Target" density="comfortable" variant="outlined" hide-details clearable class="mb-2" />
                       <v-select v-model="filters.spectroscopy" :items="[{ title: 'Yes', value: true }, { title: 'No', value: false }]" item-title="title" item-value="value" label="Spectroscopy" density="comfortable" variant="outlined" hide-details clearable class="mb-2" />
-                      <v-select v-model="filters.spectrograph" :items="spectrographItems" item-title="label" item-value="value" label="Spectrograph" density="comfortable" variant="outlined" hide-details clearable class="mb-2" />
+                      <v-select v-model="filters.spectrograph" :items="spectrographItems" item-title="label" item-value="value" label="Spectrograph" density="comfortable" variant="outlined" hide-details clearable multiple chips class="mb-2" />
+                      <v-select v-model="filters.spectrograph_override" :items="yesNoItems" item-title="title" item-value="value" label="Spectrograph Set Manually" density="comfortable" variant="outlined" hide-details clearable class="mb-2" />
+                      <v-select v-model="filters.has_spectrograph_suggestion" :items="suggestionFilterItems" item-title="title" item-value="value" label="Open Spectrograph Suggestion" density="comfortable" variant="outlined" hide-details clearable class="mb-2" />
+                      <v-select v-model="filters.invalid_combination" :items="yesNoItems" item-title="title" item-value="value" label="Invalid Type/Spectrograph Combination" density="comfortable" variant="outlined" hide-details clearable class="mb-2" />
                       <v-select v-model="filters.plate_solved" :items="[{ title: 'Yes', value: true }, { title: 'No', value: false }]" item-title="title" item-value="value" label="Plate Solved" density="comfortable" variant="outlined" hide-details clearable class="mb-2" />
                       <v-select v-model="filters.has_error" :items="[{ title: 'Yes', value: true }, { title: 'No', value: false }]" item-title="title" item-value="value" label="Has Plate Error" density="comfortable" variant="outlined" hide-details clearable />
                     </v-expansion-panel-text>
@@ -85,8 +99,11 @@
         <div class="text-body-2">{{ selectedCount }} selected</div>
         <div class="d-flex align-center flex-wrap" style="gap: 8px">
           <v-btn v-if="canPlateSolve" color="primary" variant="outlined" prepend-icon="mdi-star-four-points" :loading="busy.plateSolve" @click="bulkPlateSolve">Trigger Plate Solve</v-btn>
-          <v-btn v-if="canExposureTypeUser" color="primary" variant="outlined" prepend-icon="mdi-pencil" @click="openBulkExposureTypeDialog">Set Manual Exposure Type</v-btn>
-          <v-btn v-if="canSpectrograph" color="primary" variant="outlined" prepend-icon="mdi-telescope" @click="openBulkSpectrographDialog">Set Spectrograph</v-btn>
+          <v-btn v-if="canEditClassification" color="primary" variant="outlined" prepend-icon="mdi-pencil" @click="openClassificationDialog(null)">Edit Classification</v-btn>
+          <template v-if="showSuggestions && canSpectrograph">
+            <v-btn color="success" variant="outlined" prepend-icon="mdi-check-all" :loading="busy.suggestions" @click="bulkAcceptSuggestions">Accept Suggestions</v-btn>
+            <v-btn color="secondary" variant="outlined" prepend-icon="mdi-close-circle-outline" :loading="busy.suggestions" @click="bulkKeepCurrent">Keep Current Values</v-btn>
+          </template>
           <v-btn v-if="canReEvaluate" color="primary" variant="outlined" prepend-icon="mdi-refresh" :loading="busy.reEvaluate" @click="bulkReEvaluate">Re-evaluate</v-btn>
           <v-btn v-if="canClearOverrides" color="secondary" variant="outlined" prepend-icon="mdi-flag-off" :loading="busy.clearOverrides" @click="bulkClearOverrides">Clear Overrides</v-btn>
           <v-btn v-if="canLinkObject" color="primary" variant="outlined" prepend-icon="mdi-link" :loading="busy.linkObject" @click="openLinkObjectDialog(null)">Link to Object</v-btn>
@@ -171,17 +188,32 @@
         </template>
 
         <template #item.exposure_type_ml="{ item }">
-          <v-chip v-if="item.exposure_type_ml" size="small" :color="getExposureTypeColor(item.exposure_type_ml)" variant="flat">
-            {{ item.exposure_type_ml_display || item.exposure_type_ml }}
-          </v-chip>
+          <div v-if="item.exposure_type_ml" class="py-1">
+            <v-chip size="small" :color="getExposureTypeColor(item.exposure_type_ml)" variant="flat">
+              {{ item.exposure_type_ml_display || item.exposure_type_ml }}
+            </v-chip>
+            <div v-if="item.exposure_type_ml_confidence != null" class="text-caption text-medium-emphasis">
+              {{ (item.exposure_type_ml_confidence * 100).toFixed(1) }} %
+              <v-chip v-if="item.exposure_type_ml_abstained" size="x-small" color="warning" variant="flat" class="ml-1">Abstained</v-chip>
+            </div>
+          </div>
           <span v-else class="text-medium-emphasis">—</span>
         </template>
 
         <template #item.exposure_type_user="{ item }">
-          <v-chip v-if="item.exposure_type_user" size="small" :color="getExposureTypeColor(item.exposure_type_user)" variant="flat">
-            {{ item.exposure_type_user_display || item.exposure_type_user }}
-          </v-chip>
+          <div v-if="item.exposure_type_user" class="d-flex align-center flex-wrap" style="gap: 4px">
+            <v-chip size="small" :color="getExposureTypeColor(item.exposure_type_user)" variant="flat">
+              {{ item.exposure_type_user_display || item.exposure_type_user }}
+            </v-chip>
+            <v-chip v-if="item.exposure_type_user_override" size="x-small" color="info" variant="flat">Override</v-chip>
+          </div>
           <span v-else class="text-medium-emphasis">—</span>
+        </template>
+
+        <template #item.effective_exposure_type="{ item }">
+          <v-chip size="small" :color="getExposureTypeColor(item.effective_exposure_type)" variant="outlined">
+            {{ item.effective_exposure_type_display || item.effective_exposure_type || '—' }}
+          </v-chip>
         </template>
 
         <template #item.plate_solved="{ item }">
@@ -191,7 +223,46 @@
         </template>
 
         <template #item.spectrograph="{ item }">
-          <span v-if="item.spectrograph && item.spectrograph !== 'N'">{{ getSpectrographLabel(item.spectrograph) }}</span>
+          <div class="d-flex align-center flex-wrap" style="gap: 4px">
+            <v-chip v-if="item.spectrograph && item.spectrograph !== 'N'" size="small" :color="spectrographColor(item.spectrograph)" variant="flat">
+              {{ getSpectrographLabel(item.spectrograph) }}
+            </v-chip>
+            <span v-else class="text-medium-emphasis">—</span>
+            <v-chip v-if="item.spectrograph_override" size="x-small" color="info" variant="flat">Override</v-chip>
+          </div>
+        </template>
+
+        <template #item.suggestion="{ item }">
+          <div v-if="openSuggestion(item)" class="d-flex align-center flex-wrap py-1" style="gap: 4px">
+            <v-chip v-if="openSuggestion(item).byRun" size="x-small" :color="spectrographColor(openSuggestion(item).byRun)" variant="tonal" title="Majority of the observation run">
+              Run: {{ getSpectrographLabel(openSuggestion(item).byRun) }}
+            </v-chip>
+            <v-chip v-if="openSuggestion(item).byToken" size="x-small" :color="spectrographColor(openSuggestion(item).byToken)" variant="tonal" title="Words in the file path">
+              Path: {{ getSpectrographLabel(openSuggestion(item).byToken) }}
+            </v-chip>
+            <v-icon v-if="openSuggestion(item).agree" icon="mdi-check-decagram" color="success" size="small" title="Both heuristics agree" />
+            <template v-if="canSpectrograph">
+              <v-btn
+                v-for="value in openSuggestion(item).values"
+                :key="value"
+                size="x-small"
+                color="success"
+                variant="text"
+                prepend-icon="mdi-check"
+                :loading="suggestionBusy === item.pk"
+                :title="`Set spectrograph to ${getSpectrographLabel(value)}`"
+                @click="acceptSuggestion(item, value)"
+              >{{ openSuggestion(item).values.length > 1 ? getSpectrographLabel(value) : 'Accept' }}</v-btn>
+              <v-btn
+                size="x-small"
+                variant="text"
+                prepend-icon="mdi-close"
+                :loading="suggestionBusy === item.pk"
+                title="Keep the current value (marks it as reviewed)"
+                @click="keepCurrent(item)"
+              >Keep</v-btn>
+            </template>
+          </div>
           <span v-else class="text-medium-emphasis">—</span>
         </template>
 
@@ -208,8 +279,7 @@
                 <template v-if="canExposureTypeUser || canSpectrograph || canLinkObject || canUnlinkObject || canReEvaluate || canPlateSolve || canClearOverrides">
                   <v-divider />
                 </template>
-                <v-list-item v-if="canExposureTypeUser" prepend-icon="mdi-pencil" title="Set manual exposure type" @click="openExposureTypeDialog(item)" />
-                <v-list-item v-if="canSpectrograph" prepend-icon="mdi-telescope" title="Set spectrograph" @click="openSpectrographDialog(item)" />
+                <v-list-item v-if="canEditClassification" prepend-icon="mdi-pencil" title="Edit classification" @click="openClassificationDialog(item)" />
                 <template v-if="canLinkObject || canUnlinkObject || canReEvaluate">
                   <v-divider />
                 </template>
@@ -296,21 +366,6 @@
       </v-card>
     </v-dialog>
 
-    <!-- Exposure Type dialog -->
-    <v-dialog v-model="exposureTypeDialog" max-width="500">
-      <v-card>
-        <v-card-title>{{ exposureTypeDialogBulk ? `Set Manual Exposure Type (${selectedCount} files)` : 'Set Manual Exposure Type' }}</v-card-title>
-        <v-card-text>
-          <p class="text-body-2 text-medium-emphasis mb-3">
-            A manually set exposure type takes precedence over the header and classifier values. Clear it to fall back to them.
-          </p>
-          <v-select v-model="exposureTypeForm.exposure_type_user" :items="exposureTypeItems" item-title="label" item-value="value" label="Exposure Type (Manual)" variant="outlined" clearable class="mb-2" />
-          <v-checkbox v-model="exposureTypeForm.exposure_type_user_override" label="Set override flag" />
-        </v-card-text>
-        <v-card-actions><v-spacer /><v-btn variant="text" @click="exposureTypeDialog = false">Cancel</v-btn><v-btn color="primary" :loading="exposureTypeSaving" @click="saveExposureType">Save</v-btn></v-card-actions>
-      </v-card>
-    </v-dialog>
-
     <!-- Link to Object dialog -->
     <v-dialog v-model="linkObjectDialog" max-width="520" persistent>
       <v-card>
@@ -359,22 +414,19 @@
       </v-card>
     </v-dialog>
 
-    <!-- Spectrograph dialog -->
-    <v-dialog v-model="spectrographDialog" max-width="500">
-      <v-card>
-        <v-card-title>{{ spectrographDialogBulk ? `Set Spectrograph (${selectedCount})` : 'Set Spectrograph' }}</v-card-title>
-        <v-card-text>
-          <v-select v-model="spectrographForm.spectrograph" :items="spectrographItems" item-title="label" item-value="value" label="Spectrograph" variant="outlined" clearable class="mb-2" />
-          <v-checkbox v-model="spectrographForm.spectrograph_override" label="Set override flag" />
-        </v-card-text>
-        <v-card-actions><v-spacer /><v-btn variant="text" @click="spectrographDialog = false">Cancel</v-btn><v-btn color="primary" :loading="spectrographSaving" @click="saveSpectrograph">Save</v-btn></v-card-actions>
-      </v-card>
-    </v-dialog>
+    <ClassificationEditDialog
+      v-model="classificationDialog"
+      :items="classificationItems"
+      :can-exposure-type="canExposureTypeUser"
+      :can-spectrograph="canSpectrograph"
+      @saved="onClassificationSaved"
+    />
   </v-container>
 </template>
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { api } from '@/services/api'
 import { useAuthStore } from '@/store/auth'
 import { useNotifyStore } from '@/store/notify'
@@ -382,6 +434,16 @@ import { buildDownloadPrepMessage } from '@/config/downloadJobs'
 import { pollDownloadJobUntilReady } from '@/utils/downloadJobPoll'
 import EmptyState from '@/components/ui/EmptyState.vue'
 import LoadingState from '@/components/ui/LoadingState.vue'
+import ClassificationEditDialog from '@/components/datafiles/ClassificationEditDialog.vue'
+import SpectrographSuggestionPanel from '@/components/datafiles/SpectrographSuggestionPanel.vue'
+import {
+  EXPOSURE_TYPE_ITEMS,
+  SPECTROGRAPH_ITEMS,
+  exposureTypeColor,
+  openSpectrographSuggestion,
+  spectrographColor,
+  spectrographLabel,
+} from '@/constants/classification'
 
 const notify = useNotifyStore()
 const auth = useAuthStore()
@@ -392,6 +454,12 @@ const canExposureTypeUser = computed(() => auth.hasPerm('acl_datafiles_exposure_
 const canSpectrograph = computed(() => auth.hasPerm('acl_datafiles_spectrograph'))
 const canLinkObject = computed(() => auth.hasPerm('acl_datafiles_link_object'))
 const canUnlinkObject = computed(() => auth.hasPerm('acl_datafiles_unlink_object'))
+const canEditClassification = computed(() => canExposureTypeUser.value || canSpectrograph.value)
+// Users with any data file admin ACL use the admin list (all files, not limited by run visibility)
+const useAdminList = computed(() => canPlateSolve.value || canReEvaluate.value || canClearOverrides.value
+  || canExposureTypeUser.value || canSpectrograph.value || canLinkObject.value || canUnlinkObject.value)
+const route = useRoute()
+const router = useRouter()
 const loading = ref(false)
 const items = ref([])
 const itemsPerPage = ref(25)
@@ -404,7 +472,7 @@ const ordering = computed(() => (sortOrder.value === 'desc' ? '-' : '') + sortBy
 
 const observationRuns = ref([])
 const objectNamesForTargets = ref([])
-const filters = ref({
+const emptyFilters = () => ({
   observation_run_name: null,
   file_name: null,
   file_type: null,
@@ -416,31 +484,58 @@ const filters = ref({
   exposure_type_ml: [],
   exposure_type_user: [],
   has_user_type: null,
+  exposure_disagreement: null,
+  ml_abstained: null,
   exptime_min: null,
   exptime_max: null,
   spectroscopy: null,
-  spectrograph: null,
+  spectrograph: [],
+  spectrograph_override: null,
+  has_spectrograph_suggestion: null,
+  invalid_combination: null,
   plate_solved: null,
   has_error: null,
 })
+const filters = ref(emptyFilters())
+const ARRAY_FILTERS = ['effective_exposure_type', 'exposure_type', 'exposure_type_ml', 'exposure_type_user', 'spectrograph']
+const BOOLEAN_FILTERS = ['has_user_type', 'exposure_disagreement', 'ml_abstained', 'spectroscopy', 'spectrograph_override',
+  'invalid_combination', 'plate_solved', 'has_error']
+const NUMBER_FILTERS = ['exptime_min', 'exptime_max']
 
-const spectrographItems = [
-  { label: 'DADOS', value: 'D' },
-  { label: 'BACHES', value: 'B' },
-  { label: 'EINSTEIN_TOWER', value: 'E' },
-  { label: 'None', value: 'N' },
+const yesNoItems = [{ title: 'Yes', value: true }, { title: 'No', value: false }]
+const suggestionFilterItems = [
+  { title: 'Any heuristic', value: 'any' },
+  { title: 'Run majority', value: 'run' },
+  { title: 'Path token', value: 'token' },
+  { title: 'Both agree', value: 'both' },
 ]
 
-const exposureTypeItems = [
-  { label: 'Bias', value: 'BI' },
-  { label: 'Dark', value: 'DA' },
-  { label: 'Flat', value: 'FL' },
-  { label: 'Light', value: 'LI' },
-  { label: 'Wave', value: 'WA' },
-  { label: 'Unknown', value: 'UK' },
+// Presets set a filter combination for a review task; filters can be refined afterwards
+const PRESETS = [
+  { key: 'all', label: 'All files', icon: 'mdi-file-multiple', filters: {} },
+  { key: 'exposure_review', label: 'Exposure type review', icon: 'mdi-help-circle-outline', perm: 'exposure',
+    filters: { effective_exposure_type: ['UK'], has_user_type: false } },
+  { key: 'disagreement', label: 'Header ≠ classifier', icon: 'mdi-compare-horizontal', perm: 'exposure',
+    filters: { exposure_disagreement: true } },
+  { key: 'spectrograph_files', label: 'Spectrograph files', icon: 'mdi-telescope', perm: 'spectrograph',
+    filters: { spectrograph: ['D', 'B', 'E'] } },
+  { key: 'spectrograph_suggestions', label: 'Spectrograph suggestions', icon: 'mdi-lightbulb-on-outline', perm: 'spectrograph',
+    filters: { has_spectrograph_suggestion: 'any' } },
+  { key: 'invalid', label: 'Invalid combinations', icon: 'mdi-alert-outline', perm: 'classification',
+    filters: { invalid_combination: true } },
 ]
+const visiblePresets = computed(() => PRESETS.filter(p => !p.perm
+  || (p.perm === 'exposure' && canExposureTypeUser.value)
+  || (p.perm === 'spectrograph' && canSpectrograph.value)
+  || (p.perm === 'classification' && canEditClassification.value)))
+const activePreset = ref('all')
+const suggestionPanel = ref(null)
+const showSuggestions = computed(() => !!filters.value.has_spectrograph_suggestion)
 
-const headers = [
+const spectrographItems = SPECTROGRAPH_ITEMS
+const exposureTypeItems = EXPOSURE_TYPE_ITEMS
+
+const headers = computed(() => [
   { title: 'File Name', key: 'file_name', sortable: true },
   { title: 'Run', key: 'observation_run_name', sortable: true },
   { title: 'File Type', key: 'file_type', sortable: true },
@@ -449,13 +544,16 @@ const headers = [
   { title: 'Exp. Type (Header)', key: 'exposure_type', sortable: true },
   { title: 'Exp. Type (Classifier)', key: 'exposure_type_ml', sortable: true },
   { title: 'Exp. Type (Manual)', key: 'exposure_type_user', sortable: true },
+  { title: 'Exp. Type (Effective)', key: 'effective_exposure_type', sortable: false },
   { title: 'Exp. Time', key: 'exptime', sortable: true },
   { title: 'Plate', key: 'plate_solved', sortable: true },
   { title: 'Spectr.', key: 'spectrograph', sortable: true },
+  ...(showSuggestions.value ? [{ title: 'Suggestion', key: 'suggestion', sortable: false }] : []),
   { title: 'Actions', key: 'actions', sortable: false, width: '120px' },
-]
+])
 
-const busy = ref({ plateSolve: false, reEvaluate: false, clearOverrides: false, linkObject: false, unlinkObject: false, download: false })
+const busy = ref({ plateSolve: false, reEvaluate: false, clearOverrides: false, linkObject: false, unlinkObject: false, download: false, suggestions: false })
+const suggestionBusy = ref(null)
 const triggeringSingle = ref(null)
 const reEvalSingle = ref(null)
 const clearOverrideSingle = ref(null)
@@ -482,15 +580,8 @@ const wcsDialog = ref(false)
 const wcsTitle = ref('')
 const wcsData = ref(null)
 
-const exposureTypeDialog = ref(false)
-const exposureTypeDialogBulk = ref(false)
-const exposureTypeSaving = ref(false)
-const exposureTypeForm = ref({ pk: null, exposure_type_user: null, exposure_type_user_override: true })
-
-const spectrographDialog = ref(false)
-const spectrographDialogBulk = ref(false)
-const spectrographSaving = ref(false)
-const spectrographForm = ref({ pk: null, spectrograph: null, spectrograph_override: true })
+const classificationDialog = ref(false)
+const classificationItems = ref([])
 
 const linkObjectDialog = ref(false)
 const linkObjectDialogBulk = ref(false)
@@ -595,12 +686,9 @@ const wcsEntries = computed(() => {
 
 function onUpdateSelected(val) { selected.value = Array.isArray(val) ? val : [] }
 
-function getExposureTypeColor(t) {
-  const c = { BI: 'blue', DA: 'grey-darken-2', FL: 'green', LI: 'orange', WA: 'purple', UK: 'grey' }
-  return c[t] || 'grey'
-}
-
-function getSpectrographLabel(v) { return (spectrographItems.find(i => i.value === v) || {}).label || v }
+const getExposureTypeColor = exposureTypeColor
+const getSpectrographLabel = spectrographLabel
+const openSuggestion = openSpectrographSuggestion
 
 function formatHeaderValue(v) {
   if (v == null) return '—'
@@ -610,54 +698,53 @@ function formatHeaderValue(v) {
 
 function buildParams() {
   const p = { page: currentPage.value, limit: itemsPerPage.value === -1 ? 10000 : itemsPerPage.value, ordering: ordering.value }
-  if (filters.value.observation_run_name) p.observation_run_name = filters.value.observation_run_name
-  if (filters.value.file_name) p.file_name = filters.value.file_name
-  if (filters.value.file_type) p.file_type = filters.value.file_type
-  if (filters.value.instrument) p.instrument = filters.value.instrument
-  if (filters.value.telescope) p.telescope = filters.value.telescope
-  if (filters.value.main_target) p.main_target = filters.value.main_target
-  if (filters.value.effective_exposure_type?.length) p.effective_exposure_type = filters.value.effective_exposure_type
-  if (filters.value.exposure_type?.length) p.exposure_type = filters.value.exposure_type
-  if (filters.value.exposure_type_ml?.length) p.exposure_type_ml = filters.value.exposure_type_ml
-  if (filters.value.exposure_type_user?.length) p.exposure_type_user = filters.value.exposure_type_user
-  if (filters.value.has_user_type !== null && filters.value.has_user_type !== undefined) p.has_user_type = filters.value.has_user_type
-  if (filters.value.exptime_min != null) p.exptime_min = filters.value.exptime_min
-  if (filters.value.exptime_max != null) p.exptime_max = filters.value.exptime_max
-  if (filters.value.spectroscopy !== null && filters.value.spectroscopy !== undefined) p.spectroscopy = filters.value.spectroscopy
-  if (filters.value.spectrograph) p.spectrograph = filters.value.spectrograph
-  if (filters.value.plate_solved !== null && filters.value.plate_solved !== undefined) p.plate_solved = filters.value.plate_solved
-  if (filters.value.has_error !== null && filters.value.has_error !== undefined) p.has_error = filters.value.has_error
+  for (const [key, value] of Object.entries(filters.value)) {
+    if (Array.isArray(value) ? value.length : (value !== null && value !== undefined && value !== '')) p[key] = value
+  }
   return p
 }
 
-function resetFilters() {
-  filters.value = {
-    observation_run_name: null,
-    file_name: null,
-    file_type: null,
-    instrument: null,
-    telescope: null,
-    main_target: null,
-    effective_exposure_type: [],
-    exposure_type: [],
-    exposure_type_ml: [],
-    exposure_type_user: [],
-    has_user_type: null,
-    exptime_min: null,
-    exptime_max: null,
-    spectroscopy: null,
-    spectrograph: null,
-    plate_solved: null,
-    has_error: null,
+// URL query <-> filters, so presets and filtered views can be linked and survive a reload
+function filtersToQuery() {
+  const q = {}
+  if (activePreset.value && activePreset.value !== 'all') q.preset = activePreset.value
+  for (const [key, value] of Object.entries(filters.value)) {
+    if (Array.isArray(value) ? value.length : (value !== null && value !== undefined && value !== '')) q[key] = value
   }
+  return q
+}
+
+function filtersFromQuery(query) {
+  const f = emptyFilters()
+  for (const key of Object.keys(f)) {
+    const raw = query[key]
+    if (raw === undefined || raw === null || raw === '') continue
+    if (ARRAY_FILTERS.includes(key)) f[key] = Array.isArray(raw) ? raw : [raw]
+    else if (BOOLEAN_FILTERS.includes(key)) f[key] = raw === true || raw === 'true'
+    else if (NUMBER_FILTERS.includes(key)) f[key] = Number(raw)
+    else f[key] = Array.isArray(raw) ? raw[0] : raw
+  }
+  return f
+}
+
+function applyPreset(key) {
+  const preset = PRESETS.find(p => p.key === key) || PRESETS[0]
+  activePreset.value = preset.key
+  filters.value = { ...emptyFilters(), ...preset.filters }
+  selected.value = []
   currentPage.value = 1
   fetchFiles()
+}
+
+function resetFilters() {
+  applyPreset('all')
 }
 
 async function fetchFiles() {
   loading.value = true
   try {
-    const res = await api.getAllDataFiles(buildParams())
+    router.replace({ query: filtersToQuery() })
+    const res = await (useAdminList.value ? api.getAdminDataFiles : api.getAllDataFiles)(buildParams())
     items.value = res.results || []
     totalItems.value = res.count ?? res.total ?? items.value.length
   } catch (e) {
@@ -688,6 +775,9 @@ const keyMap = {
   main_target: 'main_target',
   instrument: 'instrument',
   exposure_type: 'exposure_type',
+  exposure_type_ml: 'exposure_type_ml',
+  exposure_type_user: 'exposure_type_user',
+  spectrograph: 'spectrograph',
   exptime: 'exptime',
   plate_solved: 'plate_solved',
 }
@@ -848,56 +938,97 @@ async function bulkDownloadSelected() {
   }
 }
 
-function openExposureTypeDialog(item) {
-  exposureTypeDialogBulk.value = false
-  exposureTypeForm.value = { pk: item.pk, exposure_type_user: item.exposure_type_user || null, exposure_type_user_override: true }
-  exposureTypeDialog.value = true
+function openClassificationDialog(item) {
+  classificationItems.value = item ? [item] : selected.value.filter(row => row && typeof row === 'object')
+  if (!classificationItems.value.length) return
+  classificationDialog.value = true
 }
 
-function openBulkExposureTypeDialog() {
-  exposureTypeDialogBulk.value = true
-  exposureTypeForm.value = { pk: null, exposure_type_user: null, exposure_type_user_override: true }
-  exposureTypeDialog.value = true
+async function onClassificationSaved() {
+  if (classificationItems.value.length > 1) selected.value = []
+  await fetchFiles()
 }
 
-async function saveExposureType() {
-  exposureTypeSaving.value = true
+async function setSpectrographs(groups, message) {
+  // groups: Map value -> [ids]; sets the spectrograph manually (override) per value
+  for (const [value, ids] of groups) {
+    await api.updateClassification(ids, { spectrograph: value, spectrograph_override: true })
+  }
+  const count = [...groups.values()].reduce((n, ids) => n + ids.length, 0)
+  notify.success(`${message}: ${count} file(s)`)
+  suggestionPanel.value?.load()
+  await fetchFiles()
+}
+
+async function acceptSuggestion(item, value) {
+  suggestionBusy.value = item.pk
   try {
-    if (exposureTypeDialogBulk.value) {
-      for (const id of selectedIds.value) {
-        await api.updateExposureTypeUser(id, {
-          exposure_type_user: exposureTypeForm.value.exposure_type_user,
-          exposure_type_user_override: exposureTypeForm.value.exposure_type_user_override,
-        })
-      }
-      notify.success(`Updated ${selectedIds.value.length} file(s)`)
-      selected.value = []
-    } else {
-      await api.updateExposureTypeUser(exposureTypeForm.value.pk, {
-        exposure_type_user: exposureTypeForm.value.exposure_type_user,
-        exposure_type_user_override: exposureTypeForm.value.exposure_type_user_override,
-      })
-      notify.success('Exposure type updated')
-    }
-    exposureTypeDialog.value = false
-    await fetchFiles()
+    await setSpectrographs(new Map([[value, [item.pk]]]), 'Suggestion accepted')
   } catch (e) {
-    notify.error('Failed to update exposure type')
+    notify.error('Failed to accept the suggestion')
   } finally {
-    exposureTypeSaving.value = false
+    suggestionBusy.value = null
   }
 }
 
-function openSpectrographDialog(item) {
-  spectrographDialogBulk.value = false
-  spectrographForm.value = { pk: item.pk, spectrograph: item.spectrograph && item.spectrograph !== 'N' ? item.spectrograph : null, spectrograph_override: true }
-  spectrographDialog.value = true
+async function keepCurrent(item) {
+  suggestionBusy.value = item.pk
+  try {
+    await setSpectrographs(new Map([[item.spectrograph || 'N', [item.pk]]]), 'Current value kept')
+  } catch (e) {
+    notify.error('Failed to keep the current value')
+  } finally {
+    suggestionBusy.value = null
+  }
 }
 
-function openBulkSpectrographDialog() {
-  spectrographDialogBulk.value = true
-  spectrographForm.value = { pk: null, spectrograph: null, spectrograph_override: true }
-  spectrographDialog.value = true
+function groupSelected(valueOf) {
+  const groups = new Map()
+  for (const row of selected.value) {
+    const value = row && typeof row === 'object' ? valueOf(row) : null
+    if (!value) continue
+    if (!groups.has(value)) groups.set(value, [])
+    groups.get(value).push(row.pk)
+  }
+  return groups
+}
+
+async function bulkAcceptSuggestions() {
+  // Rows whose heuristics disagree are skipped
+  const groups = groupSelected(row => {
+    const s = openSuggestion(row)
+    return s && s.values.length === 1 ? s.values[0] : null
+  })
+  if (!groups.size) {
+    notify.warning('No selected file has a unique open suggestion')
+    return
+  }
+  busy.value.suggestions = true
+  try {
+    await setSpectrographs(groups, 'Suggestions accepted')
+    selected.value = []
+  } catch (e) {
+    notify.error('Failed to accept the suggestions')
+  } finally {
+    busy.value.suggestions = false
+  }
+}
+
+async function bulkKeepCurrent() {
+  const groups = groupSelected(row => (openSuggestion(row) ? (row.spectrograph || 'N') : null))
+  if (!groups.size) {
+    notify.warning('No selected file has an open suggestion')
+    return
+  }
+  busy.value.suggestions = true
+  try {
+    await setSpectrographs(groups, 'Current values kept')
+    selected.value = []
+  } catch (e) {
+    notify.error('Failed to keep the current values')
+  } finally {
+    busy.value.suggestions = false
+  }
 }
 
 function openLinkObjectDialog(item) {
@@ -992,29 +1123,6 @@ async function confirmUnlinkFromObjects() {
   }
 }
 
-async function saveSpectrograph() {
-  spectrographSaving.value = true
-  try {
-    const payload = { spectrograph: spectrographForm.value.spectrograph || 'N', spectrograph_override: spectrographForm.value.spectrograph_override }
-    if (spectrographDialogBulk.value) {
-      for (const id of selectedIds.value) {
-        await api.updateSpectrograph(id, payload)
-      }
-      notify.success(`Updated ${selectedIds.value.length} file(s)`)
-      selected.value = []
-    } else {
-      await api.updateSpectrograph(spectrographForm.value.pk, payload)
-      notify.success('Spectrograph updated')
-    }
-    spectrographDialog.value = false
-    await fetchFiles()
-  } catch (e) {
-    notify.error('Failed to update spectrograph')
-  } finally {
-    spectrographSaving.value = false
-  }
-}
-
 async function loadObservationRuns() {
   try {
     const res = await api.getAllObservationRuns()
@@ -1036,6 +1144,9 @@ async function loadObjectNamesForTargets() {
 onMounted(() => {
   loadObservationRuns()
   loadObjectNamesForTargets()
+  const preset = PRESETS.find(p => p.key === route.query.preset)
+  activePreset.value = preset ? preset.key : 'all'
+  filters.value = filtersFromQuery(route.query)
   fetchFiles()
 })
 </script>

@@ -117,8 +117,8 @@ class ExposureTypeUserSpectrographTest(APITestCase):
         )
         user = User.objects.create_user(username='curator', password='pw')
         _grant(user, 'acl_datafiles_exposure_type_user')
-        self.client.get('/api/users/auth/csrf/')
         self.client.force_login(user)
+        self.client.get('/api/users/auth/csrf/')
 
     def _patch(self, payload):
         token = self.client.cookies.get(settings.CSRF_COOKIE_NAME)

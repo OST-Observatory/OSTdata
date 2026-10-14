@@ -1419,3 +1419,20 @@ def process_aux_objects_queue(self):
         logger.info('Aux objects queue: %s', result)
     return result
 
+
+
+@shared_task(bind=True)
+def recompute_spectrograph_suggestions(self):
+    """
+    Recompute the spectrograph suggestions (run majority + path tokens) and their evaluation on manually
+    reviewed files (see obs_run/spectrograph_heuristics.py). Scheduled nightly or triggered from the admin UI.
+    """
+    from obs_run.spectrograph_heuristics import recompute_suggestions
+
+    result = recompute_suggestions()
+    summary = {
+        'suggestions': len(result['suggestions']),
+        'reviewed_files': result['report']['reviewed_files'],
+    }
+    logger.info(f'Spectrograph suggestions recomputed: {summary}')
+    return summary

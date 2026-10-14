@@ -516,3 +516,38 @@ class DownloadJob(models.Model):
 
     def __str__(self):
         return f"DownloadJob #{self.pk} ({self.status})"
+
+
+class SpectrographSuggestion(models.Model):
+    """
+    Spectrograph suggested by the heuristics in obs_run/spectrograph_heuristics.py for a file without a
+    manually set spectrograph. Recomputed as a whole; only files where a heuristic differs are stored.
+    """
+    datafile = models.OneToOneField(
+        DataFile,
+        on_delete=models.CASCADE,
+        related_name='spectrograph_suggestion',
+    )
+    #   Majority spectrograph of the file's run (None if no clear majority or equal to the file's value)
+    run_majority = models.CharField(
+        max_length=1, choices=DataFile.spectrograph_possibilities, null=True, blank=True,
+    )
+    #   Spectrograph indicated by words in the file path
+    path_token = models.CharField(
+        max_length=1, choices=DataFile.spectrograph_possibilities, null=True, blank=True,
+    )
+    computed_at = models.DateTimeField()
+
+    def __str__(self):
+        return f"SpectrographSuggestion(datafile={self.datafile_id}, run={self.run_majority}, token={self.path_token})"
+
+
+class HeuristicReport(models.Model):
+    """Latest result of a heuristic evaluation (e.g. spectrograph suggestions), shown in the admin UI."""
+    name = models.CharField(max_length=100, unique=True)
+    computed_at = models.DateTimeField()
+    params = models.JSONField(default=dict)
+    data = models.JSONField(default=dict)
+
+    def __str__(self):
+        return f"HeuristicReport({self.name}, {self.computed_at:%Y-%m-%d %H:%M})"

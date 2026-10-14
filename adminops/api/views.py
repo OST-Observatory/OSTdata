@@ -12,6 +12,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 
+from adminops.classification import UNCHANGED, ClassificationError, update_classification
 from adminops.redis_helpers import (
     aux_objects_task_enabled_get as _aux_objects_task_enabled_get,
 )
@@ -30,7 +31,6 @@ from obs_run.api.serializers import DataFileSerializer
 from obs_run.api.views import DataFilesPagination
 from obs_run.models import DataFile, ObservationRun
 from obs_run.plate_solving import PlateSolvingService, solve_and_update_datafile
-from obs_run.spectrograph import automatic_spectrograph
 from obs_run.tasks import (
     cleanup_expired_downloads,
     cleanup_orphan_objects,
@@ -1199,82 +1199,6 @@ def admin_reanalyse_object(request, object_id):
 
 
 @extend_schema(
-    summary='Get exposure type discrepancies',
-    parameters=[
-        OpenApiParameter('header_type', str, OpenApiParameter.QUERY, description='Filter by header exposure type'),
-        OpenApiParameter('ml_type', str, OpenApiParameter.QUERY, description='Filter by ML exposure type'),
-        OpenApiParameter('observation_run', int, OpenApiParameter.QUERY, description='Filter by observation run ID'),
-        OpenApiParameter('observation_run_name', str, OpenApiParameter.QUERY, description='Filter by observation run name (case-insensitive partial match)'),
-        OpenApiParameter('has_user_type', bool, OpenApiParameter.QUERY, description='Filter by presence of user-set type'),
-        OpenApiParameter('file_name', str, OpenApiParameter.QUERY, description='Filter by file name (case-insensitive partial match)'),
-    ],
-    responses=JSON_OBJECT_RESPONSE)
-@api_view(['GET'])
-@permission_classes([IsAuthenticated, HasPerm('acl_datafiles_exposure_type_user')])
-def admin_get_exposure_type_discrepancies(request):
-    """
-    Get DataFiles where header-based exposure_type differs from ML-classified exposure_type_ml.
-    Supports filtering by header_type, ml_type, observation_run, and has_user_type.
-    """
-    # Get files where:
-    # 1. exposure_type_ml is NULL (not yet classified), OR
-    # 2. exposure_type_ml is empty string, OR
-    # 3. exposure_type_ml is 'UK' (Unknown), OR
-    # 4. exposure_type != exposure_type_ml (discrepancy)
-    queryset = DataFile.objects.filter(
-        Q(exposure_type_ml__isnull=True) | 
-        Q(exposure_type_ml='') | 
-        Q(exposure_type_ml='UK') | 
-        ~Q(exposure_type=F('exposure_type_ml'))
-    ).select_related('observation_run')
-
-    # Filter by header_type
-    header_type = request.query_params.get('header_type')
-    if header_type:
-        queryset = queryset.filter(exposure_type=header_type)
-
-    # Filter by ml_type
-    ml_type = request.query_params.get('ml_type')
-    if ml_type:
-        queryset = queryset.filter(exposure_type_ml=ml_type)
-
-    # Filter by observation_run (by ID or name)
-    observation_run_id = request.query_params.get('observation_run')
-    observation_run_name = request.query_params.get('observation_run_name')
-    if observation_run_id:
-        try:
-            queryset = queryset.filter(observation_run_id=int(observation_run_id))
-        except ValueError:
-            pass
-    elif observation_run_name:
-        queryset = queryset.filter(observation_run__name__icontains=observation_run_name)
-
-    # Filter by has_user_type
-    has_user_type = request.query_params.get('has_user_type')
-    if has_user_type is not None:
-        has_user_type_bool = str(has_user_type).lower() in ('true', '1', 'yes')
-        if has_user_type_bool:
-            queryset = queryset.exclude(Q(exposure_type_user__isnull=True) | Q(exposure_type_user=''))
-        else:
-            queryset = queryset.filter(Q(exposure_type_user__isnull=True) | Q(exposure_type_user=''))
-
-    # Filter by file_name (case-insensitive partial match on datafile path)
-    file_name = request.query_params.get('file_name')
-    if file_name:
-        queryset = queryset.filter(datafile__icontains=file_name)
-
-    # Pagination
-    paginator = DataFilesPagination()
-    page = paginator.paginate_queryset(queryset, request)
-    if page is not None:
-        serializer = DataFileSerializer(page, many=True)
-        return paginator.get_paginated_response(serializer.data)
-
-    serializer = DataFileSerializer(queryset, many=True)
-    return Response(serializer.data)
-
-
-@extend_schema(
     summary='Update user-set exposure type',
     parameters=[
         OpenApiParameter('pk', int, OpenApiParameter.PATH),
@@ -1286,8 +1210,7 @@ def admin_get_exposure_type_discrepancies(request):
 def admin_update_exposure_type_user(request, pk):
     """
     Update the user-set exposure_type_user for a DataFile.
-    Only accessible to admin/staff users.
-    
+
     Body:
     {
         "exposure_type_user": "LI",
@@ -1295,123 +1218,22 @@ def admin_update_exposure_type_user(request, pk):
     }
     """
     try:
-        datafile = DataFile.objects.get(pk=pk)
+        datafile = DataFile.objects.select_related('observation_run').get(pk=pk)
     except DataFile.DoesNotExist:
         return Response({"detail": "Not found"}, status=404)
 
-    exposure_type_user = request.data.get('exposure_type_user')
-    exposure_type_user_override = request.data.get('exposure_type_user_override', False)
+    override = request.data.get('exposure_type_user_override', False)
+    try:
+        update_classification(
+            [datafile],
+            exposure_type_user=request.data.get('exposure_type_user') if 'exposure_type_user' in request.data else UNCHANGED,
+            exposure_type_user_override=override if isinstance(override, bool) else None,
+        )
+    except ClassificationError as e:
+        return Response({"detail": str(e)}, status=400)
 
-    # Validate exposure_type_user
-    if exposure_type_user is not None:
-        valid_types = [choice[0] for choice in DataFile.EXPOSURE_TYPE_POSSIBILITIES]
-        if exposure_type_user not in valid_types:
-            return Response(
-                {"detail": f"Invalid exposure_type_user. Must be one of: {valid_types}"},
-                status=400
-            )
-        datafile.exposure_type_user = exposure_type_user
-    elif exposure_type_user is None and 'exposure_type_user' in request.data:
-        # Explicitly set to None to clear the value
-        datafile.exposure_type_user = None
-
-    # Update override flag
-    if isinstance(exposure_type_user_override, bool):
-        datafile.exposure_type_user_override = exposure_type_user_override
-
-    # Bias/dark frames carry no spectrograph (manually set spectrographs are kept)
-    spectrograph_before = datafile.spectrograph
-    datafile.spectrograph = automatic_spectrograph(datafile)
-
-    from ostdata.history_reason import REASON_ADMIN_EXPOSURE_TYPE_USER, save_with_reason
-    save_with_reason(
-        datafile,
-        REASON_ADMIN_EXPOSURE_TYPE_USER,
-        update_fields=['exposure_type_user', 'exposure_type_user_override', 'spectrograph'],
-    )
-    if datafile.spectrograph != spectrograph_before and datafile.observation_run:
-        update_observation_run_photometry_spectroscopy(datafile.observation_run)
-        for obj in datafile.object_set.all():
-            update_object_photometry_spectroscopy(obj)
-
-    # Re-evaluate object association when set to Light (LI) so coordinate-based
-    # resolution can run for files that were previously misclassified
-    if exposure_type_user == 'LI' and datafile.observation_run:
-        try:
-            evaluate_data_file(
-                datafile,
-                datafile.observation_run,
-                skip_if_object_has_overrides=True,
-            )
-            update_observation_run_photometry_spectroscopy(datafile.observation_run)
-            for obj in datafile.object_set.all():
-                update_object_photometry_spectroscopy(obj)
-        except Exception as e:
-            logger.warning(f'Re-evaluation after exposure_type_user=LI failed for datafile {datafile.pk}: {e}')
-        datafile.refresh_from_db()
-
+    datafile.refresh_from_db()
     serializer = DataFileSerializer(datafile)
-    return Response(serializer.data)
-
-
-@extend_schema(
-    summary='Get DataFiles for spectrograph management',
-    parameters=[
-        OpenApiParameter('spectrograph', str, OpenApiParameter.QUERY, description='Filter by spectrograph type'),
-        OpenApiParameter('exposure_type', str, OpenApiParameter.QUERY, description='Filter by exposure type'),
-        OpenApiParameter('observation_run', int, OpenApiParameter.QUERY, description='Filter by observation run ID'),
-        OpenApiParameter('observation_run_name', str, OpenApiParameter.QUERY, description='Filter by observation run name (case-insensitive partial match)'),
-        OpenApiParameter('file_name', str, OpenApiParameter.QUERY, description='Filter by file name (case-insensitive partial match)'),
-    ],
-    responses=JSON_OBJECT_RESPONSE)
-@api_view(['GET'])
-@permission_classes([IsAuthenticated, HasPerm('acl_datafiles_spectrograph')])
-def admin_get_spectrograph_files(request):
-    """
-    Get DataFiles where spectrograph is set or exposure_type is WAVE.
-    Supports filtering by spectrograph, exposure_type, observation_run, and file_name.
-    """
-    # Get files where:
-    # 1. spectrograph is set (not 'N' / NONE), OR
-    # 2. exposure_type is 'WAVE'
-    queryset = DataFile.objects.filter(
-        Q(spectrograph__in=['D', 'B', 'E']) | Q(exposure_type='WA')
-    ).select_related('observation_run')
-
-    # Filter by spectrograph
-    spectrograph = request.query_params.get('spectrograph')
-    if spectrograph:
-        queryset = queryset.filter(spectrograph=spectrograph)
-
-    # Filter by exposure_type
-    exposure_type = request.query_params.get('exposure_type')
-    if exposure_type:
-        queryset = queryset.filter(exposure_type=exposure_type)
-
-    # Filter by observation_run (by ID or name)
-    observation_run_id = request.query_params.get('observation_run')
-    observation_run_name = request.query_params.get('observation_run_name')
-    if observation_run_id:
-        try:
-            queryset = queryset.filter(observation_run_id=int(observation_run_id))
-        except ValueError:
-            pass
-    elif observation_run_name:
-        queryset = queryset.filter(observation_run__name__icontains=observation_run_name)
-
-    # Filter by file_name (case-insensitive partial match on datafile path)
-    file_name = request.query_params.get('file_name')
-    if file_name:
-        queryset = queryset.filter(datafile__icontains=file_name)
-
-    # Pagination
-    paginator = DataFilesPagination()
-    page = paginator.paginate_queryset(queryset, request)
-    if page is not None:
-        serializer = DataFileSerializer(page, many=True)
-        return paginator.get_paginated_response(serializer.data)
-
-    serializer = DataFileSerializer(queryset, many=True)
     return Response(serializer.data)
 
 
@@ -1427,8 +1249,7 @@ def admin_get_spectrograph_files(request):
 def admin_update_spectrograph(request, pk):
     """
     Update the spectrograph property for a DataFile.
-    Only accessible to admin/staff users.
-    
+
     Body:
     {
         "spectrograph": "D",
@@ -1436,48 +1257,125 @@ def admin_update_spectrograph(request, pk):
     }
     """
     try:
-        datafile = DataFile.objects.get(pk=pk)
+        datafile = DataFile.objects.select_related('observation_run').get(pk=pk)
     except DataFile.DoesNotExist:
         return Response({"detail": "Not found"}, status=404)
 
-    spectrograph = request.data.get('spectrograph')
-    spectrograph_override = request.data.get('spectrograph_override', False)
+    override = request.data.get('spectrograph_override', False)
+    try:
+        update_classification(
+            [datafile],
+            spectrograph=request.data.get('spectrograph') if 'spectrograph' in request.data else UNCHANGED,
+            spectrograph_override=override if isinstance(override, bool) else None,
+        )
+    except ClassificationError as e:
+        return Response({"detail": str(e)}, status=400)
 
-    # Validate spectrograph
-    if spectrograph is not None:
-        valid_spectrographs = [choice[0] for choice in DataFile.spectrograph_possibilities]
-        if spectrograph not in valid_spectrographs:
-            return Response(
-                {"detail": f"Invalid spectrograph. Must be one of: {valid_spectrographs}"},
-                status=400
-            )
-        datafile.spectrograph = spectrograph
-    elif spectrograph is None and 'spectrograph' in request.data:
-        # Explicitly set to 'N' (NONE) to clear the value
-        datafile.spectrograph = 'N'
-
-    # Update override flag
-    if isinstance(spectrograph_override, bool):
-        datafile.spectrograph_override = spectrograph_override
-
-    from ostdata.history_reason import REASON_ADMIN_SPECTROGRAPH, save_with_reason
-    save_with_reason(
-        datafile,
-        REASON_ADMIN_SPECTROGRAPH,
-        update_fields=['spectrograph', 'spectrograph_override'],
-    )
-
-    # Automatically update photometry/spectroscopy flags for associated observation runs and objects
-    # Update observation run
-    if datafile.observation_run:
-        update_observation_run_photometry_spectroscopy(datafile.observation_run)
-    
-    # Update all associated objects
-    for obj in datafile.object_set.all():
-        update_object_photometry_spectroscopy(obj)
-
+    datafile.refresh_from_db()
     serializer = DataFileSerializer(datafile)
     return Response(serializer.data)
+
+
+MAX_BULK_CLASSIFICATION_IDS = 10000
+
+
+@extend_schema(
+    summary='Set manual exposure type and/or spectrograph for several files',
+    responses=JSON_OBJECT_RESPONSE,
+    request=EmptyObjectSerializer)
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def admin_update_classification(request):
+    """
+    Bulk update of the manual classification. Only keys present in the body are changed.
+
+    Body:
+    {
+        "ids": [1, 2, 3],
+        "exposure_type_user": "DA",          # null clears the manual type (needs acl_datafiles_exposure_type_user)
+        "exposure_type_user_override": true,
+        "spectrograph": "N",                 # needs acl_datafiles_spectrograph
+        "spectrograph_override": true
+    }
+    """
+    data = request.data
+    ids = data.get('ids')
+    if not isinstance(ids, list) or not ids:
+        return Response({'detail': 'ids must be a non-empty list'}, status=400)
+    if len(ids) > MAX_BULK_CLASSIFICATION_IDS:
+        return Response({'detail': f'At most {MAX_BULK_CLASSIFICATION_IDS} ids per request'}, status=400)
+
+    exposure_keys = {'exposure_type_user', 'exposure_type_user_override'} & set(data)
+    spectrograph_keys = {'spectrograph', 'spectrograph_override'} & set(data)
+    if not exposure_keys and not spectrograph_keys:
+        return Response({'detail': 'Nothing to update'}, status=400)
+    if exposure_keys and not user_has_acl(request.user, 'acl_datafiles_exposure_type_user'):
+        return Response({'detail': 'Missing permission users.acl_datafiles_exposure_type_user'}, status=403)
+    if spectrograph_keys and not user_has_acl(request.user, 'acl_datafiles_spectrograph'):
+        return Response({'detail': 'Missing permission users.acl_datafiles_spectrograph'}, status=403)
+
+    def _flag(key):
+        value = data.get(key)
+        return value if isinstance(value, bool) else None
+
+    datafiles = DataFile.objects.filter(pk__in=ids).select_related('observation_run').prefetch_related('object_set')
+    try:
+        updated = update_classification(
+            datafiles,
+            exposure_type_user=data.get('exposure_type_user') if 'exposure_type_user' in data else UNCHANGED,
+            exposure_type_user_override=_flag('exposure_type_user_override'),
+            spectrograph=data.get('spectrograph') if 'spectrograph' in data else UNCHANGED,
+            spectrograph_override=_flag('spectrograph_override'),
+        )
+    except ClassificationError as e:
+        return Response({'detail': str(e)}, status=400)
+    return Response({'updated': updated, 'requested': len(ids)})
+
+
+@extend_schema(
+    summary='Spectrograph suggestions: evaluation of the heuristics',
+    responses=JSON_OBJECT_RESPONSE)
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, HasPerm('acl_datafiles_spectrograph')])
+def admin_spectrograph_suggestions_evaluation(request):
+    """
+    Latest evaluation of the spectrograph heuristics (run majority, path tokens) on manually reviewed files,
+    plus the number of open suggestions (see obs_run/spectrograph_heuristics.py).
+    """
+    from obs_run.models import HeuristicReport, SpectrographSuggestion
+    from obs_run.spectrograph_heuristics import REPORT_NAME
+
+    report = HeuristicReport.objects.filter(name=REPORT_NAME).first()
+    if report is None:
+        return Response({'computed_at': None, 'params': {}, 'data': None})
+    open_queryset = SpectrographSuggestion.objects.filter(datafile__spectrograph_override=False)
+    open_now = {
+        'run_majority': open_queryset.exclude(run_majority__isnull=True)
+                                     .exclude(run_majority=F('datafile__spectrograph')).count(),
+        'path_token': open_queryset.exclude(path_token__isnull=True)
+                                   .exclude(path_token=F('datafile__spectrograph')).count(),
+    }
+    return Response({
+        'computed_at': report.computed_at,
+        'params': report.params,
+        'data': report.data,
+        'open_now': open_now,
+    })
+
+
+@extend_schema(
+    summary='Spectrograph suggestions: recompute in the background',
+    responses=JSON_OBJECT_ACCEPTED,
+    request=EmptyObjectSerializer)
+@api_view(['POST'])
+@permission_classes([IsAuthenticated, HasPerm('acl_datafiles_spectrograph')])
+def admin_spectrograph_suggestions_recompute(request):
+    """Queue the recomputation of the spectrograph suggestions and their evaluation."""
+    from obs_run.tasks import recompute_spectrograph_suggestions
+
+    result = _celery_delay(recompute_spectrograph_suggestions)
+    task_id = getattr(result, 'id', None)
+    return Response({'queued': True, 'task_id': str(task_id) if task_id else None}, status=202)
 
 
 @extend_schema(
@@ -1751,14 +1649,16 @@ def admin_list_all_datafiles(request):
         return Response({'detail': 'Forbidden'}, status=403)
     from adminops.api.filters import AdminDataFileFilter
 
-    queryset = DataFile.objects.select_related('observation_run').prefetch_related('object_set').all()
+    queryset = (DataFile.objects.select_related('observation_run', 'spectrograph_suggestion')
+                .prefetch_related('object_set', 'tags').all())
     filterset = AdminDataFileFilter(request.query_params, queryset=queryset, request=request)
     queryset = filterset.qs
 
     # Ordering
     ordering = request.query_params.get('ordering', '-pk')
     allowed_sort = ['pk', 'datafile', 'observation_run', 'file_type', 'instrument', 'main_target',
-                    'exposure_type', 'exptime', 'obs_date', 'plate_solved', 'plate_solve_attempted_at']
+                    'exposure_type', 'exptime', 'obs_date', 'plate_solved', 'plate_solve_attempted_at',
+                    'exposure_type_ml', 'exposure_type_ml_confidence', 'exposure_type_user', 'spectrograph']
     if ordering.lstrip('-') in allowed_sort:
         queryset = queryset.order_by(ordering, 'pk')
     else:

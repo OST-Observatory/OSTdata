@@ -5,6 +5,7 @@ from django.db.models import Count, ExpressionWrapper, F, FloatField, Q
 from django_filters import rest_framework as filters
 from rest_framework.request import Request
 
+from obs_run.exposure_type import CLASSIFIER_CLASSES, effective_exposure_type_expression
 from obs_run.models import DataFile, ObservationRun
 from obs_run.search import build_run_aux_objects_search_q, find_aux_object_search_match
 from ostdata.custom_permissions import (
@@ -166,7 +167,76 @@ class RunFilter(filters.FilterSet):
 #   DATA FILE
 # ===============================================================
 
-class DataFileFilter(filters.FilterSet):
+SPECTROGRAPH_SUGGESTION_CHOICES = (
+    ('run', 'Run majority'),
+    ('token', 'Path token'),
+    ('both', 'Both agree'),
+    ('any', 'Any'),
+)
+
+
+class DataFileClassificationFilterSet(filters.FilterSet):
+    """
+    Classification filters shared by the public data file list (DataFileFilter) and the admin list
+    (adminops AdminDataFileFilter): exposure type review and spectrograph suggestions.
+    """
+    spectrograph = filters.MultipleChoiceFilter(
+        field_name='spectrograph',
+        choices=DataFile.spectrograph_possibilities,
+    )
+    spectrograph_override = filters.BooleanFilter(field_name='spectrograph_override')
+    ml_abstained = filters.BooleanFilter(field_name='exposure_type_ml_abstained')
+    #   Classifier has a class and it differs from the header type
+    exposure_disagreement = filters.BooleanFilter(method='filter_exposure_disagreement')
+    #   Effective exposure type and spectrograph do not form a classifier class (e.g. WAVE without spectrograph)
+    invalid_combination = filters.BooleanFilter(method='filter_invalid_combination')
+    #   Open spectrograph suggestion (differs from the current value, spectrograph not set manually)
+    has_spectrograph_suggestion = filters.ChoiceFilter(
+        method='filter_spectrograph_suggestion',
+        choices=SPECTROGRAPH_SUGGESTION_CHOICES,
+    )
+
+    def filter_exposure_disagreement(self, queryset, name, value):
+        if value is None:
+            return queryset
+        disagreement = (
+            Q(exposure_type_ml__isnull=False) & ~Q(exposure_type_ml__in=['', DataFile.UNKNOWN])
+            & ~Q(exposure_type_ml=F('exposure_type'))
+        )
+        return queryset.filter(disagreement) if value else queryset.exclude(disagreement)
+
+    def filter_invalid_combination(self, queryset, name, value):
+        if value is None:
+            return queryset
+        queryset = queryset.alias(classification_effective_type=effective_exposure_type_expression())
+        valid = Q(classification_effective_type=DataFile.UNKNOWN)
+        for exposure_type, spectrograph in CLASSIFIER_CLASSES:
+            valid |= Q(classification_effective_type=exposure_type, spectrograph=spectrograph)
+        return queryset.exclude(valid) if value else queryset.filter(valid)
+
+    def filter_spectrograph_suggestion(self, queryset, name, value):
+        if not value:
+            return queryset
+        by_run = (
+            Q(spectrograph_suggestion__run_majority__isnull=False)
+            & ~Q(spectrograph_suggestion__run_majority=F('spectrograph'))
+        )
+        by_token = (
+            Q(spectrograph_suggestion__path_token__isnull=False)
+            & ~Q(spectrograph_suggestion__path_token=F('spectrograph'))
+        )
+        conditions = {
+            'run': by_run,
+            'token': by_token,
+            'both': by_run & by_token & Q(
+                spectrograph_suggestion__run_majority=F('spectrograph_suggestion__path_token')
+            ),
+            'any': by_run | by_token,
+        }
+        return queryset.filter(conditions[value], spectrograph_override=False)
+
+
+class DataFileFilter(DataFileClassificationFilterSet):
     '''
         Filter definitions for table with observation runs
     '''
@@ -237,11 +307,6 @@ class DataFileFilter(filters.FilterSet):
     effective_exposure_type = filters.MultipleChoiceFilter(
         method='filter_effective_exposure_type',
         choices=DataFile.EXPOSURE_TYPE_POSSIBILITIES,
-    )
-
-    spectrograph = filters.ChoiceFilter(
-        field_name='spectrograph',
-        choices=DataFile.spectrograph_possibilities,
     )
 
     has_error = filters.BooleanFilter(method='filter_has_plate_error')

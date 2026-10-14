@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Optional
 
+from django.core.exceptions import ObjectDoesNotExist
 from django.utils import timezone
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema_field
@@ -338,6 +339,7 @@ class DataFileSerializer(ModelSerializer):
     exposure_type_ml_display = SerializerMethodField()
     exposure_type_user_display = SerializerMethodField()
     binning = SerializerMethodField()
+    spectrograph_suggestion = SerializerMethodField()
     tag_ids = PrimaryKeyRelatedField(
         many=True,
         queryset=Tag.objects.all(),
@@ -361,6 +363,7 @@ class DataFileSerializer(ModelSerializer):
             'pk',
             'observation_run',
             'observation_run_name',
+            'spectrograph_suggestion',
             'file_name',
             'download_url',
             'file_type',
@@ -604,6 +607,19 @@ class DataFileSerializer(ModelSerializer):
         if len(objs) == 1:
             return objs[0].name
         return objs[0].name if objs else None
+
+    @extend_schema_field(OpenApiTypes.OBJECT)
+    def get_spectrograph_suggestion(self, obj) -> Optional[dict]:
+        """Heuristic spectrograph suggestion (obs_run/spectrograph_heuristics.py), None if there is none."""
+        try:
+            suggestion = obj.spectrograph_suggestion
+        except ObjectDoesNotExist:
+            return None
+        return {
+            'run_majority': suggestion.run_majority,
+            'path_token': suggestion.path_token,
+            'computed_at': suggestion.computed_at,
+        }
 
     @extend_schema_field(OpenApiTypes.STR)
     def get_ra_hms(self, obj) -> str:

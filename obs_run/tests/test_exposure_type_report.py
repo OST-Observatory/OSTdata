@@ -7,8 +7,8 @@ from pathlib import Path
 from django.core.management import call_command
 from django.test import TestCase, override_settings
 
-from obs_run.management.commands._spectrograph_report import indicative_tokens
 from obs_run.models import DataFile, ObservationRun
+from obs_run.spectrograph_heuristics import indicative_tokens
 from ostdata.history_reason import REASON_ADMIN_SPECTROGRAPH, save_with_reason
 
 

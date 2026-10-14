@@ -6,12 +6,13 @@ import re
 from django.db.models import Q
 from django_filters import rest_framework as filters
 
+from obs_run.api.filter import DataFileClassificationFilterSet
 from obs_run.models import DataFile
 from tags.models import Tag
 from utilities import annotate_effective_exposure_type
 
 
-class AdminDataFileFilter(filters.FilterSet):
+class AdminDataFileFilter(DataFileClassificationFilterSet):
     """
     Filter for admin list of all DataFiles.
     No run visibility filtering - staff/admin see all.
@@ -45,10 +46,6 @@ class AdminDataFileFilter(filters.FilterSet):
         choices=DataFile.EXPOSURE_TYPE_POSSIBILITIES,
     )
     spectroscopy = filters.BooleanFilter(field_name='spectroscopy')
-    spectrograph = filters.ChoiceFilter(
-        field_name='spectrograph',
-        choices=DataFile.spectrograph_possibilities,
-    )
     exptime_min = filters.NumberFilter(field_name='exptime', lookup_expr='gte')
     exptime_max = filters.NumberFilter(field_name='exptime', lookup_expr='lte')
     plate_solved = filters.BooleanFilter(field_name='plate_solved')

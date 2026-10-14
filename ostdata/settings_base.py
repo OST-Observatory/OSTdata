@@ -250,6 +250,13 @@ if env.bool('ENABLE_DASHBOARD_STATS_REFRESH', default=False):
         'schedule': crontab(minute='*/30'),
         'args': (),
     }
+if env.bool('ENABLE_SPECTROGRAPH_SUGGESTIONS', default=True):
+    # Spectrograph suggestions + evaluation for the data files admin view (obs_run/spectrograph_heuristics.py)
+    CELERY_BEAT_SCHEDULE['recompute_spectrograph_suggestions'] = {
+        'task': 'obs_run.tasks.recompute_spectrograph_suggestions',
+        'schedule': crontab(minute=20, hour='5'),  # Daily at 5:20
+        'args': (),
+    }
 if env.bool('ENABLE_SCAN_MISSING_FILESYSTEM', default=False):
     CELERY_BEAT_SCHEDULE['scan_missing_filesystem'] = {
         'task': 'obs_run.tasks.scan_missing_filesystem',

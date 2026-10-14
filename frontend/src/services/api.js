@@ -489,29 +489,25 @@ export const api = {
   getInstruments: () => fetchWithAuth('/runs/instruments/'),
   getInstrumentCatalog: () => fetchWithAuth('/runs/instrument-catalog/'),
 
-  // Exposure Type Classification (Admin)
-  getExposureTypeDiscrepancies: (params = {}) => {
-    const queryString = new URLSearchParams(params).toString()
-    return fetchWithAuth(`/admin/datafiles/discrepancies/${queryString ? '?' + queryString : ''}`)
-  },
+  // Data file classification (Admin): manual exposure type / spectrograph, spectrograph suggestions
+  getAdminDataFiles: (params = {}) => fetchWithAuth('/admin/datafiles/', { params }),
   updateExposureTypeUser: (datafileId, data) => fetchWithAuth(`/admin/datafiles/${encodeURIComponent(datafileId)}/exposure-type-user/`, {
     method: 'PATCH',
     body: JSON.stringify(data),
   }),
-  // Spectrograph Management (Admin)
-  getSpectrographFiles: (params = {}) => {
-    const queryParams = new URLSearchParams()
-    Object.entries(params).forEach(([key, value]) => {
-      if (value !== undefined && value !== null && value !== '') {
-        queryParams.append(key, value)
-      }
-    })
-    const queryString = queryParams.toString()
-    return fetchWithAuth(`/admin/datafiles/spectrograph/${queryString ? `?${queryString}` : ''}`)
-  },
   updateSpectrograph: (datafileId, data) => fetchWithAuth(`/admin/datafiles/${encodeURIComponent(datafileId)}/spectrograph/`, {
     method: 'PATCH',
     body: JSON.stringify(data),
+  }),
+  // Bulk update; only keys present in data are changed (exposure_type_user, exposure_type_user_override,
+  // spectrograph, spectrograph_override)
+  updateClassification: (ids, data) => fetchWithAuth('/admin/datafiles/classification/', {
+    method: 'POST',
+    body: JSON.stringify({ ids, ...data }),
+  }),
+  getSpectrographSuggestionEvaluation: () => fetchWithAuth('/admin/spectrograph-suggestions/evaluation/'),
+  recomputeSpectrographSuggestions: () => fetchWithAuth('/admin/spectrograph-suggestions/recompute/', {
+    method: 'POST',
   }),
   // Plate Solving (Admin)
   getUnsolvedPlateFiles: (params = {}) => {

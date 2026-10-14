@@ -5,7 +5,7 @@ import numpy as np
 from astropy.io import fits
 from astropy.visualization import AsinhStretch, ImageNormalize, ZScaleInterval
 from django.conf import settings as django_settings
-from django.http import HttpResponse
+from django.http import Http404, HttpResponse
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import viewsets
 from rest_framework.decorators import api_view
@@ -357,7 +357,7 @@ class DataFileViewSet(viewsets.ModelViewSet):
         Returns a list of all stars/objects in the database
     """
     # object_set / tags are read per row by DataFileSerializer: prefetch them
-    queryset = (DataFile.objects.select_related('observation_run')
+    queryset = (DataFile.objects.select_related('observation_run', 'spectrograph_suggestion')
                 .prefetch_related('object_set', 'tags').all())
     serializer_class = DataFileSerializer
     pagination_class = DataFilesPagination
@@ -390,6 +390,29 @@ class DataFileViewSet(viewsets.ModelViewSet):
             return Response({'detail': 'Forbidden'}, status=403)
         return super().create(request, *args, **kwargs)
 
+    def _write_denied(self, request, allowed):
+        """403 response unless the user has acl_runs_edit and ``allowed`` (run permission) passes."""
+        user = request.user
+        if not (getattr(user, 'is_superuser', False) or user_has_acl(user, 'acl_runs_edit')):
+            return Response({'detail': 'Forbidden'}, status=403)
+        try:
+            if not allowed(self.get_object()):
+                return Response({'detail': 'Forbidden'}, status=403)
+        except Http404:
+            raise
+        except Exception:
+            return Response({'detail': 'Forbidden'}, status=403)
+        return None
+
+    def update(self, request, *args, **kwargs):
+        # Also used by partial_update
+        denied = self._write_denied(request, request.user.can_edit)
+        return denied or super().update(request, *args, **kwargs)
+
+    def destroy(self, request, *args, **kwargs):
+        denied = self._write_denied(request, request.user.can_delete)
+        return denied or super().destroy(request, *args, **kwargs)
+
     def list(self, request, *args, **kwargs):
         queryset = self.filter_queryset(self.get_queryset())
 
@@ -397,6 +420,7 @@ class DataFileViewSet(viewsets.ModelViewSet):
         allowed_sort = [
             'pk', 'datafile', 'observation_run', 'file_type', 'instrument', 'main_target',
             'exposure_type', 'exptime', 'obs_date', 'plate_solved', 'plate_solve_attempted_at',
+            'exposure_type_ml', 'exposure_type_ml_confidence', 'exposure_type_user', 'spectrograph',
         ]
         if ordering and ordering.lstrip('-') in allowed_sort:
             queryset = queryset.order_by(ordering, 'pk')

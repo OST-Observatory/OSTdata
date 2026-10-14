@@ -3,6 +3,7 @@ from typing import ClassVar
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.core.cache import cache
 from rest_framework import status
 from rest_framework.test import APIClient, APITestCase
 
@@ -18,6 +19,8 @@ class SessionAuthTest(APITestCase):
 
     def setUp(self) -> None:
         super().setUp()
+        # Throttle counters (anon 60/min, login 10/min) live in the shared LocMemCache across all tests
+        cache.clear()
         self.user = User.objects.create_user(username='alice', password='alice-pass')
 
     def _csrf_header(self):

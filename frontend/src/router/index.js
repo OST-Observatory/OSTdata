@@ -108,17 +108,14 @@ const routes = [
     component: () => import('@/views/admin/AdminMaintenance.vue'),
     meta: { requiresAuth: true, requiresAnyPerms: ['users.acl_maintenance_cleanup','users.acl_maintenance_reconcile','users.acl_maintenance_orphans','users.acl_banner_manage','acl_maintenance_cleanup','acl_maintenance_reconcile','acl_maintenance_orphans','acl_banner_manage'], title: 'Admin – Maintenance', description: 'Data maintenance tools.' }
   },
+  // Former admin pages, now presets of the Data Files page
   {
     path: '/admin/exposure-type-discrepancies',
-    name: 'admin-exposure-type-discrepancies',
-    component: () => import('@/views/admin/AdminExposureTypeDiscrepancies.vue'),
-    meta: { requiresAuth: true, requiresAnyPerms: ['users.acl_datafiles_exposure_type_user','acl_datafiles_exposure_type_user'], title: 'Admin – Exposure Type Discrepancies', description: 'Review and resolve exposure type classification discrepancies.' }
+    redirect: { path: '/datafiles', query: { preset: 'exposure_review' } },
   },
   {
     path: '/admin/spectrograph-files',
-    name: 'admin-spectrograph-files',
-    component: () => import('@/views/admin/AdminSpectrographFiles.vue'),
-    meta: { requiresAuth: true, requiresAnyPerms: ['users.acl_datafiles_spectrograph','acl_datafiles_spectrograph'], title: 'Admin – Spectrograph Management', description: 'Manage spectrograph property for data files.' }
+    redirect: { path: '/datafiles', query: { preset: 'spectrograph_files' } },
   },
   {
     path: '/admin/plate-solving',

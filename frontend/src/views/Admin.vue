@@ -35,6 +35,19 @@
             <v-card-subtitle class="text-wrap mt-2 opacity-90">
               {{ tile.description }}
             </v-card-subtitle>
+            <!-- Secondary link sits below the description, so the primary buttons line up at the card bottom -->
+            <v-btn
+              v-if="tile.secondaryTo"
+              variant="text"
+              size="small"
+              color="primary"
+              append-icon="mdi-chevron-right"
+              class="mt-2 px-1"
+              :to="tile.secondaryTo"
+              :aria-label="tile.secondaryAriaLabel"
+            >
+              {{ tile.secondaryLabel }}
+            </v-btn>
             <v-chip
               v-if="tile.to === '/admin/health' && watchdogErrorCount > 0"
               color="error"
@@ -50,25 +63,16 @@
 
           <v-spacer />
 
-          <v-card-actions class="px-4 pb-4 pt-0 flex-column align-stretch" style="gap: 8px">
+          <v-card-actions class="px-4 pb-4 pt-0">
             <v-btn
               color="primary"
               :variant="tile.featured ? 'flat' : 'tonal'"
               :prepend-icon="tile.actionIcon"
-              :to="{ path: tile.to }"
+              :to="tile.to"
               block
               :aria-label="tile.ariaLabel"
             >
               {{ tile.actionLabel }}
-            </v-btn>
-            <v-btn
-              v-if="tile.secondaryTo"
-              variant="text"
-              size="small"
-              :to="{ path: tile.secondaryTo }"
-              :aria-label="tile.secondaryAriaLabel"
-            >
-              {{ tile.secondaryLabel }}
             </v-btn>
           </v-card-actions>
         </v-card>
@@ -166,25 +170,42 @@ const adminTiles = [
     featured: true,
   },
   {
-    title: 'Exposure Type Discrepancies',
-    description: 'Review and resolve exposure type classification conflicts.',
+    title: 'Exposure Type Review',
+    description: 'Files with unknown effective exposure type or header/classifier disagreement (Data Files page).',
     icon: 'mdi-filter-variant',
     avatarColor: 'cyan',
-    to: '/admin/exposure-type-discrepancies',
-    actionLabel: 'Open Discrepancies',
+    to: '/datafiles?preset=exposure_review',
+    actionLabel: 'Open Review',
     actionIcon: 'mdi-arrow-right',
-    ariaLabel: 'Open Exposure Type Discrepancies',
+    ariaLabel: 'Open Exposure Type Review',
+    secondaryTo: '/datafiles?preset=disagreement',
+    secondaryLabel: 'Header ≠ classifier',
+    secondaryAriaLabel: 'Open files where header and classifier disagree',
     featured: true,
   },
   {
-    title: 'Spectrograph Management',
-    description: 'Manage spectrograph metadata for WAVE and spectroscopy files.',
+    title: 'Spectrograph Suggestions',
+    description: 'Evaluate the run-majority and path heuristics and accept or reject their suggestions.',
+    icon: 'mdi-lightbulb-on-outline',
+    avatarColor: 'amber',
+    to: '/datafiles?preset=spectrograph_suggestions',
+    actionLabel: 'Open Suggestions',
+    actionIcon: 'mdi-arrow-right',
+    ariaLabel: 'Open Spectrograph Suggestions',
+    featured: true,
+  },
+  {
+    title: 'Spectrograph Files',
+    description: 'All DADOS, BACHES and Einsteinturm files; invalid exposure type/spectrograph combinations.',
     icon: 'mdi-chart-timeline-variant',
     avatarColor: 'indigo',
-    to: '/admin/spectrograph-files',
-    actionLabel: 'Open Spectrograph',
+    to: '/datafiles?preset=spectrograph_files',
+    actionLabel: 'Open Spectrograph Files',
     actionIcon: 'mdi-arrow-right',
-    ariaLabel: 'Open Spectrograph Management',
+    ariaLabel: 'Open Spectrograph Files',
+    secondaryTo: '/datafiles?preset=invalid',
+    secondaryLabel: 'Invalid combinations',
+    secondaryAriaLabel: 'Open files with invalid exposure type/spectrograph combinations',
     featured: true,
   },
   {

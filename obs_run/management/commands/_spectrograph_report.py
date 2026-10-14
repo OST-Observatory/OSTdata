@@ -5,22 +5,16 @@ The spectrograph is only set by the ML classifier (or manually, which sets ``spe
 The value the classifier produced before a manual correction is not stored separately, so it is
 recovered from the DataFile history.
 """
-import re
-import sys
 from collections import Counter, defaultdict
-from pathlib import Path
 
 from obs_run.exposure_type import UNKNOWN, classifier_class_name
-from obs_run.models import DataFile
 from obs_run.spectrograph import constrained_spectrograph
-
-TOKEN_PATTERN = re.compile(r'[a-z]{3,}')
-
-# Exposure types for which the spectrograph matters
-SPECTROGRAPH_RELEVANT = ('LI', 'FL', 'WA')
-
-# History change reasons written by admin/API endpoints (history_user is set for API requests too)
-MANUAL_REASON_PREFIXES = ('admin:', 'api:')
+from obs_run.spectrograph_heuristics import (
+    SPECTROGRAPH_RELEVANT,
+    auto_spectrograph_values,
+    indicative_tokens,
+    token_label,
+)
 
 CORRECTION_DETECTION_DESCRIPTIONS = {
     'flagged_correct': 'run majority heuristic flags the file and suggests the corrected value',
@@ -42,72 +36,6 @@ TOKEN_PREDICTION_DESCRIPTIONS = {
     'conflicting_tokens': 'path tokens point to different spectrographs',
     'no_token': 'no indicative path token',
 }
-
-
-def path_tokens(path):
-    """Lower-case letter tokens (>= 3 chars) from directory names and file stem."""
-    tokens = TOKEN_PATTERN.findall(str(Path(path or '').with_suffix('')).lower())
-    return tuple(sorted({sys.intern(t) for t in tokens}))
-
-
-def indicative_tokens(token_labels, token_runs, min_support, min_runs, min_purity, max_run_share):
-    """
-    Tokens whose files carry (almost) always the same label, across several runs. Tokens found in more
-    than ``max_run_share`` of all runs are generic path components (e.g. the archive mount point) and only
-    mirror the overall label distribution, so they are ignored.
-    """
-    all_runs = set().union(*token_runs.values()) if token_runs else set()
-    max_runs = max_run_share * len(all_runs)
-    indicative = {}
-    for token, labels in token_labels.items():
-        support = sum(labels.values())
-        label, count = labels.most_common(1)[0]
-        runs = len(token_runs[token])
-        if support >= min_support and min_runs <= runs <= max_runs and count / support >= min_purity:
-            indicative[token] = {
-                'label': label, 'purity': round(count / support, 4), 'support': support,
-                'runs': len(token_runs[token]),
-            }
-    return dict(sorted(indicative.items(), key=lambda kv: -kv[1]['support']))
-
-
-def token_label(tokens, indicative):
-    """Single label suggested by the indicative tokens of a file, 'conflict' or None."""
-    labels = {indicative[t]['label'] for t in tokens if t in indicative}
-    if len(labels) > 1:
-        return 'conflict'
-    return labels.pop() if labels else None
-
-
-def _auto_value(records):
-    """Spectrograph before the first manual change; records = [(spectrograph, user_id, reason), ...]."""
-    for previous, current in zip(records, records[1:]):
-        manual = current[1] is not None or (current[2] or '').startswith(MANUAL_REASON_PREFIXES)
-        if manual and current[0] != previous[0]:
-            return previous[0] or 'N'
-    if len({r[0] for r in records}) == 1:
-        # Never changed: the override only confirmed the automatic value
-        return records[0][0] or 'N'
-    return 'unknown'
-
-
-def auto_spectrograph_values(pks):
-    """pk -> spectrograph value set automatically before the first manual change ('unknown' if unclear)."""
-    history = DataFile.history.model
-    pks = list(pks)
-    result = {}
-    for start in range(0, len(pks), 1000):
-        rows = (
-            history.objects.filter(id__in=pks[start:start + 1000])
-            .order_by('id', 'history_date', 'history_id')
-            .values_list('id', 'spectrograph', 'history_user_id', 'history_change_reason')
-        )
-        by_pk = defaultdict(list)
-        for pk, spectrograph, user_id, reason in rows:
-            by_pk[pk].append((spectrograph, user_id, reason))
-        for pk, records in by_pk.items():
-            result[pk] = _auto_value(records)
-    return result
 
 
 def _nested(by):
