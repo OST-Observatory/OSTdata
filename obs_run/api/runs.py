@@ -720,8 +720,8 @@ def dark_finder_search(request):
             if value == normalized_instrument:
                 possible_instruments.add(key)
 
-        # Filter by instrument (case-insensitive for every variant)
-        instrument_q = Q()
+        # Filter by instrument (canonical name, plus every raw variant for files not yet normalized)
+        instrument_q = Q(instrument_normalized=normalized_instrument)
         for name in possible_instruments:
             if name:
                 instrument_q |= Q(instrument__iexact=name)

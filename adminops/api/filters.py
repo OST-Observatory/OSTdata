@@ -21,7 +21,6 @@ class AdminDataFileFilter(DataFileClassificationFilterSet):
     observation_run_name = filters.CharFilter(field_name='observation_run__name', lookup_expr='icontains')
     file_name = filters.CharFilter(field_name='datafile', lookup_expr='icontains')
     file_type = filters.CharFilter(field_name='file_type', lookup_expr='icontains')
-    instrument = filters.CharFilter(field_name='instrument', lookup_expr='icontains')
     telescope = filters.CharFilter(field_name='telescope', lookup_expr='icontains')
     main_target = filters.CharFilter(method='filter_main_target_tokens')
     exposure_type = filters.MultipleChoiceFilter(

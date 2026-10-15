@@ -19,6 +19,10 @@ User = get_user_model()
 )
 class AuxObjectsTasksTest(APITestCase):
     def setUp(self):
+        # The queue task first reads an admin toggle from Redis; keep a local Redis out of the test
+        redis_toggle = patch('adminops.redis_helpers.aux_objects_task_enabled_get', return_value=None)
+        redis_toggle.start()
+        self.addCleanup(redis_toggle.stop)
         self.run = ObservationRun.objects.create(name='2024_aux_task', is_public=True, photometry=True)
         self.df = DataFile.objects.create(
             observation_run=self.run,

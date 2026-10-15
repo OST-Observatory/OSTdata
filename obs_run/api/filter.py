@@ -180,6 +180,8 @@ class DataFileClassificationFilterSet(filters.FilterSet):
     Classification filters shared by the public data file list (DataFileFilter) and the admin list
     (adminops AdminDataFileFilter): exposure type review and spectrograph suggestions.
     """
+    #   Matches the raw header value and the canonical camera name
+    instrument = filters.CharFilter(method='filter_instrument')
     spectrograph = filters.MultipleChoiceFilter(
         field_name='spectrograph',
         choices=DataFile.spectrograph_possibilities,
@@ -195,6 +197,11 @@ class DataFileClassificationFilterSet(filters.FilterSet):
         method='filter_spectrograph_suggestion',
         choices=SPECTROGRAPH_SUGGESTION_CHOICES,
     )
+
+    def filter_instrument(self, queryset, name, value):
+        if not value:
+            return queryset
+        return queryset.filter(Q(instrument__icontains=value) | Q(instrument_normalized__icontains=value))
 
     def filter_exposure_disagreement(self, queryset, name, value):
         if value is None:
@@ -246,11 +253,6 @@ class DataFileFilter(DataFileClassificationFilterSet):
         # method='filter_name',
         lookup_expr='icontains',
         )
-
-    instrument = filters.CharFilter(
-        field_name="instrument",
-        lookup_expr='icontains',
-    )
 
     #   Main target filter (tokenized, tolerant to whitespace variations)
     main_target = filters.CharFilter(method='filter_main_target_tokens')

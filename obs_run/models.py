@@ -12,6 +12,7 @@ from simple_history.models import HistoricalRecords
 from tags.models import Tag
 
 from .analyze_files import set_file_info
+from .analyze_fits_header import canonical_instrument
 from .exposure_type import effective_exposure_type as _effective_exposure_type
 
 if TYPE_CHECKING:
@@ -226,8 +227,10 @@ class DataFile(models.Model):
         default='N',
     )
 
-    #   Telescope and instrument
+    #   Telescope and instrument (instrument: raw header value; instrument_normalized: canonical camera
+    #   name, kept in sync in save())
     instrument = models.CharField(max_length=50, default='')
+    instrument_normalized = models.CharField(max_length=50, default='', blank=True, db_index=True)
     telescope = models.CharField(max_length=50, default='')
     focal_length = models.FloatField(default=-1)
 
@@ -341,6 +344,17 @@ class DataFile(models.Model):
     wcs_crpix2 = models.FloatField(null=True, blank=True)
     wcs_crval1 = models.FloatField(null=True, blank=True)
     wcs_crval2 = models.FloatField(null=True, blank=True)
+
+    def save(self, *args, **kwargs):
+        normalized = canonical_instrument(
+            self.instrument, self.naxis1, self.naxis2, self.pixel_size, self.binning_x, self.binning_y,
+        )
+        if normalized != self.instrument_normalized:
+            self.instrument_normalized = normalized
+            update_fields = kwargs.get('update_fields')
+            if update_fields is not None and 'instrument_normalized' not in update_fields:
+                kwargs['update_fields'] = [*update_fields, 'instrument_normalized']
+        super().save(*args, **kwargs)
 
     #   Get information
     def set_info(self):

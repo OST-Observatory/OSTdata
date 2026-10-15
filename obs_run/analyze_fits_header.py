@@ -4,7 +4,7 @@ import numpy as np
 from astropy.coordinates.angles import Angle
 from astropy.time import Time
 
-from obs_run.utils import INSTRUMENT_CATALOG, should_allow_auto_update
+from obs_run.utils import INSTRUMENT_CATALOG, normalize_instrument, should_allow_auto_update
 
 logger = logging.getLogger(__name__)
 
@@ -329,10 +329,10 @@ def disambiguate_instrument(possible_instruments, header_instrument):
     # SBIG patterns
     sbig_patterns = [
         (r'st-?i\b', ['SBIG ST-i']),
-        (r'st-?7\b', ['SBIG ST7']),
-        (r'st-?8\b', ['SBIG ST8']),
-        (r'stf-?8300', ['SBIG STF-8300M']),
-        (r'sbig', ['SBIG ST-i', 'SBIG ST7', 'SBIG ST8', 'SBIG STF-8300M']),
+        (r'st-?7\b', ['SBIG ST-7']),
+        (r'st-?8\b', ['SBIG ST-8']),
+        (r'stf-?8300', ['SBIG STF-8300']),
+        (r'sbig', ['SBIG ST-i', 'SBIG ST-7', 'SBIG ST-8', 'SBIG STF-8300']),
     ]
     
     # Skyris patterns
@@ -364,6 +364,28 @@ def disambiguate_instrument(possible_instruments, header_instrument):
     
     # If still no match, return first possible instrument
     return possible_instruments[0]
+
+
+#   Header values that do not identify a camera
+UNKNOWN_INSTRUMENT_NAMES = ('', '-', 'uk', 'unknown')
+GENERIC_INSTRUMENT_MARKERS = ('qhyccd-cameras-capture', 'asi camera (1)')
+
+
+def canonical_instrument(name, naxis1=-1, naxis2=-1, pixel_size=-1, binning_x=1, binning_y=1):
+    """
+    Canonical camera name for a raw header/EXIF instrument value: alias-normalized name; missing or
+    generic names (e.g. 'QHYCCD-Cameras-Capture') are resolved from the image geometry if possible.
+    """
+    raw = (name or '').strip()
+    lower = raw.lower()
+    generic = any(marker in lower for marker in GENERIC_INSTRUMENT_MARKERS)
+    if lower in UNKNOWN_INSTRUMENT_NAMES or generic:
+        candidates = detect_instruments(naxis1, naxis2, pixel_size, binning_x, binning_y)
+        if candidates:
+            return normalize_instrument(disambiguate_instrument(candidates, raw) or candidates[0])
+        if not generic:
+            return 'Unknown'
+    return normalize_instrument(raw)
 
 
 def analyze_fits(datafile):

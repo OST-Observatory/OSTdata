@@ -81,7 +81,7 @@ jobs:
           ALLOWED_HOSTS: localhost
           TRUSTED_ORIGIN: http://localhost
           DATA_DIRECTORY: /tmp/ostdata-ci-archive
-        run: python manage.py test obs_run.tests users.tests ostdata.tests --verbosity=1
+        run: python manage.py test --verbosity=1
       - name: pip check
         run: pip check
       - name: pip-audit
