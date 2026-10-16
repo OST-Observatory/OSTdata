@@ -14,6 +14,8 @@ from tags.models import Tag
 from .analyze_files import set_file_info
 from .analyze_fits_header import canonical_instrument
 from .exposure_type import effective_exposure_type as _effective_exposure_type
+from .image_quality import NOT_CHECKED as QUALITY_NOT_CHECKED
+from .image_quality import QUALITY_FLAG_CHOICES
 
 if TYPE_CHECKING:
     from django.db.models.fields.related_descriptors import RelatedManager
@@ -135,6 +137,14 @@ class ObservationRun(models.Model):
         ]
 
 
+SPECTROGRAPH_CHOICES = (
+    ('D', 'DADOS'),
+    ('B', 'BACHES'),
+    ('E', 'EINSTEIN_TOWER'),
+    ('N', 'NONE'),
+)
+
+
 class DataFile(models.Model):
     """
     Super class for any file that contains data.
@@ -194,6 +204,10 @@ class DataFile(models.Model):
         null=True,
         help_text='Confidence score from ML classification (0.0-1.0)',
     )
+    #   Raw classifier output: best class also when abstaining (e.g. 'spectrum_dados') and the
+    #   spectrograph of the predicted class before the constraints of obs_run/spectrograph.py
+    ml_top_class = models.CharField(max_length=40, default='', blank=True)
+    spectrograph_ml = models.CharField(max_length=1, choices=SPECTROGRAPH_CHOICES, null=True, blank=True)
     exposure_type_ml_abstained = models.BooleanField(
         default=False,
         help_text='Whether the ML model abstained (returned unknown)',
@@ -215,12 +229,7 @@ class DataFile(models.Model):
 
     #   Spectroscopy?
     spectroscopy = models.BooleanField(default=False)
-    spectrograph_possibilities = (
-        ('D', 'DADOS'),
-        ('B', 'BACHES'),
-        ('E', 'EINSTEIN_TOWER'),
-        ('N', 'NONE'),
-    )
+    spectrograph_possibilities = SPECTROGRAPH_CHOICES
     spectrograph = models.CharField(
         max_length=1,
         choices=spectrograph_possibilities,
@@ -309,6 +318,14 @@ class DataFile(models.Model):
     telescope_override = models.BooleanField(default=False)
     status_parameters_override = models.BooleanField(default=False)
     wcs_override = models.BooleanField(default=False)
+
+    #   Image quality (obs_run/image_quality.py): over-exposed / empty / unreadable frames
+    quality_flag = models.CharField(
+        max_length=2, choices=QUALITY_FLAG_CHOICES, default=QUALITY_NOT_CHECKED, db_index=True,
+    )
+    quality_flag_override = models.BooleanField(default=False)
+    saturated_fraction = models.FloatField(null=True, blank=True)
+    median_level = models.FloatField(null=True, blank=True)
 
     #   Plate Solving
     plate_solved = models.BooleanField(default=False)

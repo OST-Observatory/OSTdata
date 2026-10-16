@@ -10,12 +10,17 @@ from django.db.models import F, Q
 
 from obs_run.exposure_type import classifier_class_name
 from obs_run.models import DataFile
+from obs_run.training_export import build_export
 
 logger = logging.getLogger(__name__)
 
 
 class Command(BaseCommand):
-    help = 'Export DataFiles to JSON for CNN training, grouped by exposure type and spectrograph'
+    help = (
+        'Export labelled DataFiles to JSON for classifier training. Format v2 (default): one record per file '
+        'with metadata, run-based splits and hard cases (obs_run/training_export.py). Format v1: legacy '
+        '{split: {class: [paths]}} for the old training pipeline.'
+    )
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -25,16 +30,22 @@ class Command(BaseCommand):
             help='Output JSON file path (default: cnn_training_data.json)',
         )
         parser.add_argument(
+            '--format',
+            choices=['v1', 'v2'],
+            default='v2',
+            help='Output format (default: v2)',
+        )
+        parser.add_argument(
             '--max-per-class',
             type=int,
-            default=4000,
-            help='Maximum number of files per class (default: 4000)',
+            default=None,
+            help='Maximum number of files per class; v2 keeps all hard files (default: v1 4000, v2 8000)',
         )
         parser.add_argument(
             '--min-year',
             type=int,
-            default=2021,
-            help='Minimum year for observation date (default: 2021)',
+            default=None,
+            help='Minimum year for observation date (default: v1 2021, v2 no limit)',
         )
         parser.add_argument(
             '--formats',
@@ -59,20 +70,23 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         output_path = options['output']
-        max_per_class = options['max_per_class']
-        # Django converts --min-year to min_year in options
-        min_year = options.get('min_year') or options.get('min-year', 2021)
         formats = [f.upper() for f in options['formats']]
         seed = options['seed']
         train_ratio, val_ratio, test_ratio = options['split']
-        
+
         # Validate split ratios
         if abs(train_ratio + val_ratio + test_ratio - 1.0) > 0.001:
             self.stdout.write(
                 self.style.ERROR(f'Split ratios must sum to 1.0, got {train_ratio + val_ratio + test_ratio}')
             )
             return
-        
+
+        if options['format'] == 'v2':
+            return self._export_v2(options, formats)
+
+        max_per_class = options['max_per_class'] or 4000
+        min_year = options['min_year'] or 2021
+
         if seed is not None:
             random.seed(seed)
         
@@ -83,16 +97,7 @@ class Command(BaseCommand):
         self.stdout.write(f'  Formats: {formats}')
         self.stdout.write(f'  Split: train={train_ratio:.1%}, val={val_ratio:.1%}, test={test_ratio:.1%}')
         
-        # Get DATA_DIRECTORY from settings
-        try:
-            import environ
-            env = environ.Env()
-            environ.Env.read_env()
-            data_directory = env.str("DATA_DIRECTORY", default='/archive/ftp/')
-        except Exception:
-            data_directory = getattr(settings, 'DATA_DIRECTORY', '/archive/ftp/')
-        
-        data_directory = Path(str(data_directory)).resolve()
+        data_directory = self._data_directory()
         self.stdout.write(f'  Data directory: {data_directory}')
         
         # Filter files:
@@ -251,6 +256,42 @@ class Command(BaseCommand):
             self.style.SUCCESS(f'\nSuccessfully exported to {output_file}')
         )
         self.stdout.write(f'Total files: {sum(len(files) for split in result.values() for files in split.values())}')
+
+    @staticmethod
+    def _data_directory():
+        try:
+            import environ
+            env = environ.Env()
+            environ.Env.read_env()
+            data_directory = env.str("DATA_DIRECTORY", default='/archive/ftp/')
+        except Exception:
+            data_directory = getattr(settings, 'DATA_DIRECTORY', '/archive/ftp/')
+        return Path(str(data_directory)).resolve()
+
+    def _export_v2(self, options, formats):
+        rng = random.Random(options['seed'] if options['seed'] is not None else 42)
+        max_per_class = options['max_per_class'] or 8000
+        data_directory = self._data_directory()
+        self.stdout.write(f'Exporting v2 from {data_directory} (formats {formats}, max {max_per_class} per class)')
+
+        export = build_export(
+            formats, data_directory, options['split'], max_per_class, rng, min_year=options['min_year'],
+        )
+
+        self.stdout.write(f"Labelled files: {export['labelled_files']}, exported: {len(export['files'])}")
+        for split in ('train', 'val', 'test'):
+            counts = export['counts'][split]
+            hard = sum(export['hard_counts'][split].values())
+            self.stdout.write(
+                f"  {split:<5} {sum(counts.values()):>7} files, {export['runs'][split]:>5} runs, {hard:>6} hard"
+            )
+            for class_name in sorted(counts):
+                self.stdout.write(f'      {class_name:<32} {counts[class_name]:>7}')
+
+        output_file = Path(options['output'])
+        output_file.parent.mkdir(parents=True, exist_ok=True)
+        output_file.write_text(json.dumps(export, indent=1))
+        self.stdout.write(self.style.SUCCESS(f'Exported to {output_file}'))
 
     def _get_class_name(self, exposure_type, spectrograph):
         """

@@ -12,6 +12,7 @@ from django.conf import settings
 from django.core.management.base import BaseCommand
 from django.db.models import Q
 
+from obs_run.image_quality import BAD_FLAGS
 from obs_run.models import DataFile
 from obs_run.plate_solving import PlateSolvingService, solve_and_update_datafile
 from utilities import annotate_effective_exposure_type
@@ -69,7 +70,7 @@ class Command(BaseCommand):
             wcs_override=False,
             spectrograph='N',  # Exclude spectra (only process files without spectrograph)
             spectroscopy=False  # Exclude files marked as spectroscopy
-        )
+        ).exclude(quality_flag__in=BAD_FLAGS)  # over-exposed / empty / unreadable frames
         
         if not force:
             queryset = queryset.filter(

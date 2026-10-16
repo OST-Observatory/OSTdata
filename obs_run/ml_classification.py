@@ -4,6 +4,7 @@ ML-based exposure type classification service.
 This module provides a service for classifying DataFile exposure types using
 a trained Keras model from the ost_image_classification package.
 """
+import inspect
 import logging
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -36,6 +37,7 @@ class ExposureTypeClassifier:
     _instance = None
     _classifier = None
     _initialized = False
+    _accepts_metadata = None  # whether the installed ClassifierService.predict_paths takes metadata
 
     def __new__(cls):
         if cls._instance is None:
@@ -211,13 +213,14 @@ class ExposureTypeClassifier:
                 'exposure_type_ml': None,
                 'exposure_type_ml_confidence': None,
                 'exposure_type_ml_abstained': False,
+                'spectrograph_ml': None,
                 'error': f'File not found: {file_path}',
             }
 
         try:
             # Call the classifier service - predict_paths expects a list
             file_path_str = str(file_path)
-            batch_result = classifier.predict_paths([file_path_str], batch_size=1)
+            batch_result = self._predict(classifier, file_path_str, datafile)
             
             # Extract classification result from batch results
             # predict_paths returns: {"meta": {...}, "results": [...], "defects": [...], "warnings": [...]}
@@ -267,12 +270,14 @@ class ExposureTypeClassifier:
             
             # Map to exposure type and spectrograph
             exposure_type_ml, spectrograph_ml = self._map_model_class_to_exposure_type_and_spectrograph(predicted_class)
-            
+
             return {
                 'exposure_type_ml': exposure_type_ml,
                 'exposure_type_ml_confidence': confidence,
                 'exposure_type_ml_abstained': abstained,
                 'spectrograph_ml': spectrograph_ml,
+                # Best class also when abstaining (newer classifier versions; older ones only when not abstaining)
+                'ml_top_class': result.get('top_class') or ('' if abstained else predicted_class),
                 'error': None,
             }
         except Exception as e:
@@ -284,6 +289,20 @@ class ExposureTypeClassifier:
                 'spectrograph_ml': None,
                 'error': str(e),
             }
+
+    def _predict(self, classifier, path: str, datafile: DataFile) -> Dict:
+        """predict_paths for one file, with archive metadata if the classifier version supports it (v2 models)."""
+        if self._accepts_metadata is None:
+            self._accepts_metadata = 'metadata' in inspect.signature(classifier.predict_paths).parameters
+        if not self._accepts_metadata:
+            return classifier.predict_paths([path], batch_size=1)
+        run = datafile.observation_run
+        metadata = {path: {
+            'instrument': datafile.instrument_normalized or datafile.instrument,
+            'plate_solved': bool(datafile.plate_solved),
+            'run_spectroscopy': bool(run.spectroscopy) if run else False,
+        }}
+        return classifier.predict_paths([path], batch_size=1, metadata=metadata)
 
     def classify_paths(self, paths: List[Path]) -> List[Dict]:
         """
@@ -415,3 +434,22 @@ class ExposureTypeClassifier:
                 })
 
         return results
+
+
+def apply_ml_result(datafile: DataFile, result: Dict) -> List[str]:
+    """
+    Set the classifier fields of ``datafile`` from a classify_datafile() result, including the spectrograph
+    (classifier suggestion constrained by obs_run/spectrograph.py). Returns the fields to save.
+    """
+    from obs_run.spectrograph import automatic_spectrograph
+
+    datafile.exposure_type_ml = result.get('exposure_type_ml')
+    datafile.exposure_type_ml_confidence = result.get('exposure_type_ml_confidence')
+    datafile.exposure_type_ml_abstained = result.get('exposure_type_ml_abstained', False)
+    datafile.spectrograph_ml = result.get('spectrograph_ml')
+    datafile.ml_top_class = result.get('ml_top_class') or ''
+    datafile.spectrograph = automatic_spectrograph(datafile, result.get('spectrograph_ml'))
+    return [
+        'exposure_type_ml', 'exposure_type_ml_confidence', 'exposure_type_ml_abstained', 'spectrograph_ml',
+        'ml_top_class', 'spectrograph',
+    ]

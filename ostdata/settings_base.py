@@ -419,6 +419,11 @@ EXPOSURE_TYPE_EFFECTIVE_RULE = env.str('EXPOSURE_TYPE_EFFECTIVE_RULE', default='
 EXPOSURE_TYPE_LIGHT_DEFAULT_FORMATS = env.list(
     'EXPOSURE_TYPE_LIGHT_DEFAULT_FORMATS', default=['JPG', 'CR2', 'SER', 'AVI', 'MOV'],
 )
+# Image quality check at ingest (obs_run/image_quality.py): over-exposed if at least this fraction of pixels
+# is saturated or the median reaches this share of full scale
+IMAGE_QUALITY_ENABLED = env.bool('IMAGE_QUALITY_ENABLED', default=True)
+IMAGE_QUALITY_SATURATED_FRACTION = env.float('IMAGE_QUALITY_SATURATED_FRACTION', default=0.05)
+IMAGE_QUALITY_MEDIAN_LEVEL = env.float('IMAGE_QUALITY_MEDIAN_LEVEL', default=0.9)
 # Instruments (regex, case-insensitive) never used as main camera at a spectrograph -> spectrograph 'N'
 # (see obs_run/spectrograph.py). ZWO: guiding/solar/planetary only so far. Remove or narrow the ZWO
 # pattern when a ZWO camera becomes main camera at a spectrograph (planned for UVEX)!

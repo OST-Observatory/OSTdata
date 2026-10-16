@@ -6,9 +6,8 @@ from django.conf import settings
 from django.core.management.base import BaseCommand
 from django.db.models import Q
 
-from obs_run.ml_classification import ExposureTypeClassifier
+from obs_run.ml_classification import ExposureTypeClassifier, apply_ml_result
 from obs_run.models import DataFile
-from obs_run.spectrograph import automatic_spectrograph
 from utilities import update_object_photometry_spectroscopy, update_observation_run_photometry_spectroscopy
 
 logger = logging.getLogger(__name__)
@@ -39,6 +38,11 @@ class Command(BaseCommand):
             type=str,
             default=None,
             help='Filter by file format (FITS, TIFF, etc.)',
+        )
+        parser.add_argument(
+            '--only-unlabelled',
+            action='store_true',
+            help='Skip files with a manual exposure type (e.g. when re-classifying with a new model)',
         )
 
     def handle(self, *args, **options):
@@ -114,6 +118,8 @@ class Command(BaseCommand):
         # (this is the best indicator that a real ML classification was performed)
         if not force:
             queryset = queryset.filter(exposure_type_ml_confidence__isnull=True)
+        if options['only_unlabelled']:
+            queryset = queryset.filter(Q(exposure_type_user__isnull=True) | Q(exposure_type_user=''))
 
         if limit:
             queryset = queryset[:limit]
@@ -165,17 +171,7 @@ class Command(BaseCommand):
 
                 # Update DataFile if not dry-run
                 if not dry_run:
-                    df.exposure_type_ml = result.get('exposure_type_ml')
-                    df.exposure_type_ml_confidence = result.get('exposure_type_ml_confidence')
-                    df.exposure_type_ml_abstained = result.get('exposure_type_ml_abstained', False)
-                    # ML spectrograph, constrained by exposure type/instrument (keeps manual values)
-                    df.spectrograph = automatic_spectrograph(df, result.get('spectrograph_ml'))
-                    df.save(update_fields=[
-                        'exposure_type_ml',
-                        'exposure_type_ml_confidence',
-                        'exposure_type_ml_abstained',
-                        'spectrograph',
-                    ])
+                    df.save(update_fields=apply_ml_result(df, result))
                     
                     # Automatically update photometry/spectroscopy flags for associated observation runs and objects
                     # Update observation run

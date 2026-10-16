@@ -26,6 +26,7 @@ from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 
 from objects.models import Object
+from obs_run.image_quality import BAD_FLAGS as BAD_QUALITY_FLAGS
 from obs_run.models import DataFile, ObservationRun
 from obs_run.utils import (
     INSTRUMENT_ALIASES,
@@ -710,7 +711,7 @@ def dark_finder_search(request):
         
         # Build query for dark / bias frames (using effective exposure type)
         queryset = annotate_effective_exposure_type(
-            DataFile.objects.filter(observation_run__is_public=True)
+            DataFile.objects.filter(observation_run__is_public=True).exclude(quality_flag__in=BAD_QUALITY_FLAGS)
         ).filter(annotated_effective_exposure_type=type_code)
         
         # Find all possible instrument variants (alias keys are stored lowercased,

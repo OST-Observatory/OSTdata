@@ -23,8 +23,8 @@ from scipy import ndimage, signal
 
 from objects.models import Object
 from obs_run.exposure_type import effective_exposure_type_expression, effective_exposure_type_q
+from obs_run.image_quality import apply_quality
 from obs_run.models import DataFile, ObservationRun
-from obs_run.spectrograph import automatic_spectrograph
 from obs_run.utils import object_has_any_override, should_allow_auto_update
 
 logger = logging.getLogger(__name__)
@@ -1222,9 +1222,11 @@ def add_new_data_file(path_to_file, observation_run, print_to_terminal=False):
     )
     data_file.save()
 
-    #   Populate header info (exposure_type, ra, dec, etc.) before ML and evaluation
+    #   Populate header info (exposure_type, ra, dec, etc.) and the image quality before ML and evaluation
     try:
         data_file.set_info()
+        if getattr(settings, 'IMAGE_QUALITY_ENABLED', True):
+            apply_quality(data_file, save=False)
         data_file.save()
     except Exception as e:
         logger.warning(f'Error in set_info() for data_file {data_file.pk}: {e}')
@@ -1233,23 +1235,13 @@ def add_new_data_file(path_to_file, observation_run, print_to_terminal=False):
     #   so effective_exposure_type can consider ML result for object association
     try:
         if getattr(settings, 'ML_EXPOSURE_TYPE_ENABLED', False):
-            from obs_run.ml_classification import ExposureTypeClassifier
+            from obs_run.ml_classification import ExposureTypeClassifier, apply_ml_result
             classifier = ExposureTypeClassifier()
             if classifier.is_supported_format(file_type, path_to_file):
                 result = classifier.classify_datafile(data_file)
                 if result.get('error') is None:
-                    data_file.exposure_type_ml = result.get('exposure_type_ml')
-                    data_file.exposure_type_ml_confidence = result.get('exposure_type_ml_confidence')
-                    data_file.exposure_type_ml_abstained = result.get('exposure_type_ml_abstained', False)
-                    # ML spectrograph, constrained by exposure type/instrument (keeps manual values)
-                    data_file.spectrograph = automatic_spectrograph(data_file, result.get('spectrograph_ml'))
-                    data_file.save(update_fields=[
-                        'exposure_type_ml',
-                        'exposure_type_ml_confidence',
-                        'exposure_type_ml_abstained',
-                        'spectrograph',
-                    ])
-                    
+                    data_file.save(update_fields=apply_ml_result(data_file, result))
+
                     if print_to_terminal:
                         print(f'ML Classification: {result.get("exposure_type_ml")} '
                               f'(confidence: {result.get("exposure_type_ml_confidence", 0.0):.3f})')

@@ -76,6 +76,7 @@
                       <v-select v-model="filters.spectrograph" :items="spectrographItems" item-title="label" item-value="value" label="Spectrograph" density="comfortable" variant="outlined" hide-details clearable multiple chips class="mb-2" />
                       <v-select v-model="filters.spectrograph_override" :items="yesNoItems" item-title="title" item-value="value" label="Spectrograph Set Manually" density="comfortable" variant="outlined" hide-details clearable class="mb-2" />
                       <v-select v-model="filters.has_spectrograph_suggestion" :items="suggestionFilterItems" item-title="title" item-value="value" label="Open Spectrograph Suggestion" density="comfortable" variant="outlined" hide-details clearable class="mb-2" />
+                      <v-select v-model="filters.quality_flag" :items="qualityFlagItems" item-title="label" item-value="value" label="Image Quality" density="comfortable" variant="outlined" hide-details clearable multiple chips class="mb-2" />
                       <v-select v-model="filters.invalid_combination" :items="yesNoItems" item-title="title" item-value="value" label="Invalid Type/Spectrograph Combination" density="comfortable" variant="outlined" hide-details clearable class="mb-2" />
                       <v-select v-model="filters.plate_solved" :items="[{ title: 'Yes', value: true }, { title: 'No', value: false }]" item-title="title" item-value="value" label="Plate Solved" density="comfortable" variant="outlined" hide-details clearable class="mb-2" />
                       <v-select v-model="filters.has_error" :items="[{ title: 'Yes', value: true }, { title: 'No', value: false }]" item-title="title" item-value="value" label="Has Plate Error" density="comfortable" variant="outlined" hide-details clearable />
@@ -143,6 +144,15 @@
 
         <template #item.file_name="{ item }">
           <span class="cell-truncate">{{ item.file_name }}</span>
+          <v-chip
+            v-if="BAD_QUALITY_FLAGS.includes(item.quality_flag)"
+            size="x-small"
+            color="error"
+            variant="tonal"
+            prepend-icon="mdi-image-broken-variant"
+            class="ml-1"
+            :title="item.saturated_fraction != null ? `${(item.saturated_fraction * 100).toFixed(1)} % saturated pixels` : ''"
+          >{{ qualityFlagLabel(item.quality_flag) }}</v-chip>
         </template>
 
         <template #item.main_target="{ item }">
@@ -195,6 +205,9 @@
             <div v-if="item.exposure_type_ml_confidence != null" class="text-caption text-medium-emphasis">
               {{ (item.exposure_type_ml_confidence * 100).toFixed(1) }} %
               <v-chip v-if="item.exposure_type_ml_abstained" size="x-small" color="warning" variant="flat" class="ml-1">Abstained</v-chip>
+            </div>
+            <div v-if="item.exposure_type_ml_abstained && item.ml_top_class" class="text-caption text-medium-emphasis" title="Best class of the classifier below its threshold">
+              Top: {{ item.ml_top_class }}
             </div>
           </div>
           <span v-else class="text-medium-emphasis">—</span>
@@ -437,10 +450,13 @@ import LoadingState from '@/components/ui/LoadingState.vue'
 import ClassificationEditDialog from '@/components/datafiles/ClassificationEditDialog.vue'
 import SpectrographSuggestionPanel from '@/components/datafiles/SpectrographSuggestionPanel.vue'
 import {
+  BAD_QUALITY_FLAGS,
   EXPOSURE_TYPE_ITEMS,
+  QUALITY_FLAG_ITEMS,
   SPECTROGRAPH_ITEMS,
   exposureTypeColor,
   openSpectrographSuggestion,
+  qualityFlagLabel,
   spectrographColor,
   spectrographLabel,
 } from '@/constants/classification'
@@ -493,11 +509,13 @@ const emptyFilters = () => ({
   spectrograph_override: null,
   has_spectrograph_suggestion: null,
   invalid_combination: null,
+  quality_flag: [],
   plate_solved: null,
   has_error: null,
 })
 const filters = ref(emptyFilters())
-const ARRAY_FILTERS = ['effective_exposure_type', 'exposure_type', 'exposure_type_ml', 'exposure_type_user', 'spectrograph']
+const ARRAY_FILTERS = ['effective_exposure_type', 'exposure_type', 'exposure_type_ml', 'exposure_type_user', 'spectrograph',
+  'quality_flag']
 const BOOLEAN_FILTERS = ['has_user_type', 'exposure_disagreement', 'ml_abstained', 'spectroscopy', 'spectrograph_override',
   'invalid_combination', 'plate_solved', 'has_error']
 const NUMBER_FILTERS = ['exptime_min', 'exptime_max']
@@ -523,6 +541,8 @@ const PRESETS = [
     filters: { has_spectrograph_suggestion: 'any' } },
   { key: 'invalid', label: 'Invalid combinations', icon: 'mdi-alert-outline', perm: 'classification',
     filters: { invalid_combination: true } },
+  { key: 'quality', label: 'Image quality issues', icon: 'mdi-image-broken-variant',
+    filters: { quality_flag: [...BAD_QUALITY_FLAGS] } },
 ]
 const visiblePresets = computed(() => PRESETS.filter(p => !p.perm
   || (p.perm === 'exposure' && canExposureTypeUser.value)
@@ -533,6 +553,7 @@ const suggestionPanel = ref(null)
 const showSuggestions = computed(() => !!filters.value.has_spectrograph_suggestion)
 
 const spectrographItems = SPECTROGRAPH_ITEMS
+const qualityFlagItems = QUALITY_FLAG_ITEMS
 const exposureTypeItems = EXPOSURE_TYPE_ITEMS
 
 const headers = computed(() => [

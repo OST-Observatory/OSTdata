@@ -6,6 +6,7 @@ from django_filters import rest_framework as filters
 from rest_framework.request import Request
 
 from obs_run.exposure_type import CLASSIFIER_CLASSES, effective_exposure_type_expression
+from obs_run.image_quality import QUALITY_FLAG_CHOICES
 from obs_run.models import DataFile, ObservationRun
 from obs_run.search import build_run_aux_objects_search_q, find_aux_object_search_match
 from ostdata.custom_permissions import (
@@ -187,6 +188,7 @@ class DataFileClassificationFilterSet(filters.FilterSet):
         choices=DataFile.spectrograph_possibilities,
     )
     spectrograph_override = filters.BooleanFilter(field_name='spectrograph_override')
+    quality_flag = filters.MultipleChoiceFilter(field_name='quality_flag', choices=QUALITY_FLAG_CHOICES)
     ml_abstained = filters.BooleanFilter(field_name='exposure_type_ml_abstained')
     #   Classifier has a class and it differs from the header type
     exposure_disagreement = filters.BooleanFilter(method='filter_exposure_disagreement')

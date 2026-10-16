@@ -14,6 +14,7 @@ from django.conf import settings
 from django.utils import timezone
 
 from obs_run.datafile_filters import apply_datafile_filters
+from obs_run.image_quality import BAD_FLAGS as BAD_QUALITY_FLAGS
 from obs_run.models import DataFile, DownloadJob, ObservationRun
 from obs_run.plate_solving import PlateSolvingService, solve_and_update_datafile
 from obs_run.utils import should_allow_auto_update
@@ -1135,7 +1136,7 @@ def plate_solve_pending_files(self):
             wcs_override=False,
             spectrograph='N',  # Exclude spectra (only process files without spectrograph)
             spectroscopy=False  # Exclude files marked as spectroscopy
-        )
+        ).exclude(quality_flag__in=BAD_QUALITY_FLAGS)  # over-exposed / empty / unreadable frames
         
         # Annotate with effective_exposure_type and filter for Light frames
         queryset = annotate_effective_exposure_type(queryset)

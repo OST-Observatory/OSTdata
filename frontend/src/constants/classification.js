@@ -16,6 +16,21 @@ export const SPECTROGRAPH_ITEMS = [
   { label: 'None', value: 'N' },
 ]
 
+// Image quality flags (obs_run/image_quality.py); BAD ones are excluded from plate solving, dark finder,
+// spectrograph heuristics and training data
+export const QUALITY_FLAG_ITEMS = [
+  { label: 'OK', value: 'OK' },
+  { label: 'Over-exposed', value: 'OE' },
+  { label: 'Empty / constant', value: 'EM' },
+  { label: 'Unreadable', value: 'UR' },
+  { label: 'Not checked', value: 'NC' },
+]
+export const BAD_QUALITY_FLAGS = ['OE', 'EM', 'UR']
+
+export function qualityFlagLabel(code) {
+  return (QUALITY_FLAG_ITEMS.find(i => i.value === code) || {}).label || code
+}
+
 const EXPOSURE_TYPE_COLORS = { BI: 'blue', DA: 'grey-darken-2', FL: 'green', LI: 'orange', WA: 'purple', UK: 'grey' }
 const SPECTROGRAPH_COLORS = { D: 'blue', B: 'green', E: 'purple', N: 'grey' }
 

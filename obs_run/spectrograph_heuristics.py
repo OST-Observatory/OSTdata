@@ -18,6 +18,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from obs_run.exposure_type import effective_exposure_type_expression
+from obs_run.image_quality import BAD_FLAGS as BAD_QUALITY_FLAGS
 from obs_run.models import DataFile, HeuristicReport, SpectrographSuggestion
 
 TOKEN_PATTERN = re.compile(r'[a-z]{3,}')
@@ -140,6 +141,7 @@ def analyse(params=None):
         DataFile.objects
         .annotate(annotated_effective_exposure_type=effective_exposure_type_expression())
         .filter(annotated_effective_exposure_type__in=SPECTROGRAPH_RELEVANT)
+        .exclude(quality_flag__in=BAD_QUALITY_FLAGS)
         .values_list('pk', 'observation_run_id', 'spectrograph', 'spectrograph_override', 'datafile')
     )
     files = []
