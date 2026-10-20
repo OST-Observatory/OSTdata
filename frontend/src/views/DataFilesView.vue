@@ -130,7 +130,7 @@
         :sort-by="[{ key: sortBy, order: sortOrder }]"
         :multi-sort="false"
         :loading="loading"
-        class="custom-table"
+        class="custom-table datafiles-table"
         :items-length="totalItems"
         :items-per-page="itemsPerPage === -1 ? totalItems : itemsPerPage"
         hide-default-footer
@@ -143,7 +143,7 @@
         </template>
 
         <template #item.file_name="{ item }">
-          <span class="cell-truncate">{{ item.file_name }}</span>
+          <span class="cell-truncate" :title="item.file_name">{{ item.file_name }}</span>
           <v-chip
             v-if="BAD_QUALITY_FLAGS.includes(item.quality_flag)"
             size="x-small"
@@ -186,9 +186,11 @@
         </template>
 
         <template #item.observation_run_name="{ item }">
-          <router-link :to="`/observation-runs/${item.observation_run}`" class="text-primary text-decoration-none">
-            {{ item.observation_run_name }}
-          </router-link>
+          <div class="cell-scroll" :title="item.observation_run_name">
+            <router-link :to="`/observation-runs/${item.observation_run}`" class="text-primary text-decoration-none">
+              {{ item.observation_run_name }}
+            </router-link>
+          </div>
         </template>
 
         <template #item.exposure_type="{ item }">
@@ -246,35 +248,38 @@
         </template>
 
         <template #item.suggestion="{ item }">
-          <div v-if="openSuggestion(item)" class="d-flex align-center flex-wrap py-1" style="gap: 4px">
-            <v-chip v-if="openSuggestion(item).byRun" size="x-small" :color="spectrographColor(openSuggestion(item).byRun)" variant="tonal" title="Majority of the observation run">
-              Run: {{ getSpectrographLabel(openSuggestion(item).byRun) }}
-            </v-chip>
-            <v-chip v-if="openSuggestion(item).byToken" size="x-small" :color="spectrographColor(openSuggestion(item).byToken)" variant="tonal" title="Words in the file path">
-              Path: {{ getSpectrographLabel(openSuggestion(item).byToken) }}
-            </v-chip>
-            <v-icon v-if="openSuggestion(item).agree" icon="mdi-check-decagram" color="success" size="small" title="Both heuristics agree" />
-            <template v-if="canSpectrograph">
+          <div v-if="openSuggestion(item)" class="suggestion-cell py-2">
+            <div class="d-flex align-center flex-wrap" style="gap: 4px">
+              <v-chip v-if="openSuggestion(item).byRun" size="x-small" :color="spectrographColor(openSuggestion(item).byRun)" variant="tonal" title="Majority of the observation run">
+                Run: {{ suggestionLabel(openSuggestion(item).byRun) }}
+              </v-chip>
+              <v-chip v-if="openSuggestion(item).byToken" size="x-small" :color="spectrographColor(openSuggestion(item).byToken)" variant="tonal" title="Words in the file path">
+                Path: {{ suggestionLabel(openSuggestion(item).byToken) }}
+              </v-chip>
+              <v-icon v-if="openSuggestion(item).agree" icon="mdi-check-decagram" color="success" size="small" title="Both heuristics agree" />
+            </div>
+            <div v-if="canSpectrograph" class="d-flex align-center flex-wrap mt-2" style="gap: 12px">
               <v-btn
                 v-for="value in openSuggestion(item).values"
                 :key="value"
-                size="x-small"
+                size="small"
                 color="success"
-                variant="text"
+                variant="flat"
                 prepend-icon="mdi-check"
                 :loading="suggestionBusy === item.pk"
-                :title="`Set spectrograph to ${getSpectrographLabel(value)}`"
+                :title="`Set spectrograph to ${suggestionLabel(value)}`"
                 @click="acceptSuggestion(item, value)"
-              >{{ openSuggestion(item).values.length > 1 ? getSpectrographLabel(value) : 'Accept' }}</v-btn>
+              >{{ openSuggestion(item).values.length > 1 ? suggestionLabel(value) : 'Accept' }}</v-btn>
               <v-btn
-                size="x-small"
-                variant="text"
+                size="small"
+                color="secondary"
+                variant="outlined"
                 prepend-icon="mdi-close"
                 :loading="suggestionBusy === item.pk"
                 title="Keep the current value (marks it as reviewed)"
                 @click="keepCurrent(item)"
               >Keep</v-btn>
-            </template>
+            </div>
           </div>
           <span v-else class="text-medium-emphasis">—</span>
         </template>
@@ -558,18 +563,24 @@ const exposureTypeItems = EXPOSURE_TYPE_ITEMS
 
 const headers = computed(() => [
   { title: 'File Name', key: 'file_name', sortable: true },
-  { title: 'Run', key: 'observation_run_name', sortable: true },
+  { title: 'Run', key: 'observation_run_name', sortable: true, width: '140px', maxWidth: '140px' },
   { title: 'File Type', key: 'file_type', sortable: true },
   { title: 'Target', key: 'main_target', sortable: true },
   { title: 'Instrument', key: 'instrument', sortable: true },
-  { title: 'Exp. Type (Header)', key: 'exposure_type', sortable: true },
-  { title: 'Exp. Type (Classifier)', key: 'exposure_type_ml', sortable: true },
-  { title: 'Exp. Type (Manual)', key: 'exposure_type_user', sortable: true },
-  { title: 'Exp. Type (Effective)', key: 'effective_exposure_type', sortable: false },
+  {
+    title: 'Exposure Type',
+    align: 'center',
+    children: [
+      { title: 'Header', key: 'exposure_type', sortable: true },
+      { title: 'Classifier', key: 'exposure_type_ml', sortable: true },
+      { title: 'Manual', key: 'exposure_type_user', sortable: true },
+      { title: 'Effective', key: 'effective_exposure_type', sortable: false },
+    ],
+  },
   { title: 'Exp. Time', key: 'exptime', sortable: true },
   { title: 'Plate', key: 'plate_solved', sortable: true },
   { title: 'Spectr.', key: 'spectrograph', sortable: true },
-  ...(showSuggestions.value ? [{ title: 'Suggestion', key: 'suggestion', sortable: false }] : []),
+  ...(showSuggestions.value ? [{ title: 'Suggestion', key: 'suggestion', sortable: false, minWidth: '210px' }] : []),
   { title: 'Actions', key: 'actions', sortable: false, width: '120px' },
 ])
 
@@ -710,6 +721,8 @@ function onUpdateSelected(val) { selected.value = Array.isArray(val) ? val : [] 
 const getExposureTypeColor = exposureTypeColor
 const getSpectrographLabel = spectrographLabel
 const openSuggestion = openSpectrographSuggestion
+// 'N' as a suggestion means "no spectrograph" (imaging), not "no suggestion"
+const suggestionLabel = (value) => (value === 'N' ? 'no spectrograph' : spectrographLabel(value))
 
 function formatHeaderValue(v) {
   if (v == null) return '—'
@@ -1173,7 +1186,13 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.cell-truncate { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block; }
+.cell-truncate { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block; vertical-align: middle; }
+/* Long run names (e.g. 2018-02-08_einstein_tower) scroll inside the cell instead of widening the column */
+.cell-scroll { max-width: 140px; overflow-x: auto; white-space: nowrap; scrollbar-width: thin; }
+/* The global table style hides overflow; scroll horizontally when the columns do not fit */
+.datafiles-table :deep(.v-table__wrapper) { overflow-x: auto; }
+.datafiles-table :deep(th) { white-space: nowrap; }
+.suggestion-cell { min-width: 200px; }
 .preview-container { min-height: 200px; }
 .preview-placeholder { min-height: 200px; }
 </style>
