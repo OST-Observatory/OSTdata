@@ -16,6 +16,7 @@ from rest_framework.throttling import ScopedRateThrottle
 
 from obs_run.models import DataFile, ObservationRun
 from obs_run.ser_thumbnails import get_ser_thumbnail_png, is_ser_path
+from obs_run.video_thumbnails import get_video_thumbnail_png, is_video_path
 from ostdata.custom_permissions import get_allowed_run_objects_to_view_for_user
 from ostdata.permissions import user_has_acl
 
@@ -86,7 +87,7 @@ def get_datafile_thumbnail(request, pk):
     """
     Return a PNG thumbnail for the given DataFile.
     FITS uses ZScale + asinh stretch; JPG/TIFF are thumbnailed directly.
-    SER extracts a representative frame (cached on disk). AVI/MOV are not supported.
+    SER, AVI and MOV extract a representative frame (cached on disk).
     Optional query params: w (int, default 512)
     """
     try:
@@ -123,23 +124,34 @@ def get_datafile_thumbnail(request, pk):
     except FileNotFoundError:
         return Response({"detail": "File not found"}, status=404)
 
-    try:
-        max_source = int(getattr(django_settings, 'THUMBNAIL_MAX_SOURCE_BYTES', 500 * 1024 * 1024))
-        if file_path.stat().st_size > max_source:
-            return Response({"detail": "Source file too large for thumbnail"}, status=400)
-    except Exception:
-        pass
-
     file_type = (df.file_type or '').upper()
 
     # Determine FITS by type or extension (fallback)
     is_fits = (file_type == 'FITS') or (file_path.suffix.lower() in ['.fits', '.fit', '.fts'])
     is_ser = is_ser_path(file_type, file_path)
-    is_other_video = (file_type in ('AVI', 'MOV')) or (file_path.suffix.lower() in ['.avi', '.mov'])
+    is_other_video = is_video_path(file_type, file_path)
+
+    # Videos only read single frames (bounded by THUMBNAIL_MAX_PIXELS), so the
+    # source-size limit applies to fully loaded formats only.
+    if not (is_ser or is_other_video):
+        try:
+            max_source = int(getattr(django_settings, 'THUMBNAIL_MAX_SOURCE_BYTES', 500 * 1024 * 1024))
+            if file_path.stat().st_size > max_source:
+                return Response({"detail": "Source file too large for thumbnail"}, status=400)
+        except Exception:
+            pass
 
     try:
         if is_ser:
             png = get_ser_thumbnail_png(
+                datafile_id=df.pk,
+                content_hash=df.content_hash or '',
+                file_path=file_path,
+                max_dim=w,
+            )
+            return HttpResponse(png, content_type='image/png')
+        if is_other_video:
+            png = get_video_thumbnail_png(
                 datafile_id=df.pk,
                 content_hash=df.content_hash or '',
                 file_path=file_path,
@@ -188,8 +200,6 @@ def get_datafile_thumbnail(request, pk):
                 img.save(buf, format='PNG')
                 buf.seek(0)
                 return HttpResponse(buf.getvalue(), content_type='image/png')
-        elif is_other_video:
-            return Response({"detail": "Preview not supported for video files"}, status=400)
         else:
             # Non-FITS: try PIL thumbnail
             if Image is None:

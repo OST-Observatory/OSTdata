@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from io import BytesIO
 from pathlib import Path
 
@@ -43,13 +44,22 @@ def _frame_to_uint8(arr: np.ndarray) -> np.ndarray:
 
     finite = np.isfinite(data)
     if not finite.any():
-        raise ValueError('SER frame has no finite pixels')
+        raise ValueError('Frame has no finite pixels')
 
     vmin, vmax = np.percentile(data[finite], [1.0, 99.5])
     if vmax <= vmin:
         vmax = vmin + 1.0
     scaled = np.clip((data - vmin) / (vmax - vmin), 0.0, 1.0)
     return (scaled * 255.0).astype(np.uint8)
+
+
+def check_frame_pixels(width: int, height: int) -> None:
+    """Reject frames above THUMBNAIL_MAX_PIXELS (videos skip the source-size limit)."""
+    max_pixels = int(getattr(settings, 'THUMBNAIL_MAX_PIXELS', 50_000_000))
+    if width <= 0 or height <= 0:
+        raise ValueError('Invalid frame dimensions')
+    if width * height > max_pixels:
+        raise ValueError(f'Frame too large for thumbnail ({width}x{height})')
 
 
 def render_ser_frame_png(file_path: Path, max_dim: int = 512, frame_index: int | None = None) -> bytes:
@@ -63,19 +73,27 @@ def render_ser_frame_png(file_path: Path, max_dim: int = 512, frame_index: int |
     try:
         if parser.frame_count <= 0:
             raise ValueError('SER file has no frames')
+        check_frame_pixels(int(parser.header['ImageWidth']), int(parser.header['ImageHeight']))
         if frame_index is None:
             frame_index = parser.frame_count // 2
         frame_index = max(0, min(frame_index, parser.frame_count - 1))
         frame = parser.read_frame(frame_index)
-        img8 = _frame_to_uint8(frame)
-        mode = 'L' if img8.ndim == 2 else 'RGB'
-        img = Image.fromarray(img8, mode=mode)
-        img.thumbnail((max_dim, max_dim))
-        buf = BytesIO()
-        img.save(buf, format='PNG')
-        return buf.getvalue()
+        return _frame_to_png(frame, max_dim)
     finally:
         parser.release()
+
+
+def _frame_to_png(frame: np.ndarray, max_dim: int) -> bytes:
+    """Stretch a video frame to 8 bit and encode it as PNG thumbnail."""
+    if Image is None:
+        raise RuntimeError('PIL not available')
+    img8 = _frame_to_uint8(frame)
+    mode = 'L' if img8.ndim == 2 else 'RGB'
+    img = Image.fromarray(img8, mode=mode)
+    img.thumbnail((max_dim, max_dim))
+    buf = BytesIO()
+    img.save(buf, format='PNG')
+    return buf.getvalue()
 
 
 def get_ser_thumbnail_png(
@@ -89,6 +107,24 @@ def get_ser_thumbnail_png(
     Return cached PNG thumbnail for a SER file, generating on cache miss.
     Cache invalidates when the source file is newer than the cached PNG.
     """
+    return get_cached_thumbnail_png(
+        datafile_id=datafile_id,
+        content_hash=content_hash,
+        file_path=file_path,
+        max_dim=max_dim,
+        render=render_ser_frame_png,
+    )
+
+
+def get_cached_thumbnail_png(
+    *,
+    datafile_id: int,
+    content_hash: str,
+    file_path: Path,
+    max_dim: int,
+    render: Callable[..., bytes],
+) -> bytes:
+    """Disk cache shared by SER and other video thumbnails (see SER_THUMBNAIL_CACHE_DIR)."""
     cache_path = _cache_path(datafile_id, content_hash, max_dim)
     cache_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -104,9 +140,9 @@ def get_ser_thumbnail_png(
         except OSError:
             pass
 
-    png = render_ser_frame_png(file_path, max_dim=max_dim)
+    png = render(file_path, max_dim=max_dim)
     try:
         cache_path.write_bytes(png)
     except OSError:
-        logger.warning('Could not write SER thumbnail cache %s', cache_path, exc_info=True)
+        logger.warning('Could not write video thumbnail cache %s', cache_path, exc_info=True)
     return png
