@@ -41,7 +41,8 @@ psutil==7.2.2
 
 # Security pins (transitive deps; keep at or above patched versions)
 cryptography==50.0.0
-pillow==12.3.0
+# pillow: CVE-2026-112395 / 112397 / 112400 / 112404 / 112895 / 112896 / 112897 / 112899 (fixed in 13.0.0).
+pillow==13.0.0
 setuptools==83.0.0
 # tornado: GHSA-chx6-46f5-w4vp, GHSA-c2m8-h5v5-343r, GHSA-3hv7-mjh2-fv65 (fixed in 6.5.9); via bokeh.
 tornado==6.5.10
