@@ -980,13 +980,12 @@ def get_instruments(request):
             instrument__isnull=True
         ).exclude(
             instrument=''
-        ).values_list('instrument', flat=True).distinct()
+        ).values_list('instrument', 'instrument_normalized').distinct()
         
-        # Normalize and deduplicate
+        # Prefer the geometry-resolved canonical name; deduplicate
         instruments_normalized = set()
-        for inst in instruments_raw:
-            normalized = normalize_alias(inst, INSTRUMENT_ALIASES)
-            instruments_normalized.add(normalized)
+        for inst, canonical in instruments_raw:
+            instruments_normalized.add(canonical or normalize_alias(inst, INSTRUMENT_ALIASES))
         
         # Sort alphabetically
         instruments_sorted = sorted(instruments_normalized)

@@ -1,11 +1,12 @@
 """Canonical instrument names: aliases, geometry-based resolution, sync on save, backfill and filter."""
 from io import StringIO
+from unittest.mock import patch
 
 from django.core.management import call_command
 from django.test import TestCase
 from rest_framework.test import APITestCase
 
-from obs_run.analyze_fits_header import canonical_instrument
+from obs_run.analyze_fits_header import analyze_fits, canonical_instrument, detect_instruments
 from obs_run.models import DataFile, ObservationRun
 from obs_run.utils import INSTRUMENT_CATALOG, normalize_instrument
 
@@ -39,6 +40,60 @@ class CanonicalInstrumentTest(TestCase):
         self.assertEqual(canonical_instrument('QHYCCD-Cameras-Capture', **QHY268_GEOMETRY), 'QHY 268M')
         self.assertEqual(canonical_instrument('UK'), 'Unknown')
         self.assertEqual(canonical_instrument('QHYCCD-Cameras-Capture'), 'QHY 600M or QHY 268M')
+
+    def test_binned_geometry(self):
+        # 3x3 binning of the QHY 600M: 3192 x 2129 px, XPIXSZ written binned (11.28) or unbinned (3.76)
+        for pixel_size in (11.28, 3.76):
+            with self.subTest(pixel_size=pixel_size):
+                self.assertEqual(detect_instruments(3192, 2129, pixel_size, 3, 3), ['QHY 600M'])
+                self.assertEqual(
+                    canonical_instrument('QHYCCD-Cameras-Capture', 3192, 2129, pixel_size, 3, 3), 'QHY 600M',
+                )
+        # 2x2 binning of the QHY 268M
+        self.assertEqual(canonical_instrument('QHYCCD-Cameras-Capture', 3126, 2088, 7.52, 2, 2), 'QHY 268M')
+
+    def test_shared_sensor_resolved_by_generic_zwo_header(self):
+        self.assertEqual(canonical_instrument('ASI Camera (1)', 6248, 4176, 3.76), 'ZWO ASI2600MC Pro')
+
+
+class AnalyzeFitsInstrumentTest(TestCase):
+    def _analyze(self, header_data):
+        run = ObservationRun.objects.create(name='fits', is_public=True)
+        datafile = DataFile.objects.create(observation_run=run, datafile='/tmp/frame.fits', file_type='FITS')
+        with patch.object(DataFile, 'get_fits_header', return_value={}), \
+                patch('obs_run.analyze_fits_header.extract_fits_header_info', return_value=header_data):
+            analyze_fits(datafile)
+        datafile.refresh_from_db()
+        return datafile
+
+    def test_generic_header_resolved_by_header_name_not_catalog_order(self):
+        # QHY 268M comes first in the catalog and shares the sensor with the ZWO ASI2600MC Pro
+        datafile = self._analyze({
+            'instrument': 'ASI Camera (1)', 'naxis1': 6248, 'naxis2': 4176, 'pixel_size': 3.76,
+            'binning_x': 1, 'binning_y': 1,
+        })
+        self.assertEqual(datafile.instrument, 'ZWO ASI2600MC Pro')
+        self.assertEqual(datafile.instrument_normalized, 'ZWO ASI2600MC Pro')
+
+    def test_specific_header_name_is_kept(self):
+        datafile = self._analyze({
+            'instrument': 'QHY600M', 'naxis1': 3192, 'naxis2': 2129, 'pixel_size': 11.28,
+            'binning_x': 3, 'binning_y': 3,
+        })
+        self.assertEqual(datafile.instrument, 'QHY600M')
+        self.assertEqual(datafile.instrument_normalized, 'QHY 600M')
+
+
+class InstrumentApiDisplayTest(APITestCase):
+    def test_generic_raw_name_displayed_as_resolved_camera(self):
+        run = ObservationRun.objects.create(name='display', is_public=True)
+        DataFile.objects.create(
+            observation_run=run, datafile='/tmp/g.fit', file_type='FITS', instrument='QHYCCD-Cameras-Capture',
+            naxis1=3192, naxis2=2129, pixel_size=11.28, binning_x=3, binning_y=3,
+        )
+        row = self.client.get('/api/runs/datafiles/').json()['results'][0]
+        self.assertEqual(row['instrument'], 'QHY 600M')
+        self.assertEqual(row['instrument_normalized'], 'QHY 600M')
 
 
 class InstrumentNormalizedFieldTest(TestCase):

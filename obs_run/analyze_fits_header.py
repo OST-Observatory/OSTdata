@@ -239,9 +239,12 @@ def detect_instruments(naxis1, naxis2, pixel_um, binx, biny):
     except Exception:
         w, h = -1, -1
     try:
-        px = float(pixel_um) / bw
+        px_header = float(pixel_um)
     except Exception:
-        px = -1.0
+        px_header = -1.0
+    # XPIXSZ is normally the binned pixel size (N.I.N.A., MaxIm); some software writes the
+    # unbinned size. Accept both conventions.
+    px_candidates = [px_header / bw, px_header] if px_header > 0 else []
 
     catalog = INSTRUMENT_CATALOG
 
@@ -254,7 +257,7 @@ def detect_instruments(naxis1, naxis2, pixel_um, binx, biny):
     matches = []
     for item in catalog:
         # Check pixel size if available
-        if px > 0 and item['px_um'] > 0 and not close(px, item['px_um'], 0.15):
+        if px_candidates and item['px_um'] > 0 and not any(close(px, item['px_um'], 0.15) for px in px_candidates):
             continue
         
         # Check dimensions
@@ -564,13 +567,15 @@ def analyze_fits(datafile):
     except Exception:
         header_instr = ''
 
-    inferred = detect_instrument(
+    candidates = detect_instruments(
         header_data.get('naxis1', -1),
         header_data.get('naxis2', -1),
         header_data.get('pixel_size', -1),
         header_data.get('binning_x', 1),
         header_data.get('binning_y', 1),
     )
+    # Cameras sharing a sensor (e.g. QHY 268M / ZWO ASI2600MC Pro) are told apart by the header name
+    inferred = (disambiguate_instrument(candidates, header_instr) or candidates[0]) if candidates else None
 
     # Prefer inferred instrument when header is generic or missing
     generic_markers = ['unknown', 'uk', 'qhyccd-cameras-capture', 'asi camera (1)']

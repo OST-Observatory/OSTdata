@@ -169,9 +169,13 @@ class ObjectListSerializer(ModelSerializer):
 
             # Instruments & Telescopes (unique, non-empty) with alias normalization
             try:
-                instruments_raw = [x for x in df_qs.values_list('instrument', flat=True) if x]
+                instruments_raw = [
+                    normalized or normalize_alias(raw, INSTRUMENT_ALIASES)
+                    for raw, normalized in df_qs.values_list('instrument', 'instrument_normalized')
+                    if raw
+                ]
                 telescopes_raw = [x for x in df_qs.values_list('telescope', flat=True) if x]
-                instruments = list({ normalize_alias(x, INSTRUMENT_ALIASES) for x in instruments_raw })
+                instruments = list(set(instruments_raw))
                 telescopes = list({ normalize_alias(x, TELESCOPE_ALIASES) for x in telescopes_raw })
             except Exception:
                 instruments = []

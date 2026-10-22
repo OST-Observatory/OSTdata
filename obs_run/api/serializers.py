@@ -673,7 +673,12 @@ class DataFileSerializer(ModelSerializer):
         data = super().to_representation(instance)
         try:
             if 'instrument' in data and data['instrument']:
-                data['instrument'] = normalize_alias(data['instrument'], INSTRUMENT_ALIASES)
+                # instrument_normalized also resolves generic names (e.g. 'QHYCCD-Cameras-Capture')
+                # from the image geometry; the alias map alone cannot
+                data['instrument'] = (
+                    getattr(instance, 'instrument_normalized', '')
+                    or normalize_alias(data['instrument'], INSTRUMENT_ALIASES)
+                )
         except Exception:
             pass
         try:
