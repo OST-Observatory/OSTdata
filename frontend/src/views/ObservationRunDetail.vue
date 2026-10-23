@@ -840,44 +840,7 @@
                 </v-chip>
               </template>
               <template v-slot:item.tools="{ item }">
-                <div class="d-flex justify-end">
-                  <v-tooltip text="Preview thumbnail" location="top">
-                    <template #activator="{ props }">
-                      <v-btn
-                        v-bind="props"
-                        variant="text"
-                        size="small"
-                        icon
-                        aria-label="Preview"
-                        @click="openPreview(item)"
-                      >
-                        <v-icon>mdi-image-search</v-icon>
-                      </v-btn>
-                    </template>
-                  </v-tooltip>
-                  <v-tooltip text="View FITS header" location="top">
-                    <template #activator="{ props }">
-                      <v-btn
-                        v-bind="props"
-                        variant="text"
-                        size="small"
-                        icon
-                        :disabled="String(item.file_type || '').toUpperCase() !== 'FITS'"
-                        :aria-label="`View FITS header for ${item.file_name}`"
-                        @click="openHeader(item)"
-                      >
-                        <v-icon>mdi-file-document-outline</v-icon>
-                      </v-btn>
-                    </template>
-                  </v-tooltip>
-                  <v-tooltip :text="`Download ${item.file_name}`" location="top">
-                    <template #activator="{ props }">
-                      <v-btn v-bind="props" variant="text" size="small" icon :href="api.getDataFileDownloadUrl(item.pk || item.id)" :aria-label="`Download ${item.file_name}`">
-                        <v-icon>mdi-download</v-icon>
-                      </v-btn>
-                    </template>
-                  </v-tooltip>
-                </div>
+                <DataFileQuickActions :item="item" class="justify-end" @preview="openPreview" @header="openHeader" />
               </template>
             </v-data-table>
             <div v-else class="text-caption text-secondary">No data files found for this run.</div>
@@ -1107,6 +1070,7 @@ import { pollDownloadJobUntilReady } from '@/utils/downloadJobPoll'
 import { formatDateTime } from '@/utils/datetime'
 import { getStatusColor } from '@/utils/status'
 import { ensureBokeh } from '@/utils/bokeh'
+import DataFileQuickActions from '@/components/datafiles/DataFileQuickActions.vue'
 
 const route = useRoute()
 const notify = useNotifyStore()
@@ -2252,8 +2216,8 @@ const binningOptions = computed(() => {
   word-break: break-word;
 }
 
-/* Link styling similar to Dashboard tables */
-.custom-table :deep(a) {
+/* Link styling similar to Dashboard tables (text links only: buttons and chips keep their own look) */
+.custom-table :deep(a:not(.v-btn):not(.v-chip)) {
   color: var(--v-theme-primary);
   text-decoration: none;
   font-weight: 600;
@@ -2266,13 +2230,13 @@ const binningOptions = computed(() => {
   margin: -2px -4px;
 }
 
-.custom-table :deep(a:hover) {
+.custom-table :deep(a:not(.v-btn):not(.v-chip):hover) {
   color: var(--v-theme-primary-dark);
   background-color: rgba(var(--v-theme-primary-light), 0.9);
   transform: translateY(-1px);
 }
 
-.custom-table :deep(a::after) {
+.custom-table :deep(a:not(.v-btn):not(.v-chip)::after) {
   content: '';
   position: absolute;
   width: 100%;
@@ -2285,7 +2249,7 @@ const binningOptions = computed(() => {
   border-radius: var(--v-theme-radius-sm);
 }
 
-.custom-table :deep(a:hover::after) {
+.custom-table :deep(a:not(.v-btn):not(.v-chip):hover::after) {
   transform: scaleX(1);
 }
 

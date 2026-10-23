@@ -729,7 +729,7 @@ export default {
   color: var(--v-theme-on-surface);
 }
 
-.custom-table :deep(a) {
+.custom-table :deep(a:not(.v-btn):not(.v-chip)) {
   color: var(--v-theme-primary);
   text-decoration: none;
   font-weight: 600;
@@ -742,13 +742,13 @@ export default {
   margin: -2px -4px;
 }
 
-.custom-table :deep(a:hover) {
+.custom-table :deep(a:not(.v-btn):not(.v-chip):hover) {
   color: var(--v-theme-primary-dark);
   background-color: rgba(var(--v-theme-primary-light), 0.9);
   transform: translateY(-1px);
 }
 
-.custom-table :deep(a::after) {
+.custom-table :deep(a:not(.v-btn):not(.v-chip)::after) {
   content: '';
   position: absolute;
   width: 100%;
@@ -761,7 +761,7 @@ export default {
   border-radius: var(--v-theme-radius-sm);
 }
 
-.custom-table :deep(a:hover::after) {
+.custom-table :deep(a:not(.v-btn):not(.v-chip):hover::after) {
   transform: scaleX(1);
 }
 

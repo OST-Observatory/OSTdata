@@ -293,12 +293,10 @@
         </template>
 
         <template #item.actions="{ item }">
-          <div class="d-flex align-center flex-nowrap" style="gap: 6px">
-            <v-btn icon="mdi-eye" size="x-small" variant="text" title="Preview thumbnail" :aria-label="`Preview ${item.file_name}`" @click="openPreview(item)" />
-            <v-btn icon="mdi-code-tags" size="x-small" variant="text" title="FITS header" :aria-label="`View header for ${item.file_name}`" @click="openHeader(item)" />
+          <DataFileQuickActions :item="item" @preview="openPreview" @header="openHeader">
             <v-menu>
               <template #activator="{ props }">
-                <v-btn v-bind="props" icon="mdi-dots-vertical" size="x-small" variant="text" :loading="isActionLoading(item)" :aria-label="`More actions for ${item.file_name}`" />
+                <v-btn v-bind="props" icon="mdi-dots-vertical" size="small" density="comfortable" variant="text" :loading="isActionLoading(item)" :aria-label="`More actions for ${item.file_name}`" />
               </template>
               <v-list density="compact" min-width="200">
                 <v-list-item prepend-icon="mdi-crosshairs-gps" title="WCS information" @click="openWcs(item)" />
@@ -317,11 +315,9 @@
                 </template>
                 <v-list-item v-if="canPlateSolve" prepend-icon="mdi-star-four-points" title="Trigger plate solve" @click="triggerPlateSolveSingle(item)" />
                 <v-list-item v-if="canClearOverrides" prepend-icon="mdi-flag-off" title="Clear override flags" @click="clearOverrideSingleItem(item)" />
-                <v-divider />
-                <v-list-item prepend-icon="mdi-download" title="Download" :href="api.getDataFileDownloadUrl(item.pk)" target="_blank" rel="noopener" />
               </v-list>
             </v-menu>
-          </div>
+          </DataFileQuickActions>
         </template>
       </v-data-table>
 
@@ -462,6 +458,7 @@ import EmptyState from '@/components/ui/EmptyState.vue'
 import LoadingState from '@/components/ui/LoadingState.vue'
 import ClassificationEditDialog from '@/components/datafiles/ClassificationEditDialog.vue'
 import SpectrographSuggestionPanel from '@/components/datafiles/SpectrographSuggestionPanel.vue'
+import DataFileQuickActions from '@/components/datafiles/DataFileQuickActions.vue'
 import {
   BAD_QUALITY_FLAGS,
   EXPOSURE_TYPE_ITEMS,
@@ -589,7 +586,7 @@ const headers = computed(() => [
   { title: 'Plate', key: 'plate_solved', sortable: true },
   { title: 'Spectr.', key: 'spectrograph', sortable: true },
   ...(showSuggestions.value ? [{ title: 'Suggestion', key: 'suggestion', sortable: false, minWidth: '210px' }] : []),
-  { title: 'Actions', key: 'actions', sortable: false, width: '120px' },
+  { title: 'Actions', key: 'actions', sortable: false, width: '150px' },
 ])
 
 const busy = ref({ plateSolve: false, reEvaluate: false, clearOverrides: false, linkObject: false, unlinkObject: false, download: false, suggestions: false })
