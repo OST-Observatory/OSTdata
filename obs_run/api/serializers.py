@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Optional
 
 from django.core.exceptions import ObjectDoesNotExist
+from django.db.models import Q
 from django.utils import timezone
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema_field
@@ -78,6 +79,7 @@ class RunSerializer(ModelSerializer):
     # Exposure-type counts (robust fallback)
     n_light = SerializerMethodField()
     instruments = SerializerMethodField()
+    calibration_only = SerializerMethodField()
     n_flat = SerializerMethodField()
     n_dark = SerializerMethodField()
     expo_time = SerializerMethodField()
@@ -100,6 +102,7 @@ class RunSerializer(ModelSerializer):
             'photometry',
             'spectroscopy',
             'instruments',
+            'calibration_only',
             'tags',
             'tag_ids',
             'href',
@@ -207,29 +210,23 @@ class RunSerializer(ModelSerializer):
 
     # Robust exposure-type counters (tolerant to variant values)
     def _count_exptype(self, obj, codes_or_prefixes):
+        # Files of an effective exposure type (as the n_light/n_flat/n_dark annotations of
+        # RunViewSet). The annotation is used whenever present, also when 0: falling back to the
+        # header type there mixed two definitions (e.g. header flats that the classifier calls
+        # lights counted as flats, so 'Other' showed 0 instead of the unknown files).
+        ann_key = codes_or_prefixes.get('ann')
+        value = getattr(obj, ann_key, None) if ann_key else None
+        if isinstance(value, (int, float)):
+            return int(value)
         try:
-            # Prefer annotated value if present and positive (detail may also carry annotations)
-            ann_key = codes_or_prefixes.get('ann')
-            if ann_key:
-                v = getattr(obj, ann_key, None)
-                if isinstance(v, (int, float)) and v > 0:
-                    return int(v)
-        except Exception:
-            pass
-        try:
-            qs = obj.datafile_set.all()
-            from django.db.models import Q
+            from utilities import get_effective_exposure_type_filter
             q = Q()
             for code in codes_or_prefixes.get('codes', []):
-                q |= Q(exposure_type__iexact=code)
-                q |= Q(exposure_type__iregex=rf'^\\s*{code.lower()}\\s*$')
-            for pref in codes_or_prefixes.get('prefixes', []):
-                q |= Q(exposure_type__istartswith=pref)
-            return qs.filter(q).count()
+                q |= get_effective_exposure_type_filter(code)
+            return obj.datafile_set.filter(q).count()
         except Exception:
             return 0
 
-    @extend_schema_field(OpenApiTypes.INT)
     @extend_schema_field(OpenApiTypes.OBJECT)
     def get_instruments(self, obj) -> dict:
         # List views pass the instruments of the whole page (one query); else query this run
@@ -238,16 +235,33 @@ class RunSerializer(ModelSerializer):
             return page[obj.pk]
         return runs_instruments([obj.pk])[obj.pk]
 
+    @extend_schema_field(OpenApiTypes.BOOL)
+    def get_calibration_only(self, obj) -> bool:
+        # Run with files, none of them a light, all of them calibration frames
+        counts = [getattr(obj, name, None) for name in ('n_datafiles', 'n_light', 'n_calibration')]
+        if any(value is None for value in counts):
+            # Not annotated (run serialized outside RunViewSet): count directly
+            from utilities import get_calibration_exposure_type_filter, get_effective_exposure_type_filter
+            files = obj.datafile_set.all()
+            counts = [
+                files.count(),
+                files.filter(get_effective_exposure_type_filter('LI')).count(),
+                files.filter(get_calibration_exposure_type_filter()).count(),
+            ]
+        n_files, n_light, n_calibration = counts
+        return n_files > 0 and n_light == 0 and n_calibration == n_files
+
+    @extend_schema_field(OpenApiTypes.INT)
     def get_n_light(self, obj) -> int:
-        return self._count_exptype(obj, {'ann': 'n_light', 'codes': ['LI'], 'prefixes': ['LIGHT']})
+        return self._count_exptype(obj, {'ann': 'n_light', 'codes': ['LI']})
 
     @extend_schema_field(OpenApiTypes.INT)
     def get_n_flat(self, obj) -> int:
-        return self._count_exptype(obj, {'ann': 'n_flat', 'codes': ['FL'], 'prefixes': ['FLAT']})
+        return self._count_exptype(obj, {'ann': 'n_flat', 'codes': ['FL']})
 
     @extend_schema_field(OpenApiTypes.INT)
     def get_n_dark(self, obj) -> int:
-        return self._count_exptype(obj, {'ann': 'n_dark', 'codes': ['DA'], 'prefixes': ['DARK']})
+        return self._count_exptype(obj, {'ann': 'n_dark', 'codes': ['DA']})
 
     # (legacy alias getters removed)
 

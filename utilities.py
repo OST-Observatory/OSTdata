@@ -18,7 +18,7 @@ from astropy.time import Time
 from astropy.visualization import simple_norm
 from astroquery.simbad import Simbad
 from django.conf import settings
-from django.db.models import ExpressionWrapper, F, FloatField
+from django.db.models import ExpressionWrapper, F, FloatField, Q
 from scipy import ndimage, signal
 
 from objects.models import Object
@@ -221,6 +221,18 @@ def get_effective_exposure_type_filter(exposure_type_code, field_prefix=''):
         Django Q object for filtering by effective exposure type
     """
     return effective_exposure_type_q(exposure_type_code, field_prefix)
+
+
+#   Effective exposure types of calibration frames (bias, dark, flat, wavelength calibration)
+CALIBRATION_EXPOSURE_TYPES = ('BI', 'DA', 'FL', 'WA')
+
+
+def get_calibration_exposure_type_filter(field_prefix=''):
+    """Q filter for calibration frames by effective exposure type (see CALIBRATION_EXPOSURE_TYPES)."""
+    q = Q()
+    for code in CALIBRATION_EXPOSURE_TYPES:
+        q |= effective_exposure_type_q(code, field_prefix)
+    return q
 
 
 def get_object_fov_radius(obj, fallback_arcmin=10.0, min_arcmin=1.0, max_arcmin=60.0):

@@ -41,7 +41,11 @@ from ostdata.custom_permissions import (
     get_run_for_user_or_404,
 )
 from ostdata.openapi import JSON_OBJECT_RESPONSE
-from utilities import annotate_effective_exposure_type, get_effective_exposure_type_filter
+from utilities import (
+    annotate_effective_exposure_type,
+    get_calibration_exposure_type_filter,
+    get_effective_exposure_type_filter,
+)
 
 from ..auxil import get_size_dir
 from ..plotting import (
@@ -136,6 +140,7 @@ class RunViewSet(viewsets.ModelViewSet):
             n_light=Count('datafile', filter=get_effective_exposure_type_filter('LI', 'datafile__')),
             n_flat=Count('datafile', filter=get_effective_exposure_type_filter('FL', 'datafile__')),
             n_dark=Count('datafile', filter=get_effective_exposure_type_filter('DA', 'datafile__')),
+            n_calibration=Count('datafile', filter=get_calibration_exposure_type_filter('datafile__')),
             expo_time=Sum('datafile__exptime', filter=Q(datafile__exptime__gt=0)),
             light_expo_time=Sum(
                 'datafile__exptime',

@@ -164,13 +164,25 @@
           </template>
           <!-- Name column with link -->
           <template v-slot:item.name="{ item }">
-            <v-tooltip :text="item.name" location="top">
-              <template #activator="{ props }">
-                <router-link v-bind="props" :to="`/observation-runs/${item.pk || item.id}`" class="text-decoration-none primary--text cell-truncate">
-                  {{ item.name }}
-                </router-link>
-              </template>
-            </v-tooltip>
+            <div class="d-flex align-center flex-wrap ga-2">
+              <v-tooltip :text="item.name" location="top">
+                <template #activator="{ props }">
+                  <router-link v-bind="props" :to="`/observation-runs/${item.pk || item.id}`" class="text-decoration-none primary--text cell-truncate">
+                    {{ item.name }}
+                  </router-link>
+                </template>
+              </v-tooltip>
+              <v-chip
+                v-if="item.calibration_only"
+                size="x-small"
+                variant="tonal"
+                color="secondary"
+                prepend-icon="mdi-tune-variant"
+                title="Calibration run: only bias, dark, flat or wavelength calibration frames, no lights"
+              >
+                Calibration
+              </v-chip>
+            </div>
           </template>
 
           <template v-slot:item.mid_observation_jd="{ item }">
@@ -183,14 +195,13 @@
           </template>
 
           <template v-slot:item.main_targets="{ item }">
-            <div class="d-flex flex-wrap gap-1">
+            <div class="d-flex flex-wrap chip-list">
               <v-chip
                 v-for="t in getMainTargets(item)"
                 :key="t.name"
                 size="x-small"
                 variant="outlined"
                 color="primary"
-                class="mr-1"
                 :to="t.href"
                 link
               >
@@ -202,7 +213,7 @@
 
           <!-- Instruments used: cameras of the photometry light frames, spectrographs of the spectra -->
           <template v-slot:item.photometry="{ item }">
-            <div v-if="getBool(item, ['photometry', 'has_photometry'])" class="d-flex flex-wrap gap-1">
+            <div v-if="getBool(item, ['photometry', 'has_photometry'])" class="d-flex flex-wrap chip-list">
               <v-chip
                 v-for="camera in item.instruments?.photometry || []"
                 :key="camera"
@@ -222,7 +233,7 @@
           </template>
 
           <template v-slot:item.spectroscopy="{ item }">
-            <div v-if="getBool(item, ['spectroscopy', 'has_spectroscopy'])" class="d-flex flex-wrap gap-1">
+            <div v-if="getBool(item, ['spectroscopy', 'has_spectroscopy'])" class="d-flex flex-wrap chip-list">
               <v-chip
                 v-for="code in item.instruments?.spectroscopy || []"
                 :key="code"
@@ -257,7 +268,7 @@
           </template>
 
           <template v-slot:item.tags="{ item }">
-            <div class="d-flex flex-wrap gap-1">
+            <div class="d-flex flex-wrap chip-list">
               <v-chip
                 v-for="tag in normalizeTags(item.tags)"
                 :key="tag.name"
@@ -1018,6 +1029,12 @@ watch(runs, (val) => {
 .card-actions-responsive .items-per-page-select { min-width: 96px; }
 
 /* Single-line truncation with ellipsis */
+/* Chip lists in table cells (targets, instruments, tags): space between chips and wrapped rows */
+.chip-list {
+  column-gap: 6px;
+  row-gap: 4px;
+}
+
 .cell-truncate {
   display: inline-block;
   max-width: 320px;
