@@ -1,5 +1,6 @@
 import logging
 import time
+from collections import Counter
 from pathlib import Path
 
 from django.core.management.base import BaseCommand
@@ -24,7 +25,7 @@ class Command(BaseCommand):
         parser.add_argument(
             '--dry-run',
             action='store_true',
-            help='Show what would be processed without saving',
+            help='Analyze headers and simulate object evaluation without saving; shows changes per field',
         )
         parser.add_argument(
             '--skip-evaluation',
@@ -53,6 +54,8 @@ class Command(BaseCommand):
             self.stdout.write(self.style.WARNING(f'DRY RUN MODE: Processing {total} FITS files (no database changes will be made)...'))
         else:
             self.stdout.write(f'Processing {total} FITS files...')
+        if dry_run:
+            self.stdout.write('Header analysis runs without saving; changes are summarized per field')
         if not skip_evaluation:
             if dry_run:
                 self.stdout.write('Will simulate re-evaluation of object associations (no changes will be saved)')
@@ -66,18 +69,18 @@ class Command(BaseCommand):
         reassigned_files = []
         skipped_files = []
         new_objects_created = []
+        field_changes = Counter()
+        files_changed = 0
         
         start_time = time.time()
         
         for idx, df in enumerate(queryset, 1):
             try:
-                # First analyze FITS header (always run, but only save if not dry_run)
-                if not dry_run:
-                    analyze_fits(df)
-                else:
-                    # In dry-run, we still want to see what would happen, so we need to refresh
-                    # the datafile to get current state, but we won't save changes
-                    df.refresh_from_db()
+                # First analyze FITS header; saved only if a value changed (dry run: never)
+                changes = analyze_fits(df, save=not dry_run)
+                if changes:
+                    files_changed += 1
+                    field_changes.update(changes.keys())
                 
                 # Then evaluate object associations if requested
                 if not skip_evaluation and df.observation_run:
@@ -165,7 +168,12 @@ class Command(BaseCommand):
                     obj.delete()
                     deleted_objects.append(obj_name)
         
-        # Summary output
+        # Summary output: header analysis
+        verb = 'would change' if dry_run else 'changed'
+        self.stdout.write(f'\nHeader analysis: {files_changed} files {verb}, {updated - files_changed} unchanged')
+        for field, count in field_changes.most_common():
+            self.stdout.write(f'  {field}: {count}')
+
         if dry_run:
             self.stdout.write(self.style.WARNING(f'\nDRY RUN SUMMARY: Would process {updated} files'))
             if not skip_evaluation:

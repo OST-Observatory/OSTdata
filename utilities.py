@@ -1272,6 +1272,13 @@ def add_new_data_file(path_to_file, observation_run, print_to_terminal=False):
     return True
 
 
+def _set_main_target(data_file, name):
+    """Set main_target and save it, only if it changes (no history entry otherwise)."""
+    if data_file.main_target != name:
+        data_file.main_target = name
+        data_file.save(update_fields=['main_target'])
+
+
 def evaluate_data_file(data_file, observation_run, print_to_terminal=False, skip_if_object_has_overrides=True, dry_run=False):
     """
     Evaluate data file and add associated objects
@@ -1322,21 +1329,23 @@ def evaluate_data_file(data_file, observation_run, print_to_terminal=False, skip
     #   Set data file information from file header data
     if not dry_run:
         try:
+            # The analyzers save the file themselves (only if a value changed)
             data_file.set_info()
-            data_file.save()
         except Exception as e:
             logger.warning(f'Error in set_info() for data_file {data_file.pk}: {e}')
             # Continue anyway - some fields might already be set
         # Update file metadata (size/hash) to reflect any external changes
         try:
             p = Path(str(data_file.datafile))
+            old_meta = (data_file.file_size, data_file.content_hash)
             data_file.file_size = p.stat().st_size if p.exists() else 0
             try:
                 data_file.content_hash = compute_file_hash(p) if p.exists() else ''
             except Exception:
                 # Keep previous hash if reading fails
                 pass
-            data_file.save(update_fields=['file_size', 'content_hash'])
+            if (data_file.file_size, data_file.content_hash) != old_meta:
+                data_file.save(update_fields=['file_size', 'content_hash'])
         except Exception:
             pass
 
@@ -1466,8 +1475,7 @@ def evaluate_data_file(data_file, observation_run, print_to_terminal=False, skip
                     #   This should always be updated when an object is identified,
                     #   regardless of whether it was resolved via Simbad or not
                     if should_allow_auto_update(data_file, 'main_target'):
-                        data_file.main_target = obj.name
-                        data_file.save()
+                        _set_main_target(data_file, obj.name)
 
                     #   Add header name as an alias (skip when target is empty)
                     if target and target.strip():
@@ -1721,8 +1729,7 @@ def evaluate_data_file(data_file, observation_run, print_to_terminal=False, skip
                         
                         # Update datafile target name to match detected Solar System object
                         if should_allow_auto_update(data_file, 'main_target'):
-                            data_file.main_target = object_name
-                            data_file.save()
+                            _set_main_target(data_file, object_name)
                     
                     #   Set alias names (only if verification didn't already update identifiers)
                     elif object_simbad_resolved and not verification_updated:
@@ -1760,8 +1767,7 @@ def evaluate_data_file(data_file, observation_run, print_to_terminal=False, skip
 
                         #   Set datafile target name to Simbad resolved name
                         if should_allow_auto_update(data_file, 'main_target'):
-                            data_file.main_target = object_name
-                            data_file.save()
+                            _set_main_target(data_file, object_name)
                     elif verification_updated:
                         # If verification updated the object, ensure header name is added as identifier
                         # (it might have been removed when identifiers were replaced)
@@ -1778,8 +1784,7 @@ def evaluate_data_file(data_file, observation_run, print_to_terminal=False, skip
                         # Update datafile target name to match updated object name
                         obj.refresh_from_db()
                         if should_allow_auto_update(data_file, 'main_target'):
-                            data_file.main_target = obj.name
-                            data_file.save()
+                            _set_main_target(data_file, obj.name)
                     
                     #   Automatically update photometry/spectroscopy flags for object and observation run
                     update_object_photometry_spectroscopy(obj)

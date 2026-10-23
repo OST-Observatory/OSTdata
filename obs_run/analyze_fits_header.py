@@ -1,4 +1,5 @@
 import logging
+import math
 
 import numpy as np
 from astropy.coordinates.angles import Angle
@@ -411,7 +412,7 @@ def canonical_instrument(name, naxis1=-1, naxis2=-1, pixel_size=-1, binning_x=1,
     return normalize_instrument(raw)
 
 
-def analyze_fits(datafile):
+def analyze_fits(datafile, save=True):
     """
         Extract HEADER information from the FITS files
 
@@ -419,6 +420,15 @@ def analyze_fits(datafile):
         ----------
         datafile        : `obs_run.models.DataFile` object
             DataFile instance
+
+        save            : `boolean`, optional
+            Save the changes (only when a value differs from the database, so unchanged
+            files get no history entry). False: only update the instance (dry runs).
+
+        Returns
+        -------
+        dict
+            {field: (stored value, new value)} for every field that changes
     """
     #   Get Header
     header = datafile.get_fits_header()
@@ -579,7 +589,10 @@ def analyze_fits(datafile):
         datafile.header_target_name = header_data.get('objectname', '-')
     else:
         datafile.header_target_name = '-'
-    if should_allow_auto_update(datafile, 'main_target'):
+    #   Files already associated with an object show the object as target (set by the object
+    #   evaluation); the header name is only the initial target of unassigned files
+    linked = datafile.pk is not None and datafile.object_set.exists()
+    if should_allow_auto_update(datafile, 'main_target') and not linked:
         datafile.main_target = datafile.header_target_name
 
     # Infer instrument from header/geometry if header instrument is generic or missing
@@ -613,5 +626,43 @@ def analyze_fits(datafile):
     if assign_inferred and should_allow_auto_update(datafile, 'instrument'):
         datafile.instrument = inferred
 
-    from ostdata.history_reason import REASON_TASK_ANALYZE_HEADER, save_with_reason
-    save_with_reason(datafile, REASON_TASK_ANALYZE_HEADER)
+    #   Derived field (save() keeps it in sync); set here so dry runs report it too
+    datafile.instrument_normalized = canonical_instrument(
+        datafile.instrument, datafile.naxis1, datafile.naxis2, datafile.pixel_size,
+        datafile.binning_x, datafile.binning_y, datafile.color_sensor,
+    )
+
+    changes = changed_fields(datafile)
+    if save and (changes or datafile.pk is None):
+        from ostdata.history_reason import REASON_TASK_ANALYZE_HEADER, save_with_reason
+        save_with_reason(datafile, REASON_TASK_ANALYZE_HEADER)
+    return changes
+
+
+def changed_fields(instance):
+    """
+    {field: (stored value, new value)} for concrete fields whose in-memory value differs from the
+    database row (all fields for unsaved instances). New values are cleaned with the field's
+    to_python(), so e.g. a header string '1.20' and a stored 1.2 count as equal.
+    """
+    fields = [f for f in instance._meta.concrete_fields if not f.primary_key]
+    stored = None
+    if instance.pk is not None:
+        stored = type(instance).objects.filter(pk=instance.pk).values(*[f.attname for f in fields]).first()
+    changes = {}
+    for field in fields:
+        new = getattr(instance, field.attname)
+        try:
+            new = field.to_python(new)
+        except Exception:
+            pass
+        old = stored.get(field.attname) if stored is not None else None
+        if stored is None or not _same_value(old, new):
+            changes[field.name] = (old, new)
+    return changes
+
+
+def _same_value(old, new):
+    if isinstance(old, float) and isinstance(new, float) and math.isnan(old) and math.isnan(new):
+        return True
+    return old == new
