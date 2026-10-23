@@ -50,6 +50,35 @@ export function spectrographLabel(code) {
   return (SPECTROGRAPH_ITEMS.find(i => i.value === code) || {}).label || code || '—'
 }
 
+// Cameras (canonical names of obs_run/utils.py INSTRUMENT_CATALOG); colors differ from the spectrograph
+// colors so photometry and spectroscopy chips stay distinguishable
+const CAMERA_COLORS = {
+  'QHY 600M': 'teal',
+  'QHY 268M': 'indigo',
+  'QHY 5III485C': 'pink',
+  'QHY 5III462C': 'pink-darken-2',
+  'SBIG ST-8': 'brown',
+  'SBIG ST-7': 'brown-lighten-1',
+  'SBIG STF-8300': 'deep-orange',
+  'SBIG ST-i': 'blue-grey',
+  'Skyris 445C': 'lime-darken-2',
+  'ZWO ASI174MM': 'cyan-darken-2',
+  'ZWO ASI174MM Mini': 'cyan-darken-2',
+  'ZWO ASI220MM': 'cyan',
+  'ZWO ASI678MM': 'light-blue-darken-2',
+  'ZWO ASI2600MC Pro': 'amber-darken-3',
+  'ZWO ASI294MM Pro': 'orange-darken-3',
+}
+const CAMERA_FALLBACK_COLORS = ['teal-darken-2', 'indigo-lighten-1', 'deep-orange-darken-2', 'blue-grey-darken-1', 'pink-lighten-1']
+
+export function cameraColor(name) {
+  if (CAMERA_COLORS[name]) return CAMERA_COLORS[name]
+  // Stable color for cameras not in the list
+  let hash = 0
+  for (const ch of String(name || '')) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0
+  return CAMERA_FALLBACK_COLORS[hash % CAMERA_FALLBACK_COLORS.length]
+}
+
 /**
  * Open heuristic spectrograph suggestion of a data file row (serializer field spectrograph_suggestion):
  * { byRun, byToken, values } with only the values that still differ from the current spectrograph.

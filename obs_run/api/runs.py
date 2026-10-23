@@ -52,7 +52,7 @@ from ..plotting import (
     time_distribution_model,
 )
 from .filter import RunFilter
-from .serializers import RunSerializer
+from .serializers import RunSerializer, runs_instruments
 
 try:
     from PIL import Image
@@ -247,6 +247,8 @@ class RunViewSet(viewsets.ModelViewSet):
         if aux_object:
             from objects.search import normalize_search_term
             ctx['aux_object'] = normalize_search_term(str(aux_object))
+        if getattr(self, '_run_instruments', None) is not None:
+            ctx['run_instruments'] = self._run_instruments
         return ctx
 
     def get_serializer_class(self):
@@ -296,6 +298,8 @@ class RunViewSet(viewsets.ModelViewSet):
             latest_hist = None
         page = self.paginate_queryset(queryset)
         if page is not None:
+            # Photometry cameras / spectrographs of all runs on the page in one query
+            self._run_instruments = runs_instruments([run.pk for run in page])
             serializer = self.get_serializer(page, many=True)
             resp = self.get_paginated_response(serializer.data)
             try:
@@ -308,7 +312,9 @@ class RunViewSet(viewsets.ModelViewSet):
             except Exception:
                 pass
             return resp
-        serializer = self.get_serializer(queryset, many=True)
+        runs = list(queryset)
+        self._run_instruments = runs_instruments([run.pk for run in runs])
+        serializer = self.get_serializer(runs, many=True)
         resp = Response(serializer.data)
         try:
             if etag:

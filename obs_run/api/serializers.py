@@ -33,6 +33,34 @@ from tags.models import Tag
 ################################################################################
 
 
+#   Camera names that do not identify a camera (not shown as photometry instrument)
+_NO_CAMERA_NAMES = ('', '-', 'unknown')
+
+
+def runs_instruments(run_ids):
+    """
+    Instruments of the light frames per run, with the same split as the run's photometry/spectroscopy
+    flags (utilities.update_observation_run_photometry_spectroscopy): one query for all runs.
+
+    Returns {run_id: {'photometry': [camera names], 'spectroscopy': [spectrograph codes]}}.
+    """
+    result = {run_id: {'photometry': set(), 'spectroscopy': set()} for run_id in run_ids}
+    rows = (
+        DataFile.objects.filter(observation_run_id__in=list(result), exposure_type='LI')
+        .values_list('observation_run_id', 'spectrograph', 'instrument_normalized')
+        .distinct()
+    )
+    for run_id, spectrograph, camera in rows:
+        if spectrograph and spectrograph != 'N':
+            result[run_id]['spectroscopy'].add(spectrograph)
+        elif (camera or '').strip().lower() not in _NO_CAMERA_NAMES:
+            result[run_id]['photometry'].add(camera)
+    return {
+        run_id: {kind: sorted(values) for kind, values in kinds.items()}
+        for run_id, kinds in result.items()
+    }
+
+
 class RunSerializer(ModelSerializer):
     tags = SerializerMethodField()
     tag_ids = PrimaryKeyRelatedField(
@@ -49,6 +77,7 @@ class RunSerializer(ModelSerializer):
     n_ser = SerializerMethodField()
     # Exposure-type counts (robust fallback)
     n_light = SerializerMethodField()
+    instruments = SerializerMethodField()
     n_flat = SerializerMethodField()
     n_dark = SerializerMethodField()
     expo_time = SerializerMethodField()
@@ -70,6 +99,7 @@ class RunSerializer(ModelSerializer):
             'note',
             'photometry',
             'spectroscopy',
+            'instruments',
             'tags',
             'tag_ids',
             'href',
@@ -200,6 +230,14 @@ class RunSerializer(ModelSerializer):
             return 0
 
     @extend_schema_field(OpenApiTypes.INT)
+    @extend_schema_field(OpenApiTypes.OBJECT)
+    def get_instruments(self, obj) -> dict:
+        # List views pass the instruments of the whole page (one query); else query this run
+        page = self.context.get('run_instruments')
+        if page is not None and obj.pk in page:
+            return page[obj.pk]
+        return runs_instruments([obj.pk])[obj.pk]
+
     def get_n_light(self, obj) -> int:
         return self._count_exptype(obj, {'ann': 'n_light', 'codes': ['LI'], 'prefixes': ['LIGHT']})
 

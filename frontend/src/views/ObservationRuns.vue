@@ -200,12 +200,45 @@
             </div>
           </template>
 
+          <!-- Instruments used: cameras of the photometry light frames, spectrographs of the spectra -->
           <template v-slot:item.photometry="{ item }">
-            <v-icon :color="getBool(item, ['photometry', 'has_photometry']) ? 'success' : 'disabled'">{{ getBool(item, ['photometry', 'has_photometry']) ? 'mdi-check-circle' : 'mdi-close-circle' }}</v-icon>
+            <div v-if="getBool(item, ['photometry', 'has_photometry'])" class="d-flex flex-wrap gap-1">
+              <v-chip
+                v-for="camera in item.instruments?.photometry || []"
+                :key="camera"
+                size="x-small"
+                variant="flat"
+                :color="cameraColor(camera)"
+              >
+                {{ camera }}
+              </v-chip>
+              <v-icon
+                v-if="!(item.instruments?.photometry || []).length"
+                color="success"
+                title="Photometry (camera unknown)"
+              >mdi-check-circle</v-icon>
+            </div>
+            <span v-else class="text-disabled">—</span>
           </template>
 
           <template v-slot:item.spectroscopy="{ item }">
-            <v-icon :color="getBool(item, ['spectroscopy', 'has_spectroscopy']) ? 'success' : 'disabled'">{{ getBool(item, ['spectroscopy', 'has_spectroscopy']) ? 'mdi-check-circle' : 'mdi-close-circle' }}</v-icon>
+            <div v-if="getBool(item, ['spectroscopy', 'has_spectroscopy'])" class="d-flex flex-wrap gap-1">
+              <v-chip
+                v-for="code in item.instruments?.spectroscopy || []"
+                :key="code"
+                size="x-small"
+                variant="flat"
+                :color="spectrographColor(code)"
+              >
+                {{ spectrographLabel(code) }}
+              </v-chip>
+              <v-icon
+                v-if="!(item.instruments?.spectroscopy || []).length"
+                color="success"
+                title="Spectroscopy (spectrograph unknown)"
+              >mdi-check-circle</v-icon>
+            </div>
+            <span v-else class="text-disabled">—</span>
           </template>
 
           <template v-slot:item.n_light="{ item }">
@@ -445,6 +478,7 @@ import { useDisplay } from 'vuetify'
 import { api } from '@/services/api'
 import { formatDateTime, jdToDate } from '@/utils/datetime'
 import { getStatusColor } from '@/utils/status'
+import { cameraColor, spectrographColor, spectrographLabel } from '@/constants/classification'
 import { useQuerySync } from '@/composables/useQuerySync'
 import { useNotifyStore } from '@/store/notify'
 import { useAuthStore } from '@/store/auth'
