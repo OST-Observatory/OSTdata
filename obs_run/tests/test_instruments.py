@@ -68,13 +68,29 @@ class CanonicalInstrumentTest(TestCase):
 
     def test_sensor_type_resolves_shared_geometry(self):
         # QHY 268M (mono) and ZWO ASI2600MC Pro (color) share the sensor
-        self.assertEqual(detect_instruments(6248, 4176, -1, 1, 1), ['QHY 268M', 'ZWO ASI2600MC Pro'])
-        self.assertEqual(detect_instruments(6248, 4176, -1, 1, 1, color=True), ['ZWO ASI2600MC Pro'])
-        self.assertEqual(detect_instruments(6248, 4176, -1, 1, 1, color=False), ['QHY 268M'])
-        self.assertEqual(canonical_instrument('', 6248, 4176, -1, 1, 1, color=True), 'ZWO ASI2600MC Pro')
+        self.assertEqual(detect_instruments(6248, 4176, 3.76, 1, 1), ['QHY 268M', 'ZWO ASI2600MC Pro'])
+        self.assertEqual(detect_instruments(6248, 4176, 3.76, 1, 1, color=True), ['ZWO ASI2600MC Pro'])
+        self.assertEqual(detect_instruments(6248, 4176, 3.76, 1, 1, color=False), ['QHY 268M'])
+        self.assertEqual(canonical_instrument('', 6248, 4176, 3.76, 1, 1, color=True), 'ZWO ASI2600MC Pro')
+        # Ambiguous and nothing decides: no guess
+        self.assertEqual(canonical_instrument('', 6248, 4176, 3.76, 1, 1), 'Unknown')
         # ZWO ASI220MM (mono) and QHY 5III462C (color): both 1920 x 1080, no pixel size in SER files
         self.assertEqual(canonical_instrument('', 1920, 1080, -1, 1, 1, color=True), 'QHY 5III462C')
         self.assertEqual(canonical_instrument('', 1920, 1080, -1, 1, 1, color=False), 'ZWO ASI220MM')
+
+    def test_without_pixel_size_the_size_must_match_exactly(self):
+        # Common video/ROI sizes are no cameras: 640 x 480 is not the SBIG ST-i (648 x 486)
+        self.assertEqual(detect_instruments(640, 480, -1, 1, 1), [])
+        self.assertEqual(detect_instruments(648, 486, -1, 1, 1), ['SBIG ST-i'])
+        # Binned sizes are rounded: 6388 / 3 = 2129.3
+        self.assertEqual(detect_instruments(3192, 2129, -1, 3, 3), ['QHY 600M'])
+        # With a pixel size the 3 % tolerance stays
+        self.assertEqual(detect_instruments(6252, 4176, 3.76, 1, 1), ['QHY 268M', 'ZWO ASI2600MC Pro'])
+
+    def test_placeholder_names_are_unknown(self):
+        self.assertEqual(canonical_instrument('Unknown Instrument', 3864, 2180, -1), 'QHY 5III485C')
+        self.assertEqual(canonical_instrument('Unknown Instrument'), 'Unknown')
+        self.assertEqual(canonical_instrument('ZWO ASI533MC Pro', 1920, 1080, -1), 'ZWO ASI533MC Pro')
 
     def test_contradicting_sensor_type_keeps_geometry_match(self):
         # e.g. color data from a mono-only geometry: do not drop the only match
@@ -216,10 +232,10 @@ class BackfillCameraInfoTest(TestCase):
         return out.getvalue()
 
     def test_fills_camera_fields_only(self):
-        fits_file = self._file('a.fits', 'FITS', naxis1=6248, naxis2=4176)
+        fits_file = self._file('a.fits', 'FITS', naxis1=6248, naxis2=4176, pixel_size=3.76)
         ser_file = self._file('b.ser', 'SER', naxis1=1920, naxis2=1080)
         avi_file = self._file('c.avi', 'AVI')
-        self.assertEqual(fits_file.instrument_normalized, 'QHY 268M')  # shared sensor, first guess
+        self.assertEqual(fits_file.instrument_normalized, 'Unknown')  # shared sensor: no guess
 
         with patch.object(DataFile, 'get_fits_header', return_value={'BAYERPAT': 'RGGB'}), \
                 patch(f'{self.CMD}.read_ser_header', return_value={'Instrument': 'ZWO ASI174MM', 'ColorID': 0}), \
@@ -248,3 +264,20 @@ class BackfillCameraInfoTest(TestCase):
             self._run('--kind', 'ser')
         ser_file.refresh_from_db()
         self.assertEqual((ser_file.instrument, ser_file.color_sensor), ('My camera', True))
+
+
+class SerPlaceholderCameraTest(TestCase):
+    def test_placeholder_is_not_stored_as_camera(self):
+        self.assertEqual(ser_camera_name('Unknown Instrument'.ljust(40, '\x00')), '')
+        run = ObservationRun.objects.create(name='ser-placeholder', is_public=True)
+        datafile = DataFile.objects.create(
+            observation_run=run, datafile='/tmp/p.ser', file_type='SER', naxis1=3864, naxis2=2180,
+        )
+        with patch('obs_run.management.commands.backfill_camera_info.read_ser_header',
+                   return_value={'Instrument': 'Unknown Instrument', 'ColorID': 8}):
+            out = StringIO()
+            call_command('backfill_camera_info', '--kind', 'ser', stdout=out)
+        datafile.refresh_from_db()
+        self.assertEqual(datafile.instrument, '')
+        self.assertEqual(datafile.instrument_normalized, 'QHY 5III485C')
+        self.assertIn("header 'Unknown Instrument', 3864x2180", out.getvalue())

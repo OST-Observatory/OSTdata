@@ -1,5 +1,6 @@
 import json
 import logging
+from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
@@ -32,6 +33,7 @@ from obs_run.api.views import DataFilesPagination
 from obs_run.models import DataFile, ObservationRun
 from obs_run.plate_solving import PlateSolvingService, solve_and_update_datafile
 from obs_run.tasks import (
+    check_data_files,
     cleanup_expired_downloads,
     cleanup_orphan_objects,
     cleanup_orphans_and_hashcheck,
@@ -686,6 +688,90 @@ def admin_trigger_scan_missing(request):
     except Exception as e:
         logger.exception("admin_trigger_scan_missing failed: %s", e)
         return Response({'enqueued': False, 'error': str(e)}, status=400)
+
+
+def _can_check_files(user) -> bool:
+    return bool(user.is_superuser or user.has_perm('users.acl_maintenance_reconcile'))
+
+
+class AdminCheckDataFilesRequestSerializer(serializers.Serializer):
+    only_unchecked = serializers.BooleanField(required=False, default=False)
+    limit = serializers.IntegerField(required=False, allow_null=True, min_value=1)
+
+
+@extend_schema(summary='Trigger data file integrity check', request=AdminCheckDataFilesRequestSerializer,
+               responses=JSON_OBJECT_ACCEPTED, tags=['Admin'])
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def admin_trigger_check_data_files(request):
+    if not _can_check_files(request.user):
+        return Response({'detail': 'Forbidden'}, status=403)
+    serializer = AdminCheckDataFilesRequestSerializer(data=request.data or {})
+    serializer.is_valid(raise_exception=True)
+    options = serializer.validated_data
+    try:
+        res = _celery_delay(check_data_files, only_unchecked=options['only_unchecked'], limit=options.get('limit'))
+        return Response({'enqueued': True, 'task_id': getattr(res, 'id', None), **options}, status=202)
+    except Exception as e:
+        logger.exception("admin_trigger_check_data_files failed: %s", e)
+        return Response({'enqueued': False, 'error': str(e)}, status=400)
+
+
+@extend_schema(
+    summary='Data files with integrity issues',
+    parameters=[
+        OpenApiParameter('level', str, description="'error', 'warning' or empty for both"),
+        OpenApiParameter('search', str, description='Part of the file path'),
+        OpenApiParameter('page', int),
+        OpenApiParameter('page_size', int, description='Default 50, max 200'),
+    ],
+    responses=JSON_OBJECT_RESPONSE, tags=['Admin'],
+)
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def admin_file_issues(request):
+    """Files whose last integrity check found errors or warnings (errors first)."""
+    if not _can_check_files(request.user):
+        return Response({'detail': 'Forbidden'}, status=403)
+    params = request.query_params
+    with_issues = DataFile.objects.exclude(file_issue_level='')
+    counts = {
+        'error': with_issues.filter(file_issue_level='error').count(),
+        'warning': with_issues.filter(file_issue_level='warning').count(),
+        'checked': DataFile.objects.filter(file_issues_checked_at__isnull=False).count(),
+        'total': DataFile.objects.count(),
+    }
+    queryset = with_issues.select_related('observation_run')
+    level = (params.get('level') or '').strip().lower()
+    if level in ('error', 'warning'):
+        queryset = queryset.filter(file_issue_level=level)
+    search = (params.get('search') or '').strip()
+    if search:
+        queryset = queryset.filter(datafile__icontains=search)
+    # 'error' sorts before 'warning'
+    queryset = queryset.order_by('file_issue_level', 'observation_run__name', 'datafile')
+    try:
+        page_size = max(1, min(int(params.get('page_size', 50)), 200))
+        page = max(1, int(params.get('page', 1)))
+    except (TypeError, ValueError):
+        page_size, page = 50, 1
+    total = queryset.count()
+    rows = queryset[(page - 1) * page_size: page * page_size]
+    results = [
+        {
+            'pk': df.pk,
+            'file_name': Path(df.datafile).name,
+            'path': df.datafile,
+            'file_type': df.file_type,
+            'observation_run': df.observation_run_id,
+            'observation_run_name': df.observation_run.name if df.observation_run else None,
+            'level': df.file_issue_level,
+            'issues': df.file_issues,
+            'checked_at': df.file_issues_checked_at,
+        }
+        for df in rows
+    ]
+    return Response({'count': total, 'page': page, 'page_size': page_size, 'counts': counts, 'results': results})
 
 
 class AdminOrphanObjectsRequestSerializer(serializers.Serializer):

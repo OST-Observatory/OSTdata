@@ -1244,6 +1244,13 @@ def add_new_data_file(path_to_file, observation_run, print_to_terminal=False):
     except Exception as e:
         logger.warning(f'Error in set_info() for data_file {data_file.pk}: {e}')
 
+    #   File integrity (truncated files, non-compliant headers) for the admin maintenance list
+    try:
+        from obs_run.file_check import update_file_issues
+        update_file_issues(data_file)
+    except Exception as e:
+        logger.warning(f'File check failed for data_file {data_file.pk}: {e}')
+
     #   ML-based exposure type classification (if enabled) - run before evaluate_data_file
     #   so effective_exposure_type can consider ML result for object association
     try:

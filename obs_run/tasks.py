@@ -1437,3 +1437,17 @@ def recompute_spectrograph_suggestions(self):
     }
     logger.info(f'Spectrograph suggestions recomputed: {summary}')
     return summary
+
+
+@shared_task(bind=True)
+def check_data_files(self, only_unchecked: bool = False, limit: int | None = None):
+    """File integrity check (obs_run/file_check.py): truncated/unreadable files and non-compliant headers."""
+    from obs_run.file_check import check_data_files as run_check
+    try:
+        summary = run_check(only_unchecked=only_unchecked, limit=limit)
+    except Exception as e:
+        _health_error('check_data_files', e)
+        raise
+    _health_set('check_data_files', summary)
+    logger.info(f'Data file check finished: {summary}')
+    return summary

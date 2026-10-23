@@ -325,6 +325,13 @@ class DataFile(models.Model):
     #   re-evaluation keep main_target and the object associations
     main_target_override = models.BooleanField(default=False)
 
+    #   File integrity (obs_run/file_check.py): [{'level': 'error'|'warning', 'message': ...}] of the last
+    #   check, e.g. truncated files or non-compliant FITS headers; listed on the admin maintenance page
+    file_issues = models.JSONField(default=list, blank=True)
+    #   Highest level of file_issues ('' = no issues), for filtering and counting
+    file_issue_level = models.CharField(max_length=10, default='', blank=True, db_index=True)
+    file_issues_checked_at = models.DateTimeField(null=True, blank=True)
+
     #   Image quality (obs_run/image_quality.py): over-exposed / empty / unreadable frames
     quality_flag = models.CharField(
         max_length=2, choices=QUALITY_FLAG_CHOICES, default=QUALITY_NOT_CHECKED, db_index=True,

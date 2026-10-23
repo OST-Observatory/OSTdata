@@ -321,6 +321,7 @@ const periodicTaskNames = [
   'unlink_non_light_datafiles',
   'plate_solve_pending_files',
   're_evaluate_plate_solved_files',
+  'check_data_files',
 ]
 
 const jobColor = (s) => {

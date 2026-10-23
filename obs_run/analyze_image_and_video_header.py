@@ -5,6 +5,7 @@ import exifread
 import pytz
 from astropy.time import Time
 
+from obs_run.analyze_fits_header import is_placeholder_instrument
 from obs_run.exposure_type import format_default_exposure_type
 from obs_run.utils import should_allow_auto_update
 
@@ -182,12 +183,16 @@ def read_ser_header(path):
 
 
 def ser_camera_name(value):
-    """Instrument field of a SER header (40 bytes, NUL/space padded) as clean string."""
+    """
+    Instrument field of a SER header (40 bytes, NUL/space padded) as clean string; '' for
+    placeholders such as 'Unknown Instrument' (written when the capture software knows no camera).
+    """
     if not value:
         return ''
     if isinstance(value, (bytes, bytearray)):
         value = value.decode('latin1')
-    return str(value).replace('\x00', ' ').strip()
+    name = str(value).replace('\x00', ' ').strip()
+    return '' if is_placeholder_instrument(name) else name
 
 
 def ser_color_sensor(color_id):

@@ -33,6 +33,8 @@ INSTRUMENT_ALIASES = {
     'QHY CCD QHY5III485C-131e734a8677559cd': 'QHY 5III485C',
     'QHY CCD QHY5III462C-888': 'QHY 5III462C',
     'QHY CCD QHY5III462C-888c314299c69d610': 'QHY 5III462C',
+    'ZWO ASI533MC Pro': 'ZWO ASI533MC Pro',
+    'ZWO CCD ASI533MC Pro': 'ZWO ASI533MC Pro',
     'ZWO ASI2600MC Pro': 'ZWO ASI2600MC Pro',
     'ZWO ASI2600MC Pro(2600)': 'ZWO ASI2600MC Pro',
     'ZWO CCD ASI2600MC Pro(2600)': 'ZWO ASI2600MC Pro',
@@ -74,6 +76,7 @@ INSTRUMENT_CATALOG = [
     { 'name': 'ZWO ASI220MM', 'px_um': 4.00, 'w': 1920, 'h': 1080, 'color': False },
     { 'name': 'ZWO ASI678MM', 'px_um': 2.00, 'w': 3840, 'h': 2160, 'color': False },
     { 'name': 'ZWO ASI2600MC Pro', 'px_um': 3.76, 'w': 6248, 'h': 4176, 'color': True },
+    { 'name': 'ZWO ASI533MC Pro', 'px_um': 3.76, 'w': 3008, 'h': 3008, 'color': True },
     { 'name': 'ZWO ASI294MM Pro', 'px_um': 2.3, 'w': 8288, 'h': 5644, 'color': False },
     { 'name': 'omegon veTEC 533C', 'px_um': 3.8, 'w': 3008, 'h': 3008, 'color': True },
 ]

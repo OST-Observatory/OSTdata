@@ -28,8 +28,12 @@ def _kind_filter(kind):
 
 
 def camera_info_updates(datafile, kind):
-    """Camera fields read from the file that differ from the stored values."""
+    """
+    Camera fields read from the file that differ from the stored values, and the header camera name
+    as found in the file (SER, also placeholders like 'Unknown Instrument') for the report.
+    """
     updates = {}
+    header_camera = ''
     if kind == 'fits':
         color = fits_color_sensor(datafile.get_fits_header())
         if color is not None and datafile.color_sensor != color:
@@ -39,14 +43,15 @@ def camera_info_updates(datafile, kind):
         color = ser_color_sensor(header.get('ColorID'))
         if color is not None and datafile.color_sensor != color:
             updates['color_sensor'] = color
-        camera = ser_camera_name(header.get('Instrument'))[:50]
+        header_camera = str(header.get('Instrument') or '').replace('\x00', ' ').strip()
+        camera = ser_camera_name(header_camera)[:50]
         if camera and camera != datafile.instrument and should_allow_auto_update(datafile, 'instrument'):
             updates['instrument'] = camera
     elif datafile.naxis1 <= 0 or datafile.naxis2 <= 0:
         width, height = video_frame_size(datafile.datafile)
         if width > 0:
             updates['naxis1'], updates['naxis2'] = width, height
-    return updates
+    return updates, header_camera
 
 
 class Command(BaseCommand):
@@ -79,7 +84,7 @@ class Command(BaseCommand):
             for datafile in queryset.iterator(chunk_size=500):
                 checked += 1
                 try:
-                    updates = camera_info_updates(datafile, kind)
+                    updates, header_camera = camera_info_updates(datafile, kind)
                 except Exception as exc:
                     errors += 1
                     if errors <= 10:
@@ -100,12 +105,14 @@ class Command(BaseCommand):
                         datafile.instrument, datafile.naxis1, datafile.naxis2, datafile.pixel_size,
                         datafile.binning_x, datafile.binning_y, datafile.color_sensor,
                     )
-                changes[(kind, old_normalized, new_normalized)] += 1
+                size = f'{int(datafile.naxis1)}x{int(datafile.naxis2)}' if datafile.naxis1 > 0 else '?'
+                changes[(kind, old_normalized, new_normalized, header_camera, size)] += 1
             self.stdout.write(f'{kind}: {checked} files checked, {changed} with new camera information')
 
-        self.stdout.write('  files  kind   instrument_normalized: old -> new')
-        for (kind, old, new), count in sorted(changes.items(), key=lambda kv: -kv[1]):
-            self.stdout.write(f'  {count:>7}  {kind:<5}  {old!r} -> {new!r}')
+        self.stdout.write('  files  kind   instrument_normalized: old -> new   [header camera, frame size]')
+        for (kind, old, new, header_camera, size), count in sorted(changes.items(), key=lambda kv: -kv[1]):
+            hint = f'header {header_camera!r}, ' if header_camera else ''
+            self.stdout.write(f'  {count:>7}  {kind:<5}  {old!r} -> {new!r}   [{hint}{size}]')
         total = sum(changes.values())
         if dry_run:
             self.stdout.write(self.style.WARNING(f'DRY RUN: {total} files would change'))

@@ -268,6 +268,12 @@ def detect_instruments(naxis1, naxis2, pixel_um, binx, biny, color=None):
         except Exception:
             return False
 
+    # Without a pixel size the geometry alone must identify the sensor: exact size (up to the
+    # rounding of binned sizes). A 3 % tolerance would turn common video/ROI sizes into cameras,
+    # e.g. 640 x 480 into the SBIG ST-i (648 x 486).
+    def same_size(a, b, slack):
+        return close(a, b, 0.03) if px_candidates else abs(a - b) <= slack
+
     matches = []
     for item in catalog:
         # Check pixel size if available
@@ -280,7 +286,7 @@ def detect_instruments(naxis1, naxis2, pixel_um, binx, biny, color=None):
             targets.append((item['w_alt'], item['h_alt']))
         
         for (tw, th) in targets:
-            if (close(w, tw, 0.03) and close(h, th, 0.03)) or (close(w, th, 0.03) and close(h, tw, 0.03)):
+            if (same_size(w, tw, bw) and same_size(h, th, bh)) or (same_size(w, th, bw) and same_size(h, tw, bh)):
                 matches.append(item['name'])
                 break  # Only add each instrument once
 
@@ -305,13 +311,14 @@ def detect_instrument(naxis1, naxis2, pixel_um, binx, biny):
     return matches[0] if matches else None
 
 
-def disambiguate_instrument(possible_instruments, header_instrument):
+def disambiguate_instrument(possible_instruments, header_instrument, strict=False):
     """
     Disambiguate between multiple possible instruments based on header instrument name.
     
     Args:
         possible_instruments: List of possible instrument names
         header_instrument: Instrument name from FITS header (may be generic or variant)
+        strict: Return None instead of the first possible instrument if the name decides nothing
     
     Returns:
         Best matching instrument name, or None if no disambiguation possible
@@ -345,8 +352,9 @@ def disambiguate_instrument(possible_instruments, header_instrument):
         (r'asi\s*174', ['ZWO ASI174MM']),
         (r'asi\s*220', ['ZWO ASI220MM']),
         (r'asi\s*678', ['ZWO ASI678MM']),
-        (r'asi\s*camera\s*\(1\)', ['ZWO ASI2600MC Pro', 'ZWO ASI294MM Pro', 'ZWO ASI174MM', 'ZWO ASI220MM', 'ZWO ASI678MM']),  # Generic ZWO
-        (r'zwo', ['ZWO ASI2600MC Pro', 'ZWO ASI294MM Pro', 'ZWO ASI174MM', 'ZWO ASI220MM', 'ZWO ASI678MM']),
+        (r'asi\s*533', ['ZWO ASI533MC Pro']),
+        (r'asi\s*camera\s*\(1\)', ['ZWO ASI2600MC Pro', 'ZWO ASI294MM Pro', 'ZWO ASI174MM', 'ZWO ASI220MM', 'ZWO ASI678MM', 'ZWO ASI533MC Pro']),  # Generic ZWO
+        (r'zwo', ['ZWO ASI2600MC Pro', 'ZWO ASI294MM Pro', 'ZWO ASI174MM', 'ZWO ASI220MM', 'ZWO ASI678MM', 'ZWO ASI533MC Pro']),
     ]
     
     # SBIG patterns
@@ -385,13 +393,31 @@ def disambiguate_instrument(possible_instruments, header_instrument):
         if inst_lower in header_lower or header_lower in inst_lower:
             return inst
     
-    # If still no match, return first possible instrument
-    return possible_instruments[0]
+    # If still no match, return first possible instrument (a guess; None in strict mode)
+    return None if strict else possible_instruments[0]
 
 
 #   Header values that do not identify a camera
 UNKNOWN_INSTRUMENT_NAMES = ('', '-', 'uk', 'unknown')
 GENERIC_INSTRUMENT_MARKERS = ('qhyccd-cameras-capture', 'asi camera (1)')
+
+
+def is_placeholder_instrument(name):
+    """Header values that name no camera: empty, 'UK', 'Unknown', 'Unknown Instrument', ..."""
+    lower = (name or '').strip().lower()
+    return lower in UNKNOWN_INSTRUMENT_NAMES or lower.startswith('unknown')
+
+
+def resolve_instrument(candidates, header_instrument):
+    """
+    One camera from the geometry candidates: the only candidate, or the one the header name points
+    to (e.g. generic 'QHYCCD-Cameras-Capture' -> QHY). None if ambiguous: no guessing.
+    """
+    if len(candidates) == 1:
+        return candidates[0]
+    if candidates and not is_placeholder_instrument(header_instrument):
+        return disambiguate_instrument(candidates, header_instrument, strict=True)
+    return None
 
 
 def canonical_instrument(name, naxis1=-1, naxis2=-1, pixel_size=-1, binning_x=1, binning_y=1, color=None):
@@ -403,10 +429,11 @@ def canonical_instrument(name, naxis1=-1, naxis2=-1, pixel_size=-1, binning_x=1,
     raw = (name or '').strip()
     lower = raw.lower()
     generic = any(marker in lower for marker in GENERIC_INSTRUMENT_MARKERS)
-    if lower in UNKNOWN_INSTRUMENT_NAMES or generic:
+    if is_placeholder_instrument(raw) or generic:
         candidates = detect_instruments(naxis1, naxis2, pixel_size, binning_x, binning_y, color)
-        if candidates:
-            return normalize_instrument(disambiguate_instrument(candidates, raw) or candidates[0])
+        resolved = resolve_instrument(candidates, raw)
+        if resolved:
+            return normalize_instrument(resolved)
         if not generic:
             return 'Unknown'
     return normalize_instrument(raw)
@@ -610,8 +637,9 @@ def analyze_fits(datafile, save=True):
         header_data.get('binning_y', 1),
         datafile.color_sensor,
     )
-    # Cameras sharing a sensor (e.g. QHY 268M / ZWO ASI2600MC Pro) are told apart by the header name
-    inferred = (disambiguate_instrument(candidates, header_instr) or candidates[0]) if candidates else None
+    # Cameras sharing a sensor (e.g. QHY 268M / ZWO ASI2600MC Pro) are told apart by the header name;
+    # if nothing decides, no camera is inferred
+    inferred = resolve_instrument(candidates, header_instr)
 
     # Prefer inferred instrument when header is generic or missing
     generic_markers = ['unknown', 'uk', 'qhyccd-cameras-capture', 'asi camera (1)']

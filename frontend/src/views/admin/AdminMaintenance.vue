@@ -301,6 +301,134 @@
     </template>
 
     <v-card
+      v-if="canReconcile"
+      variant="outlined"
+      class="admin-maint-card mb-3"
+    >
+      <v-card-title class="maint-section-title text-subtitle-2 d-flex align-center flex-wrap" style="gap: 8px">
+        <v-icon icon="mdi-file-alert-outline" size="18" />
+        <span>File integrity</span>
+        <v-chip size="x-small" color="error" variant="flat">{{ fileIssueCounts.error }} errors</v-chip>
+        <v-chip size="x-small" color="warning" variant="flat">{{ fileIssueCounts.warning }} warnings</v-chip>
+        <v-spacer />
+        <v-switch
+          v-model="checkOnlyUnchecked"
+          inset
+          hide-details
+          color="primary"
+          density="compact"
+          label="Only unchecked"
+        />
+        <v-btn
+          color="primary"
+          variant="tonal"
+          prepend-icon="mdi-file-search-outline"
+          :loading="busy.checkFiles"
+          @click="triggerCheckFiles"
+        >
+          Check files
+        </v-btn>
+        <v-btn
+          variant="text"
+          prepend-icon="mdi-refresh"
+          :loading="loadingFileIssues"
+          @click="loadFileIssues"
+        >
+          Refresh
+        </v-btn>
+      </v-card-title>
+      <v-card-text class="maint-section-body pt-0">
+        <p class="text-caption text-medium-emphasis mb-2">
+          Truncated or unreadable files (errors) and non-compliant headers (warnings) found by the last
+          check: {{ fileIssueCounts.checked }} of {{ fileIssueCounts.total }} files checked<template
+            v-if="periodic.check_data_files?.last_run"
+          >, last run {{ formatRelative(periodic.check_data_files.last_run, periodic.check_data_files.age_seconds) }}</template>.
+          New files are checked on ingest.
+        </p>
+        <div class="d-flex align-center flex-wrap mb-2" style="gap: 8px">
+          <v-btn-toggle v-model="fileIssueLevel" density="compact" variant="outlined" divided mandatory>
+            <v-btn value="">All</v-btn>
+            <v-btn value="error">Errors</v-btn>
+            <v-btn value="warning">Warnings</v-btn>
+          </v-btn-toggle>
+          <v-text-field
+            v-model="fileIssueSearch"
+            label="Path contains"
+            density="compact"
+            variant="outlined"
+            hide-details
+            clearable
+            prepend-inner-icon="mdi-magnify"
+            style="max-width: 320px"
+            @keyup.enter="loadFileIssues(1)"
+            @click:clear="fileIssueSearch = ''; loadFileIssues(1)"
+          />
+        </div>
+        <v-skeleton-loader v-if="loadingFileIssues && !fileIssues.length" type="table-row@4" />
+        <template v-else-if="fileIssues.length">
+          <v-table density="compact" class="maint-flags-table bg-transparent">
+            <thead>
+              <tr>
+                <th>Level</th>
+                <th>File</th>
+                <th>Run</th>
+                <th>Issues</th>
+                <th>Checked</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="item in fileIssues" :key="item.pk">
+                <td>
+                  <v-chip size="x-small" variant="flat" :color="item.level === 'error' ? 'error' : 'warning'">
+                    {{ item.level }}
+                  </v-chip>
+                </td>
+                <td class="text-caption">
+                  <div class="font-weight-medium">{{ item.file_name }}</div>
+                  <div class="text-medium-emphasis file-issue-path">{{ item.path }}</div>
+                </td>
+                <td class="text-caption">
+                  <router-link
+                    v-if="item.observation_run"
+                    :to="`/observation-runs/${item.observation_run}`"
+                    class="text-primary text-decoration-none"
+                  >
+                    {{ item.observation_run_name }}
+                  </router-link>
+                  <span v-else>—</span>
+                </td>
+                <td class="text-caption">
+                  <div
+                    v-for="(issue, idx) in item.issues"
+                    :key="idx"
+                    :class="issue.level === 'error' ? 'text-error' : 'text-warning'"
+                  >
+                    {{ issue.message }}
+                  </div>
+                </td>
+                <td class="text-caption text-medium-emphasis text-no-wrap">
+                  {{ item.checked_at ? formatRelative(item.checked_at) : '—' }}
+                </td>
+              </tr>
+            </tbody>
+          </v-table>
+          <v-pagination
+            v-if="fileIssuePages > 1"
+            v-model="fileIssuePage"
+            :length="fileIssuePages"
+            density="compact"
+            total-visible="7"
+            class="mt-2"
+            @update:model-value="loadFileIssues"
+          />
+        </template>
+        <p v-else class="text-caption text-medium-emphasis mb-0">
+          No problems found{{ fileIssueCounts.checked ? '' : ' (no files checked yet)' }}.
+        </p>
+      </v-card-text>
+    </v-card>
+
+    <v-card
       v-if="auth.isSuperuser"
       variant="outlined"
       class="admin-maint-card mb-3"
@@ -391,7 +519,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { api } from '@/services/api'
 import { useNotifyStore } from '@/store/notify'
 import { useAuthStore } from '@/store/auth'
@@ -412,11 +540,20 @@ const busy = ref({
   plateSolvingToggle: false,
   reEvaluatePlateSolved: false,
   overrideFlags: false,
+  checkFiles: false,
 })
 const health = ref({ periodic: {}, settings: {}, features: {} })
 const overrideFlagsData = ref(null)
 const loadingOverrideFlags = ref(false)
 const clearingOverrides = ref({})
+const fileIssues = ref([])
+const fileIssueCounts = ref({ error: 0, warning: 0, checked: 0, total: 0 })
+const fileIssueLevel = ref('')
+const fileIssueSearch = ref('')
+const fileIssuePage = ref(1)
+const fileIssuePages = ref(1)
+const loadingFileIssues = ref(false)
+const checkOnlyUnchecked = ref(true)
 const periodic = computed(() => health.value?.periodic ?? {})
 const dryRun = ref(true)
 const autoRefresh = ref(true)
@@ -916,6 +1053,42 @@ const humanBytes = (n) => {
   return `${v.toFixed(i === 0 ? 0 : 1)} ${units[i]}`
 }
 
+const FILE_ISSUES_PAGE_SIZE = 50
+
+const loadFileIssues = async (page) => {
+  if (!canReconcile.value) return
+  if (typeof page === 'number') fileIssuePage.value = page
+  loadingFileIssues.value = true
+  try {
+    const params = { page: fileIssuePage.value, page_size: FILE_ISSUES_PAGE_SIZE }
+    if (fileIssueLevel.value) params.level = fileIssueLevel.value
+    if (fileIssueSearch.value) params.search = fileIssueSearch.value
+    const data = await api.adminFileIssues(params)
+    fileIssues.value = data?.results || []
+    fileIssueCounts.value = data?.counts || fileIssueCounts.value
+    fileIssuePages.value = Math.max(1, Math.ceil((data?.count || 0) / FILE_ISSUES_PAGE_SIZE))
+  } catch {
+    notify.error('Failed to load file issues')
+  } finally {
+    loadingFileIssues.value = false
+  }
+}
+
+const triggerCheckFiles = async () => {
+  busy.value.checkFiles = true
+  try {
+    await api.adminMaintenanceCheckFiles({ only_unchecked: checkOnlyUnchecked.value })
+    notify.success(`File check enqueued (${checkOnlyUnchecked.value ? 'unchecked files' : 'all files'})`)
+  } catch {
+    notify.error('Failed to enqueue file check')
+  } finally {
+    busy.value.checkFiles = false
+    setTimeout(refreshHealth, 1500)
+  }
+}
+
+watch(fileIssueLevel, () => loadFileIssues(1))
+
 const loadOverrideFlags = async () => {
   loadingOverrideFlags.value = true
   busy.value.overrideFlags = true
@@ -948,6 +1121,7 @@ onMounted(() => {
   scheduleRefresh()
   loadBanner()
   loadOverrideFlags()
+  loadFileIssues()
 })
 
 onBeforeUnmount(() => {
@@ -1083,6 +1257,10 @@ onBeforeUnmount(() => {
 .maint-kv dd {
   margin: 0;
   word-break: break-word;
+}
+
+.file-issue-path {
+  word-break: break-all;
 }
 
 .maint-flags-table :deep(th),
