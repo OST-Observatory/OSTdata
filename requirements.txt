@@ -1,6 +1,6 @@
 # Django / API
 Django==6.0.8
-djangorestframework==3.17.2
+djangorestframework==3.18.3
 django-filter==25.2
 django-environ==0.13.0
 django-simple-history==3.11.0
