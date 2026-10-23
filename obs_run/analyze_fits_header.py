@@ -146,6 +146,8 @@ def extract_fits_header_info(header):
     data['binning_x'] = bx or 1
     data['binning_y'] = by or 1
 
+    data['color_sensor'] = fits_color_sensor(header)
+
     #   Observing conditions
     data['air_mass'] = header.get('AIRMASS', -1)
     data['ambient_temperature'] = header.get('AOCAMBT', -1)
@@ -219,10 +221,21 @@ def extract_fits_header_info(header):
 ############################################################################
 
 
-def detect_instruments(naxis1, naxis2, pixel_um, binx, biny):
+def fits_color_sensor(header):
+    """
+    Sensor type from a FITS header: a Bayer pattern keyword marks a one-shot-color camera (True).
+    Its absence does not prove a mono sensor (not every capture software writes it): None.
+    """
+    bayer = header.get('BAYERPAT', None) or header.get('COLORTYP', None)
+    return True if bayer is not None and str(bayer).strip() else None
+
+
+def detect_instruments(naxis1, naxis2, pixel_um, binx, biny, color=None):
     """
     Infer all possible instrument/camera names from geometry and pixel size.
     Accepts binned image sizes; will scale back to unbinned using binning factors.
+    color (True/False/None) narrows the matches to color or mono sensors; if no match has the
+    given type (e.g. a color camera recording in mono mode), the geometry matches are kept.
     
     Returns:
         List of matching instrument names (may be empty or contain multiple matches)
@@ -269,7 +282,13 @@ def detect_instruments(naxis1, naxis2, pixel_um, binx, biny):
             if (close(w, tw, 0.03) and close(h, th, 0.03)) or (close(w, th, 0.03) and close(h, tw, 0.03)):
                 matches.append(item['name'])
                 break  # Only add each instrument once
-    
+
+    if color is not None and len(matches) > 1:
+        color_of = {item['name']: item.get('color') for item in catalog}
+        same_type = [name for name in matches if color_of.get(name) == color]
+        if same_type:
+            matches = same_type
+
     return matches
 
 
@@ -374,16 +393,17 @@ UNKNOWN_INSTRUMENT_NAMES = ('', '-', 'uk', 'unknown')
 GENERIC_INSTRUMENT_MARKERS = ('qhyccd-cameras-capture', 'asi camera (1)')
 
 
-def canonical_instrument(name, naxis1=-1, naxis2=-1, pixel_size=-1, binning_x=1, binning_y=1):
+def canonical_instrument(name, naxis1=-1, naxis2=-1, pixel_size=-1, binning_x=1, binning_y=1, color=None):
     """
     Canonical camera name for a raw header/EXIF instrument value: alias-normalized name; missing or
-    generic names (e.g. 'QHYCCD-Cameras-Capture') are resolved from the image geometry if possible.
+    generic names (e.g. 'QHYCCD-Cameras-Capture') are resolved from the image geometry if possible,
+    using the sensor type (color: True/False/None) to tell apart cameras with the same geometry.
     """
     raw = (name or '').strip()
     lower = raw.lower()
     generic = any(marker in lower for marker in GENERIC_INSTRUMENT_MARKERS)
     if lower in UNKNOWN_INSTRUMENT_NAMES or generic:
-        candidates = detect_instruments(naxis1, naxis2, pixel_size, binning_x, binning_y)
+        candidates = detect_instruments(naxis1, naxis2, pixel_size, binning_x, binning_y, color)
         if candidates:
             return normalize_instrument(disambiguate_instrument(candidates, raw) or candidates[0])
         if not generic:
@@ -567,12 +587,14 @@ def analyze_fits(datafile):
     except Exception:
         header_instr = ''
 
+    datafile.color_sensor = header_data.get('color_sensor')
     candidates = detect_instruments(
         header_data.get('naxis1', -1),
         header_data.get('naxis2', -1),
         header_data.get('pixel_size', -1),
         header_data.get('binning_x', 1),
         header_data.get('binning_y', 1),
+        datafile.color_sensor,
     )
     # Cameras sharing a sensor (e.g. QHY 268M / ZWO ASI2600MC Pro) are told apart by the header name
     inferred = (disambiguate_instrument(candidates, header_instr) or candidates[0]) if candidates else None

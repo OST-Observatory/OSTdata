@@ -6,7 +6,13 @@ from django.core.management import call_command
 from django.test import TestCase
 from rest_framework.test import APITestCase
 
-from obs_run.analyze_fits_header import analyze_fits, canonical_instrument, detect_instruments
+from obs_run.analyze_fits_header import (
+    analyze_fits,
+    canonical_instrument,
+    detect_instruments,
+    extract_fits_header_info,
+)
+from obs_run.analyze_image_and_video_header import analyze_ser, ser_camera_name, ser_color_sensor
 from obs_run.models import DataFile, ObservationRun
 from obs_run.utils import INSTRUMENT_CATALOG, normalize_instrument
 
@@ -54,6 +60,60 @@ class CanonicalInstrumentTest(TestCase):
 
     def test_shared_sensor_resolved_by_generic_zwo_header(self):
         self.assertEqual(canonical_instrument('ASI Camera (1)', 6248, 4176, 3.76), 'ZWO ASI2600MC Pro')
+
+    def test_catalog_declares_sensor_type(self):
+        for item in INSTRUMENT_CATALOG:
+            with self.subTest(name=item['name']):
+                self.assertIsInstance(item.get('color'), bool)
+
+    def test_sensor_type_resolves_shared_geometry(self):
+        # QHY 268M (mono) and ZWO ASI2600MC Pro (color) share the sensor
+        self.assertEqual(detect_instruments(6248, 4176, -1, 1, 1), ['QHY 268M', 'ZWO ASI2600MC Pro'])
+        self.assertEqual(detect_instruments(6248, 4176, -1, 1, 1, color=True), ['ZWO ASI2600MC Pro'])
+        self.assertEqual(detect_instruments(6248, 4176, -1, 1, 1, color=False), ['QHY 268M'])
+        self.assertEqual(canonical_instrument('', 6248, 4176, -1, 1, 1, color=True), 'ZWO ASI2600MC Pro')
+        # ZWO ASI220MM (mono) and QHY 5III462C (color): both 1920 x 1080, no pixel size in SER files
+        self.assertEqual(canonical_instrument('', 1920, 1080, -1, 1, 1, color=True), 'QHY 5III462C')
+        self.assertEqual(canonical_instrument('', 1920, 1080, -1, 1, 1, color=False), 'ZWO ASI220MM')
+
+    def test_contradicting_sensor_type_keeps_geometry_match(self):
+        # e.g. color data from a mono-only geometry: do not drop the only match
+        self.assertEqual(detect_instruments(9576, 6388, 3.76, 1, 1, color=True), ['QHY 600M'])
+
+    def test_fits_bayer_pattern_marks_color_sensor(self):
+        self.assertIs(extract_fits_header_info({'BAYERPAT': 'RGGB'})['color_sensor'], True)
+        # Missing keyword does not prove a mono sensor
+        self.assertIsNone(extract_fits_header_info({})['color_sensor'])
+
+
+class SerCameraTest(TestCase):
+    def test_header_helpers(self):
+        self.assertEqual(ser_camera_name('ZWO ASI174MM' + '\x00' * 28), 'ZWO ASI174MM')
+        self.assertEqual(ser_camera_name(''), '')
+        self.assertIs(ser_color_sensor(0), False)
+        self.assertIs(ser_color_sensor(8), True)
+        self.assertIs(ser_color_sensor(100), True)
+        self.assertIsNone(ser_color_sensor(42))
+
+    def _analyze(self, header):
+        run = ObservationRun.objects.create(name='ser', is_public=True)
+        datafile = DataFile.objects.create(observation_run=run, datafile='/tmp/clip.ser', file_type='SER')
+        with patch('obs_run.analyze_image_and_video_header.SERParser') as parser_cls:
+            parser_cls.return_value.header = {'ImageWidth': 1920, 'ImageHeight': 1080, **header}
+            analyze_ser(datafile)
+        datafile.refresh_from_db()
+        return datafile
+
+    def test_camera_name_and_sensor_type_from_header(self):
+        datafile = self._analyze({'Instrument': 'ZWO ASI174MM'.ljust(40, '\x00'), 'ColorID': 0})
+        self.assertEqual(datafile.instrument, 'ZWO ASI174MM')
+        self.assertIs(datafile.color_sensor, False)
+        self.assertEqual(datafile.instrument_normalized, 'ZWO ASI174MM')
+
+    def test_shared_geometry_resolved_by_color_id(self):
+        datafile = self._analyze({'Instrument': '', 'ColorID': 8})
+        self.assertIs(datafile.color_sensor, True)
+        self.assertEqual(datafile.instrument_normalized, 'QHY 5III462C')
 
 
 class AnalyzeFitsInstrumentTest(TestCase):
@@ -137,3 +197,54 @@ class InstrumentFilterTest(APITestCase):
             with self.subTest(value=value):
                 response = self.client.get('/api/runs/datafiles/', {'instrument': value})
                 self.assertEqual([row['pk'] for row in response.json()['results']], [raw.pk])
+
+
+class BackfillCameraInfoTest(TestCase):
+    CMD = 'obs_run.management.commands.backfill_camera_info'
+
+    def setUp(self):
+        self.run = ObservationRun.objects.create(name='backfill', is_public=True)
+
+    def _file(self, name, file_type, **kwargs):
+        return DataFile.objects.create(
+            observation_run=self.run, datafile=f'/tmp/{name}', file_type=file_type, main_target='M 42', **kwargs,
+        )
+
+    def _run(self, *args):
+        out = StringIO()
+        call_command('backfill_camera_info', *args, stdout=out)
+        return out.getvalue()
+
+    def test_fills_camera_fields_only(self):
+        fits_file = self._file('a.fits', 'FITS', naxis1=6248, naxis2=4176)
+        ser_file = self._file('b.ser', 'SER', naxis1=1920, naxis2=1080)
+        avi_file = self._file('c.avi', 'AVI')
+        self.assertEqual(fits_file.instrument_normalized, 'QHY 268M')  # shared sensor, first guess
+
+        with patch.object(DataFile, 'get_fits_header', return_value={'BAYERPAT': 'RGGB'}), \
+                patch(f'{self.CMD}.read_ser_header', return_value={'Instrument': 'ZWO ASI174MM', 'ColorID': 0}), \
+                patch(f'{self.CMD}.video_frame_size', return_value=(1936, 1216)):
+            output = self._run()
+        self.assertIn('3 files updated', output)
+
+        fits_file.refresh_from_db()
+        self.assertIs(fits_file.color_sensor, True)
+        self.assertEqual(fits_file.instrument_normalized, 'ZWO ASI2600MC Pro')
+        ser_file.refresh_from_db()
+        self.assertEqual((ser_file.instrument, ser_file.color_sensor), ('ZWO ASI174MM', False))
+        avi_file.refresh_from_db()
+        self.assertEqual((avi_file.naxis1, avi_file.naxis2), (1936, 1216))
+        self.assertEqual(avi_file.instrument_normalized, 'ZWO ASI174MM')
+        for datafile in (fits_file, ser_file, avi_file):
+            self.assertEqual(datafile.main_target, 'M 42')
+
+    def test_dry_run_and_protected_instrument(self):
+        ser_file = self._file('d.ser', 'SER', instrument='My camera', instrument_override=True)
+        with patch(f'{self.CMD}.read_ser_header', return_value={'Instrument': 'ZWO ASI174MM', 'ColorID': 8}):
+            self.assertIn('DRY RUN: 1 files would change', self._run('--kind', 'ser', '--dry-run'))
+            ser_file.refresh_from_db()
+            self.assertIsNone(ser_file.color_sensor)
+
+            self._run('--kind', 'ser')
+        ser_file.refresh_from_db()
+        self.assertEqual((ser_file.instrument, ser_file.color_sensor), ('My camera', True))

@@ -102,10 +102,29 @@ def analyze_video(datafile):
     datafile.hjd = jd
     datafile.obs_date = obs_date
     datafile.exptime = -1.
-    datafile.naxis1 = -1
-    datafile.naxis2 = -1
+    #   Frame size (container metadata only, no decoding) for the instrument detection
+    datafile.naxis1, datafile.naxis2 = video_frame_size(datafile.datafile)
 
     datafile.save()
+
+
+def video_frame_size(path):
+    """(width, height) of an AVI/MOV file from its container metadata; (-1, -1) if unknown."""
+    try:
+        import cv2
+        cap = cv2.VideoCapture(str(path))
+        try:
+            if not cap.isOpened():
+                return -1, -1
+            width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH) or 0)
+            height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT) or 0)
+        finally:
+            cap.release()
+    except Exception:
+        return -1, -1
+    if width <= 0 or height <= 0:
+        return -1, -1
+    return width, height
 
 ############################################################################
 
@@ -118,12 +137,7 @@ def analyze_ser(datafile):
         datafile        : `obs_run.models.DataFile` object
             DataFile instance
     '''
-    #   Get .ser-Header only; avoid dynamic-range probing that reads frames
-    parser = SERParser(
-        datafile.datafile,
-        SER_16bit_shift_correction=False,
-    )
-    header = parser.header
+    header = read_ser_header(datafile.datafile)
 
     #   Get observation time and date (fallbacks)
     dt = header.get('DateTime_UTC_Decoded') or header.get('DateTime_Decoded')
@@ -148,4 +162,38 @@ def analyze_ser(datafile):
     datafile.naxis1 = naxis1
     datafile.naxis2 = naxis2
 
+    #   Camera: name from the header (written by most capture tools) and sensor type from
+    #   ColorID; save() resolves the canonical instrument name from both
+    camera = ser_camera_name(header.get('Instrument'))
+    if camera and should_allow_auto_update(datafile, 'instrument'):
+        datafile.instrument = camera[:50]
+    datafile.color_sensor = ser_color_sensor(header.get('ColorID'))
+
     datafile.save()
+
+
+def read_ser_header(path):
+    """SER header only (no dynamic-range probing that reads frames); closes the file."""
+    parser = SERParser(str(path), SER_16bit_shift_correction=False)
+    try:
+        return parser.header
+    finally:
+        parser.release()
+
+
+def ser_camera_name(value):
+    """Instrument field of a SER header (40 bytes, NUL/space padded) as clean string."""
+    if not value:
+        return ''
+    if isinstance(value, (bytes, bytearray)):
+        value = value.decode('latin1')
+    return str(value).replace('\x00', ' ').strip()
+
+
+def ser_color_sensor(color_id):
+    """SER ColorID -> True (Bayer/RGB), False (mono), None (unknown value)."""
+    if color_id == 0:
+        return False
+    if isinstance(color_id, int) and (8 <= color_id <= 19 or color_id in (100, 101)):
+        return True
+    return None

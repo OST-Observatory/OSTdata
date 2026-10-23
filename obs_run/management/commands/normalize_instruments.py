@@ -24,10 +24,13 @@ class Command(BaseCommand):
         changed = 0
 
         rows = DataFile.objects.values_list(
-            'pk', 'instrument', 'naxis1', 'naxis2', 'pixel_size', 'binning_x', 'binning_y', 'instrument_normalized',
+            'pk', 'instrument', 'naxis1', 'naxis2', 'pixel_size', 'binning_x', 'binning_y', 'color_sensor',
+            'instrument_normalized',
         )
-        for pk, instrument, naxis1, naxis2, pixel_size, binning_x, binning_y, current in rows.iterator(chunk_size=chunk_size):
-            normalized = canonical_instrument(instrument, naxis1, naxis2, pixel_size, binning_x, binning_y)
+        for pk, instrument, naxis1, naxis2, pixel_size, binning_x, binning_y, color_sensor, current in rows.iterator(
+            chunk_size=chunk_size,
+        ):
+            normalized = canonical_instrument(instrument, naxis1, naxis2, pixel_size, binning_x, binning_y, color_sensor)
             if normalized == current:
                 continue
             changes[(instrument or '', normalized)] += 1

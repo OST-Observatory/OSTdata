@@ -31,6 +31,7 @@ REASON_TASK_ORPHAN_OBJECTS_FIRST_HJD = 'task:orphan_objects:update_first_hjd'
 REASON_TASK_PLATE_SOLVE = 'task:plate_solve'
 REASON_TASK_ANALYZE_HEADER = 'task:analyze_header'
 REASON_TASK_SPECTROGRAPH_RULES = 'task:spectrograph_rules'
+REASON_TASK_BACKFILL_CAMERA_INFO = 'task:backfill_camera_info'
 
 
 def set_instance_change_reason(instance, reason: str | None) -> None:

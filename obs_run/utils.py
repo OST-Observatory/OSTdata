@@ -58,23 +58,24 @@ TELESCOPE_ALIASES = {
 }
 
 # Instrument catalog with pixel dimensions for detection and API endpoints
-# (names are the canonical names of INSTRUMENT_ALIASES)
+# (names are the canonical names of INSTRUMENT_ALIASES; color: one-shot-color/Bayer sensor,
+# used to tell apart cameras sharing a sensor geometry, e.g. QHY 268M / ZWO ASI2600MC Pro)
 INSTRUMENT_CATALOG = [
-    { 'name': 'QHY 600M', 'px_um': 3.76, 'w': 9576, 'h': 6388, 'w_alt': 9600, 'h_alt': 6422 },
-    { 'name': 'QHY 268M', 'px_um': 3.76, 'w': 6252, 'h': 4176, 'w_alt': 6280, 'h_alt': 4210 },
-    { 'name': 'QHY 5III485C', 'px_um': 2.90, 'w': 3864, 'h': 2180 },
-    { 'name': 'QHY 5III462C', 'px_um': 2.90, 'w': 1920, 'h': 1080 },
-    { 'name': 'SBIG ST-8',    'px_um': 9.00, 'w': 1530, 'h': 1020 },
-    { 'name': 'SBIG ST-7',    'px_um': 9.00, 'w': 765,  'h': 510  },
-    { 'name': 'SBIG STF-8300','px_um': 5.40, 'w': 3326, 'h': 2504 },
-    { 'name': 'SBIG ST-i',    'px_um': 7.40, 'w': 648,  'h': 486  },
-    { 'name': 'Skyris 445C', 'px_um': 3.75, 'w': 1280, 'h': 960 },
-    { 'name': 'ZWO ASI174MM', 'px_um': 5.86, 'w': 1936, 'h': 1216 },
-    { 'name': 'ZWO ASI220MM', 'px_um': 4.00, 'w': 1920, 'h': 1080 },
-    { 'name': 'ZWO ASI678MM', 'px_um': 2.00, 'w': 3840, 'h': 2160 },
-    { 'name': 'ZWO ASI2600MC Pro', 'px_um': 3.76, 'w': 6248, 'h': 4176 },
-    { 'name': 'ZWO ASI294MM Pro', 'px_um': 2.3, 'w': 8288, 'h': 5644 },
-    { 'name': 'omegon veTEC 533C', 'px_um': 3.8, 'w': 3008, 'h': 3008 }
+    { 'name': 'QHY 600M', 'px_um': 3.76, 'w': 9576, 'h': 6388, 'w_alt': 9600, 'h_alt': 6422, 'color': False },
+    { 'name': 'QHY 268M', 'px_um': 3.76, 'w': 6252, 'h': 4176, 'w_alt': 6280, 'h_alt': 4210, 'color': False },
+    { 'name': 'QHY 5III485C', 'px_um': 2.90, 'w': 3864, 'h': 2180, 'color': True },
+    { 'name': 'QHY 5III462C', 'px_um': 2.90, 'w': 1920, 'h': 1080, 'color': True },
+    { 'name': 'SBIG ST-8',    'px_um': 9.00, 'w': 1530, 'h': 1020, 'color': False },
+    { 'name': 'SBIG ST-7',    'px_um': 9.00, 'w': 765,  'h': 510, 'color': False },
+    { 'name': 'SBIG STF-8300','px_um': 5.40, 'w': 3326, 'h': 2504, 'color': False },
+    { 'name': 'SBIG ST-i',    'px_um': 7.40, 'w': 648,  'h': 486, 'color': False },
+    { 'name': 'Skyris 445C', 'px_um': 3.75, 'w': 1280, 'h': 960, 'color': True },
+    { 'name': 'ZWO ASI174MM', 'px_um': 5.86, 'w': 1936, 'h': 1216, 'color': False },
+    { 'name': 'ZWO ASI220MM', 'px_um': 4.00, 'w': 1920, 'h': 1080, 'color': False },
+    { 'name': 'ZWO ASI678MM', 'px_um': 2.00, 'w': 3840, 'h': 2160, 'color': False },
+    { 'name': 'ZWO ASI2600MC Pro', 'px_um': 3.76, 'w': 6248, 'h': 4176, 'color': True },
+    { 'name': 'ZWO ASI294MM Pro', 'px_um': 2.3, 'w': 8288, 'h': 5644, 'color': False },
+    { 'name': 'omegon veTEC 533C', 'px_um': 3.8, 'w': 3008, 'h': 3008, 'color': True },
 ]
 
 # Normalize alias maps to lowercase keys for robust, case-insensitive lookup

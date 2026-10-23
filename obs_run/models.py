@@ -262,6 +262,9 @@ class DataFile(models.Model):
     naxis1 = models.FloatField(default=-1)
     naxis2 = models.FloatField(default=-1)
     pixel_size = models.FloatField(default=-1)
+    #   One-shot-color (Bayer/RGB) sensor: True/False, None = unknown. Used to tell apart cameras
+    #   with the same sensor geometry (FITS: BAYERPAT; SER: ColorID)
+    color_sensor = models.BooleanField(null=True, blank=True)
 
     #   Filed of view
     fov_x = models.FloatField(default=-1)
@@ -365,6 +368,7 @@ class DataFile(models.Model):
     def save(self, *args, **kwargs):
         normalized = canonical_instrument(
             self.instrument, self.naxis1, self.naxis2, self.pixel_size, self.binning_x, self.binning_y,
+            self.color_sensor,
         )
         if normalized != self.instrument_normalized:
             self.instrument_normalized = normalized
