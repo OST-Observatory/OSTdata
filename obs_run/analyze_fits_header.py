@@ -573,13 +573,14 @@ def analyze_fits(datafile):
         else:
             datafile.exposure_type = 'UK'
 
-    #   Set object name
+    #   Set object name (header_target_name always mirrors the header; main_target only
+    #   unless it was set manually)
     if datafile.exposure_type in ['UK', 'LI']:
-        datafile.main_target = header_data.get('objectname', '-')
         datafile.header_target_name = header_data.get('objectname', '-')
     else:
-        datafile.main_target = '-'
         datafile.header_target_name = '-'
+    if should_allow_auto_update(datafile, 'main_target'):
+        datafile.main_target = datafile.header_target_name
 
     # Infer instrument from header/geometry if header instrument is generic or missing
     try:

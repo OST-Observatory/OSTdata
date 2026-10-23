@@ -43,7 +43,6 @@ from obs_run.tasks import (
     scan_missing_filesystem,
     unlink_non_light_datafiles_from_objects,
 )
-from obs_run.utils import should_allow_auto_update
 from ostdata.openapi import JSON_OBJECT_ACCEPTED, JSON_OBJECT_RESPONSE, EmptyObjectSerializer
 from ostdata.permissions import HasPerm, user_has_acl
 from ostdata.services.health import gather_admin_health
@@ -466,7 +465,7 @@ def admin_clear_all_overrides(request, model_type: str, instance_id: int):
         'datafile': {
             'model': DataFile,
             'fields': ['exposure_type', 'spectroscopy', 'spectrograph', 
-                      'instrument', 'telescope', 'status_parameters'],
+                      'instrument', 'telescope', 'status_parameters', 'main_target'],
         },
         'object': {
             'model': Object,
@@ -537,7 +536,7 @@ def admin_list_override_flags(request):
         'datafile': {
             'model': DataFile,
             'fields': ['exposure_type', 'spectroscopy', 'spectrograph', 
-                      'instrument', 'telescope', 'status_parameters'],
+                      'instrument', 'telescope', 'status_parameters', 'main_target'],
             'name_field': 'datafile',
         },
         'object': {
@@ -1837,11 +1836,14 @@ def admin_link_datafiles_to_object(request):
         obj.datafiles.add(datafile)
         if datafile.observation_run and not obj.observation_run.filter(pk=datafile.observation_run.pk).exists():
             obj.observation_run.add(datafile.observation_run)
-        # Update main_target so it shows in Target column (like evaluate_data_file does)
-        if should_allow_auto_update(datafile, 'main_target'):
-            datafile.main_target = obj.name
-            from ostdata.history_reason import REASON_ADMIN_LINK_DATAFILES, save_with_reason
-            save_with_reason(datafile, REASON_ADMIN_LINK_DATAFILES, update_fields=['main_target'])
+        # Manual choice: show the object as target and protect it (and the association) from
+        # header re-analysis and automatic object re-evaluation
+        datafile.main_target = obj.name[:50]
+        datafile.main_target_override = True
+        from ostdata.history_reason import REASON_ADMIN_LINK_DATAFILES, save_with_reason
+        save_with_reason(
+            datafile, REASON_ADMIN_LINK_DATAFILES, update_fields=['main_target', 'main_target_override'],
+        )
         linked += 1
 
     # Update photometry/spectroscopy flags
@@ -1883,6 +1885,15 @@ def admin_unlink_datafiles_from_objects(request):
             obj.datafiles.remove(datafile)
             unlinked += 1
             objects_updated.add(obj.pk)
+        if objects:
+            # Manual choice: fall back to the header name and keep automatic re-evaluation
+            # from linking the file again
+            datafile.main_target = datafile.header_target_name or '-'
+            datafile.main_target_override = True
+            from ostdata.history_reason import REASON_ADMIN_UNLINK_DATAFILES, save_with_reason
+            save_with_reason(
+                datafile, REASON_ADMIN_UNLINK_DATAFILES, update_fields=['main_target', 'main_target_override'],
+            )
         for obj in objects:
             try:
                 update_object_photometry_spectroscopy(obj)

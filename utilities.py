@@ -903,13 +903,14 @@ def reanalyse_object_from_simbad(obj, fixed_radius_arcmin=10.0, dry_run=False, b
 def propagate_object_name_to_datafiles(obj):
     """
     Update main_target on all DataFiles associated with obj to obj.name.
-    Respects should_allow_auto_update for each DataFile's main_target.
+    Also for files with main_target_override: the manual choice is the association with this
+    object, so its (new) name is still the right target.
     """
     if not obj or not obj.name:
         return
     for df in obj.datafiles.all():
-        if should_allow_auto_update(df, 'main_target'):
-            df.main_target = obj.name
+        if df.main_target != obj.name:
+            df.main_target = obj.name[:50]
             df.save(update_fields=['main_target'])
 
 
@@ -1338,6 +1339,14 @@ def evaluate_data_file(data_file, observation_run, print_to_terminal=False, skip
             data_file.save(update_fields=['file_size', 'content_hash'])
         except Exception:
             pass
+
+    #   Manually chosen target (admin link/unlink): keep main_target and object associations
+    if skip_if_object_has_overrides and not should_allow_auto_update(data_file, 'main_target'):
+        return {
+            'status': 'skipped',
+            'skipped_reason': 'datafile_target_override',
+            'object': existing_objects[0] if existing_objects else None,
+        }
 
     # Choose coordinates for object lookup: prefer WCS when available, else header
     if data_file.plate_solved and data_file.wcs_ra is not None and data_file.wcs_dec is not None:

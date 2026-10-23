@@ -48,7 +48,7 @@ class Command(BaseCommand):
             'DataFile': {
                 'model': DataFile,
                 'fields': ['exposure_type', 'spectroscopy', 'spectrograph', 
-                          'instrument', 'telescope', 'status_parameters'],
+                          'instrument', 'telescope', 'status_parameters', 'main_target'],
             },
             'Object': {
                 'model': Object,

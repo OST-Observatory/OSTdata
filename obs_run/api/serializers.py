@@ -426,6 +426,7 @@ class DataFileSerializer(ModelSerializer):
             'plate_solve_error',
             'plate_solve_tool',
             'wcs_override',
+            'main_target_override',
             # WCS fields
             'wcs_ra',
             'wcs_dec',
@@ -467,6 +468,7 @@ class DataFileSerializer(ModelSerializer):
             'plate_solve_error',
             'plate_solve_tool',
             'wcs_override',
+            'main_target_override',
             'wcs_ra',
             'wcs_dec',
             'wcs_ra_hms',
@@ -650,7 +652,7 @@ class DataFileSerializer(ModelSerializer):
         # Track changes and set override flags
         override_fields = []
         fields_to_check = ['exposure_type', 'spectroscopy', 'spectrograph', 
-                          'instrument', 'telescope', 'status_parameters']
+                          'instrument', 'telescope', 'status_parameters', 'main_target']
         
         for field_name in fields_to_check:
             if field_name in validated_data:

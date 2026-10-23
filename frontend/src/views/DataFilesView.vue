@@ -181,6 +181,14 @@
               </template>
               <span v-else>—</span>
             </template>
+            <v-chip
+              v-if="item.main_target_override"
+              size="x-small"
+              color="info"
+              variant="flat"
+              class="ml-1"
+              title="Target set manually; kept on header re-analysis and object re-evaluation"
+            >Manual</v-chip>
           </template>
           <span v-else class="text-secondary">—</span>
         </template>

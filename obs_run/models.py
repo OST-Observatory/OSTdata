@@ -321,6 +321,9 @@ class DataFile(models.Model):
     telescope_override = models.BooleanField(default=False)
     status_parameters_override = models.BooleanField(default=False)
     wcs_override = models.BooleanField(default=False)
+    #   Target chosen manually (admin link/unlink or API edit): header analysis and object
+    #   re-evaluation keep main_target and the object associations
+    main_target_override = models.BooleanField(default=False)
 
     #   Image quality (obs_run/image_quality.py): over-exposed / empty / unreadable frames
     quality_flag = models.CharField(
