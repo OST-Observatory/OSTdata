@@ -91,6 +91,9 @@ TEMPLATES = [
 ]
 
 # DRF
+# Tests: clear the cache (DRF throttle counters) before every test
+TEST_RUNNER = 'ostdata.test_runner.CacheIsolatingTestRunner'
+
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'rest_framework.authentication.SessionAuthentication',

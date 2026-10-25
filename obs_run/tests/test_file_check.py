@@ -3,6 +3,7 @@ import struct
 import tempfile
 from io import StringIO
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import numpy as np
@@ -113,9 +114,11 @@ class FileIssuesApiTest(APITestCase):
         data = self.client.get('/api/admin/maintenance/file-issues/', {'level': 'warning'}).json()
         self.assertEqual([row['file_name'] for row in data['results']], ['odd.fits'])
 
-        with patch('adminops.api.views._celery_delay') as delay:
+        # A plain string id: a bare MagicMock in the JSON response makes DRF's encoder loop forever
+        with patch('adminops.api.views._celery_delay', return_value=SimpleNamespace(id='task-1')) as delay:
             response = self.client.post(
                 '/api/admin/maintenance/check-files/', {'only_unchecked': True}, format='json', **self._headers(),
             )
         self.assertEqual(response.status_code, 202, response.content)
         self.assertTrue(delay.call_args.kwargs['only_unchecked'])
+        self.assertEqual(response.json()['task_id'], 'task-1')
