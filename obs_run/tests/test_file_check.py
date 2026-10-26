@@ -1,5 +1,6 @@
 """File integrity check: truncated/missing files, storage without history, command and admin API."""
 import struct
+import sys
 import tempfile
 from io import StringIO
 from pathlib import Path
@@ -13,7 +14,7 @@ from django.core.management import call_command
 from django.test import TestCase
 from rest_framework.test import APITestCase
 
-from obs_run.file_check import check_datafile, update_file_issues
+from obs_run.file_check import IsolatedChecker, check_datafile, update_file_issues
 from obs_run.models import DataFile, ObservationRun
 from users.models import User
 
@@ -81,6 +82,32 @@ class FileCheckTest(TestCase):
         out = StringIO()
         call_command('check_data_files', '--only-unchecked', stdout=out)
         self.assertIn('0 files checked', out.getvalue())
+
+
+class IsolatedCheckerTest(TestCase):
+    def test_crashing_reader_marks_the_file_and_the_next_file_gets_a_new_process(self):
+        # Same signal as glibc's 'corrupted double-linked list' abort
+        crash = [sys.executable, '-c', 'import os; os.abort()']
+        with IsolatedChecker(command=crash) as checker:
+            issues = checker.check('/tmp/broken.avi', 'video')
+            self.assertEqual(issues[0]['level'], 'error')
+            self.assertIn('crashed', issues[0]['message'])
+            self.assertIn('crashed', checker.check('/tmp/next.avi', 'video')[0]['message'])
+
+    def test_hanging_reader_times_out(self):
+        hang = [sys.executable, '-c', 'import time; time.sleep(60)']
+        with IsolatedChecker(timeout=1, command=hang) as checker:
+            self.assertIn('did not finish', checker.check('/tmp/slow.fits', 'fits')[0]['message'])
+
+    def test_real_worker_checks_several_files(self):
+        tmp = Path(tempfile.mkdtemp())
+        ok, cut = tmp / 'ok.ser', tmp / 'cut.ser'
+        ok.write_bytes(_ser_bytes(3, 3))
+        cut.write_bytes(_ser_bytes(3, 1))
+        with IsolatedChecker() as checker:
+            self.assertEqual(checker.check(ok, 'ser'), [])
+            self.assertIn('1 of 3 frames complete', checker.check(cut, 'ser')[0]['message'])
+            self.assertEqual(checker.check(ok, 'ser'), [])  # same process, still answering
 
 
 class FileIssuesApiTest(APITestCase):

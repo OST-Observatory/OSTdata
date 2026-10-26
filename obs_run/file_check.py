@@ -104,12 +104,12 @@ def _check_video(path):
         cap.release()
 
 
-def check_datafile(datafile):
-    """List of issues of one data file (empty if the file is fine)."""
-    path = Path(str(datafile.datafile))
-    if not path.is_file():
-        return [_issue(ERROR, 'File missing on disk')]
-    kind = _file_kind(datafile)
+def check_path(path, kind):
+    """
+    Issues of one existing file (no database access). Runs inside the isolated checker process:
+    the readers use native code (astropy, OpenCV/FFmpeg) that can crash on broken files.
+    """
+    path = Path(path)
     try:
         if kind == 'fits':
             issues = _check_fits(path)
@@ -130,11 +130,103 @@ def check_datafile(datafile):
     return unique
 
 
-def update_file_issues(datafile):
+class IsolatedChecker:
+    """
+    Runs check_path() in a long-lived child process (obs_run/file_check_worker.py), one JSON line per
+    file. If a native reader crashes the process (e.g. glibc 'corrupted double-linked list' on a broken
+    video) or a file takes longer than `timeout`, the file is reported as error and the next file
+    starts a fresh process, instead of the crash killing the caller (check command, Celery worker,
+    directory watchdog). subprocess instead of multiprocessing: Celery workers are daemonic and may
+    not start multiprocessing children.
+    """
+
+    def __init__(self, timeout=300, command=None):
+        self.timeout = timeout
+        self.command = command  # tests: replace the worker
+        self.proc = None
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        self.close()
+
+    def _start(self):
+        import subprocess
+        import sys
+
+        from django.conf import settings
+
+        self.proc = subprocess.Popen(
+            self.command or [sys.executable, '-m', 'obs_run.file_check_worker'],
+            cwd=str(settings.BASE_DIR),
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,  # reader warnings/crash output
+            text=True,
+        )
+
+    def _kill(self):
+        if self.proc is not None:
+            try:
+                self.proc.kill()
+                self.proc.wait(timeout=10)
+            except Exception:
+                pass
+            self.proc = None
+
+    def check(self, path, kind):
+        import json
+        import select
+
+        if self.proc is None or self.proc.poll() is not None:
+            self._start()
+        try:
+            self.proc.stdin.write(json.dumps({'path': str(path), 'kind': kind}) + '\n')
+            self.proc.stdin.flush()
+            ready, _, _ = select.select([self.proc.stdout], [], [], self.timeout)
+            line = self.proc.stdout.readline() if ready else ''
+        except (BrokenPipeError, OSError):
+            line = ''
+        if line:
+            return json.loads(line)
+        if self.proc.poll() is None:
+            message = f'File check did not finish within {self.timeout} s'
+        else:
+            message = f'File reader crashed (exit code {self.proc.returncode}): the file is probably corrupt'
+        logger.warning('%s: %s', message, path)
+        self._kill()
+        return [_issue(ERROR, message)]
+
+    def close(self):
+        if self.proc is not None and self.proc.poll() is None:
+            try:
+                self.proc.stdin.close()
+                self.proc.wait(timeout=10)
+            except Exception:
+                pass
+        self._kill()
+
+
+def check_datafile(datafile, checker=None):
+    """List of issues of one data file (empty if the file is fine)."""
+    path = Path(str(datafile.datafile))
+    if not path.is_file():
+        return [_issue(ERROR, 'File missing on disk')]
+    kind = _file_kind(datafile)
+    if kind == 'other':
+        return []
+    if checker is not None:
+        return checker.check(path, kind)
+    with IsolatedChecker() as own_checker:
+        return own_checker.check(path, kind)
+
+
+def update_file_issues(datafile, checker=None):
     """Check the file and store the result (plain update: no history entry for a diagnostic field)."""
     from obs_run.models import DataFile
 
-    issues = check_datafile(datafile)
+    issues = check_datafile(datafile, checker)
     level = issue_level(issues)
     checked_at = timezone.now()
     DataFile.objects.filter(pk=datafile.pk).update(
@@ -165,17 +257,18 @@ def check_data_files(only_unchecked=False, limit=None, kinds=None, progress=None
     if only_unchecked:
         queryset = queryset.filter(file_issues_checked_at__isnull=True)
     summary = {'checked': 0, 'with_errors': 0, 'with_warnings': 0, 'only_unchecked': bool(only_unchecked)}
-    for datafile in queryset.iterator(chunk_size=500):
-        if kinds and _file_kind(datafile) not in kinds:
-            continue
-        if limit and summary['checked'] >= limit:
-            break
-        level = issue_level(update_file_issues(datafile))
-        summary['checked'] += 1
-        if level == ERROR:
-            summary['with_errors'] += 1
-        elif level == WARNING:
-            summary['with_warnings'] += 1
-        if progress and summary['checked'] % 500 == 0:
-            progress(summary['checked'])
+    with IsolatedChecker() as checker:
+        for datafile in queryset.iterator(chunk_size=500):
+            if kinds and _file_kind(datafile) not in kinds:
+                continue
+            if limit and summary['checked'] >= limit:
+                break
+            level = issue_level(update_file_issues(datafile, checker))
+            summary['checked'] += 1
+            if level == ERROR:
+                summary['with_errors'] += 1
+            elif level == WARNING:
+                summary['with_warnings'] += 1
+            if progress and summary['checked'] % 500 == 0:
+                progress(summary['checked'])
     return summary
