@@ -43,7 +43,9 @@ psutil==7.2.2
 cryptography==50.0.0
 # pillow: CVE-2026-112395 / 112397 / 112400 / 112404 / 112895 / 112896 / 112897 / 112899 (fixed in 13.0.0).
 pillow==13.0.0
-setuptools==83.0.0
+# setuptools: GHSA-xmj3-9gf7-h52w (fixed in 84.1.0). Via tensorflow/tensorboard/pbr; 84.x only changes
+# extension building (distutils compilers), not runtime behaviour.
+setuptools==84.2.1
 # tornado: GHSA-chx6-46f5-w4vp, GHSA-c2m8-h5v5-343r, GHSA-3hv7-mjh2-fv65 (fixed in 6.5.9); via bokeh.
 tornado==6.5.10
 pyasn1==0.6.4
@@ -54,6 +56,8 @@ sqlparse==0.6.0
 soupsieve==2.9.2
 # urllib3: PYSEC-2026-4175 / 4176 / 4177 (fixed in 2.8.0). Transitive via requests.
 urllib3==2.8.0
+# certifi: PYSEC-2026-4320 (fixed in 2026.10.19). Transitive via requests and skyfield.
+certifi==2026.10.23
 # werkzeug: CVE-2026-102598 (fixed in 3.1.9). Transitive via tensorflow -> tensorboard (>=1.0.1, no upper bound).
 werkzeug==3.1.9
 
