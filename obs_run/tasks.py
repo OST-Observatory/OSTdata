@@ -1451,3 +1451,17 @@ def check_data_files(self, only_unchecked: bool = False, limit: int | None = Non
     _health_set('check_data_files', summary)
     logger.info(f'Data file check finished: {summary}')
     return summary
+
+
+@shared_task(bind=True)
+def sync_ai_notices(self):
+    """Lab course AI notice (obs_run/ai_notice.py): add/remove the FITS keyword where needed."""
+    from obs_run.ai_notice import sync_notices
+    try:
+        summary = sync_notices()
+    except Exception as e:
+        _health_error('sync_ai_notices', e)
+        raise
+    _health_set('sync_ai_notices', summary)
+    logger.info(f'AI notice sync finished: {summary}')
+    return summary

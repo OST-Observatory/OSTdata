@@ -322,6 +322,7 @@ const periodicTaskNames = [
   'plate_solve_pending_files',
   're_evaluate_plate_solved_files',
   'check_data_files',
+  'sync_ai_notices',
 ]
 
 const jobColor = (s) => {

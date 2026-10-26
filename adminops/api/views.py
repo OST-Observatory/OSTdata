@@ -43,6 +43,7 @@ from obs_run.tasks import (
     re_evaluate_plate_solved_files,
     reconcile_filesystem,
     scan_missing_filesystem,
+    sync_ai_notices,
     unlink_non_light_datafiles_from_objects,
 )
 from ostdata.openapi import JSON_OBJECT_ACCEPTED, JSON_OBJECT_RESPONSE, EmptyObjectSerializer
@@ -772,6 +773,138 @@ def admin_file_issues(request):
         for df in rows
     ]
     return Response({'count': total, 'page': page, 'page_size': page_size, 'counts': counts, 'results': results})
+
+
+def _ai_notice_status_filters(start_jd, enabled):
+    """Q per status of the lab course AI notice list (see obs_run/ai_notice.py)."""
+    from utilities import get_effective_exposure_type_filter
+
+    active = Q(ai_notice_added_at__isnull=False)
+    error = ~Q(ai_notice_error='')
+    exempt = Q(ai_notice_exempt=True)
+    pending = Q(pk__in=[])
+    if enabled:
+        pending = (
+            get_effective_exposure_type_filter('LI') & Q(hjd__gte=start_jd) & ~Q(spectrograph='N')
+            & Q(ai_notice_exempt=False, ai_notice_added_at__isnull=True, ai_notice_error='')
+        )
+    return {'active': active, 'pending': pending, 'error': error, 'exempt': exempt}
+
+
+def _ai_notice_row(df, config):
+    from obs_run.ai_notice import expires_at
+
+    if df.ai_notice_error:
+        status = 'error'
+    elif df.ai_notice_added_at:
+        status = 'active'
+    elif df.ai_notice_exempt:
+        status = 'exempt'
+    else:
+        status = 'pending'
+    return {
+        'pk': df.pk,
+        'file_name': Path(df.datafile).name,
+        'path': df.datafile,
+        'observation_run': df.observation_run_id,
+        'observation_run_name': df.observation_run.name if df.observation_run else None,
+        'obs_date': df.obs_date,
+        'spectrograph': df.spectrograph,
+        'status': status,
+        'exempt': df.ai_notice_exempt,
+        'added_at': df.ai_notice_added_at,
+        'expires_at': expires_at(df, config),
+        'error': df.ai_notice_error,
+    }
+
+
+@extend_schema(
+    summary='Lab course AI notice: affected data files',
+    parameters=[
+        OpenApiParameter('status', str, description="'active', 'pending', 'error', 'exempt' or empty for all"),
+        OpenApiParameter('search', str, description='Part of the file path'),
+        OpenApiParameter('page', int),
+        OpenApiParameter('page_size', int, description='Default 50, max 200'),
+    ],
+    responses=JSON_OBJECT_RESPONSE, tags=['Admin'],
+)
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def admin_ai_notice(request):
+    """Files with the AI notice keyword, waiting for it, failed, or exempted by an admin."""
+    from obs_run.ai_notice import notice_config, window_start_jd
+
+    if not _can_check_files(request.user):
+        return Response({'detail': 'Forbidden'}, status=403)
+    config = notice_config()
+    start_jd = window_start_jd(config)
+    filters = _ai_notice_status_filters(start_jd, config['enabled'])
+    counts = {name: DataFile.objects.filter(q).count() for name, q in filters.items()}
+
+    params = request.query_params
+    status_name = (params.get('status') or '').strip().lower()
+    if status_name in filters:
+        selected = filters[status_name]
+    else:
+        selected = filters['active'] | filters['pending'] | filters['error'] | filters['exempt']
+    queryset = DataFile.objects.filter(selected).select_related('observation_run')
+    search = (params.get('search') or '').strip()
+    if search:
+        queryset = queryset.filter(datafile__icontains=search)
+    queryset = queryset.order_by('-hjd', 'datafile')
+    try:
+        page_size = max(1, min(int(params.get('page_size', 50)), 200))
+        page = max(1, int(params.get('page', 1)))
+    except (TypeError, ValueError):
+        page_size, page = 50, 1
+    total = queryset.count()
+    rows = [_ai_notice_row(df, config) for df in queryset[(page - 1) * page_size: page * page_size]]
+    return Response({
+        'config': config, 'counts': counts, 'count': total, 'page': page, 'page_size': page_size,
+        'results': rows,
+    })
+
+
+@extend_schema(summary='Lab course AI notice: run the sync now', request=None,
+               responses=JSON_OBJECT_ACCEPTED, tags=['Admin'])
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def admin_trigger_ai_notice_sync(request):
+    if not _can_check_files(request.user):
+        return Response({'detail': 'Forbidden'}, status=403)
+    try:
+        res = _celery_delay(sync_ai_notices)
+        return Response({'enqueued': True, 'task_id': getattr(res, 'id', None)}, status=202)
+    except Exception as e:
+        logger.exception("admin_trigger_ai_notice_sync failed: %s", e)
+        return Response({'enqueued': False, 'error': str(e)}, status=400)
+
+
+class AdminAiNoticeExemptSerializer(serializers.Serializer):
+    exempt = serializers.BooleanField()
+
+
+@extend_schema(summary='Lab course AI notice: exempt a file (removes the keyword) or allow it again',
+               request=AdminAiNoticeExemptSerializer, responses=JSON_OBJECT_RESPONSE, tags=['Admin'])
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def admin_ai_notice_exempt(request, pk: int):
+    from obs_run.ai_notice import notice_config, sync_notice
+    from ostdata.history_reason import REASON_ADMIN_AI_NOTICE_EXEMPT, save_with_reason
+
+    if not _can_check_files(request.user):
+        return Response({'detail': 'Forbidden'}, status=403)
+    serializer = AdminAiNoticeExemptSerializer(data=request.data or {})
+    serializer.is_valid(raise_exception=True)
+    try:
+        datafile = DataFile.objects.select_related('observation_run').get(pk=pk)
+    except DataFile.DoesNotExist:
+        return Response({'detail': 'Not found'}, status=404)
+    datafile.ai_notice_exempt = serializer.validated_data['exempt']
+    save_with_reason(datafile, REASON_ADMIN_AI_NOTICE_EXEMPT, update_fields=['ai_notice_exempt'])
+    # Applied right away: the keyword is removed from / written into the file now
+    sync_notice(datafile)
+    return Response(_ai_notice_row(datafile, notice_config()))
 
 
 class AdminOrphanObjectsRequestSerializer(serializers.Serializer):

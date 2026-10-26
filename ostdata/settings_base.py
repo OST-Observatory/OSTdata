@@ -281,6 +281,18 @@ DOWNLOAD_JOB_RETENTION_DAYS = env.int('DOWNLOAD_JOB_RETENTION_DAYS', default=30)
 # History rows and AuditLogEntry keep their content but lose the link to the acting user after
 # PERSONAL_DATA_RETENTION_DAYS. On by default because the policy promises it.
 PERSONAL_DATA_RETENTION_DAYS = env.int('PERSONAL_DATA_RETENTION_DAYS', default=730)
+# Lab course AI notice (obs_run/ai_notice.py): FITS header keyword in student spectra observed within
+# the last AI_NOTICE_DAYS asking AI tools not to analyse them; removed again afterwards. The daily sync
+# also runs when disabled, so switching off removes existing notices.
+AI_NOTICE_ENABLED = env.bool('AI_NOTICE_ENABLED', default=False)
+AI_NOTICE_TEXT = env.str('AI_NOTICE_TEXT', default='')  # empty: obs_run.ai_notice.DEFAULT_TEXT
+AI_NOTICE_DAYS = env.int('AI_NOTICE_DAYS', default=183)
+AI_NOTICE_SINCE = env.str('AI_NOTICE_SINCE', default='')  # ISO date: no notice for older observations
+CELERY_BEAT_SCHEDULE['sync_ai_notices'] = {
+    'task': 'obs_run.tasks.sync_ai_notices',
+    'schedule': crontab(minute=10, hour='1'),  # Daily at 1:10
+}
+
 ENABLE_PERSONAL_DATA_RETENTION = env.bool('ENABLE_PERSONAL_DATA_RETENTION', default=True)
 if ENABLE_PERSONAL_DATA_RETENTION:
     CELERY_BEAT_SCHEDULE['clear_expired_sessions'] = {

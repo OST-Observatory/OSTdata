@@ -1288,6 +1288,15 @@ def add_new_data_file(path_to_file, observation_run, print_to_terminal=False):
     except Exception as e:
         logger.warning(f'Error updating photometry/spectroscopy flags: {e}')
 
+    #   Lab course AI notice for current student spectra (obs_run/ai_notice.py); files recognized as
+    #   spectra later are handled by the daily sync_ai_notices task
+    try:
+        from obs_run.ai_notice import sync_notice
+        data_file.refresh_from_db()
+        sync_notice(data_file)
+    except Exception as e:
+        logger.warning(f'AI notice update failed for data_file {data_file.pk}: {e}')
+
     return True
 
 

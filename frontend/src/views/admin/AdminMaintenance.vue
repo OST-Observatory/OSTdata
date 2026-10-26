@@ -429,6 +429,126 @@
     </v-card>
 
     <v-card
+      v-if="canReconcile"
+      variant="outlined"
+      class="admin-maint-card mb-3"
+    >
+      <v-card-title class="maint-section-title text-subtitle-2 d-flex align-center flex-wrap" style="gap: 8px">
+        <v-icon icon="mdi-robot-off-outline" size="18" />
+        <span>Lab course AI notice</span>
+        <v-chip size="x-small" :color="aiNoticeConfig.enabled ? 'success' : 'grey'" variant="flat">
+          {{ aiNoticeConfig.enabled ? 'Enabled' : 'Disabled' }}
+        </v-chip>
+        <v-spacer />
+        <v-btn
+          color="primary"
+          variant="tonal"
+          prepend-icon="mdi-sync"
+          :loading="busy.aiNoticeSync"
+          @click="triggerAiNoticeSync"
+        >
+          Sync now
+        </v-btn>
+        <v-btn variant="text" prepend-icon="mdi-refresh" :loading="loadingAiNotice" @click="loadAiNotice">
+          Refresh
+        </v-btn>
+      </v-card-title>
+      <v-card-text class="maint-section-body pt-0">
+        <p class="text-caption text-medium-emphasis mb-1">
+          Spectra observed within the last {{ aiNoticeConfig.days }} days<template v-if="aiNoticeConfig.since">
+          (not before {{ aiNoticeConfig.since }})</template> get the FITS keyword <code>AINOTICE</code> on ingest
+          or in the daily sync; it is removed again afterwards. Exempting a file removes the keyword right away.
+          Settings: <code>AI_NOTICE_*</code> in the environment.
+        </p>
+        <p class="text-caption mb-2 ai-notice-text">“{{ aiNoticeConfig.text }}”</p>
+        <div class="d-flex align-center flex-wrap mb-2" style="gap: 8px">
+          <v-btn-toggle v-model="aiNoticeStatus" density="compact" variant="outlined" divided mandatory>
+            <v-btn value="">All</v-btn>
+            <v-btn value="active">In file ({{ aiNoticeCounts.active }})</v-btn>
+            <v-btn value="pending">Pending ({{ aiNoticeCounts.pending }})</v-btn>
+            <v-btn value="exempt">Exempt ({{ aiNoticeCounts.exempt }})</v-btn>
+            <v-btn value="error">Errors ({{ aiNoticeCounts.error }})</v-btn>
+          </v-btn-toggle>
+          <v-text-field
+            v-model="aiNoticeSearch"
+            label="Path contains"
+            density="compact"
+            variant="outlined"
+            hide-details
+            clearable
+            prepend-inner-icon="mdi-magnify"
+            style="max-width: 320px"
+            @keyup.enter="loadAiNotice(1)"
+            @click:clear="aiNoticeSearch = ''; loadAiNotice(1)"
+          />
+        </div>
+        <v-skeleton-loader v-if="loadingAiNotice && !aiNoticeRows.length" type="table-row@4" />
+        <template v-else-if="aiNoticeRows.length">
+          <v-table density="compact" class="maint-flags-table bg-transparent">
+            <thead>
+              <tr>
+                <th>Status</th>
+                <th>File</th>
+                <th>Run</th>
+                <th>Observed</th>
+                <th>Removed after</th>
+                <th class="text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="item in aiNoticeRows" :key="item.pk">
+                <td>
+                  <v-chip size="x-small" variant="flat" :color="aiNoticeStatusColor(item.status)">
+                    {{ aiNoticeStatusLabel(item.status) }}
+                  </v-chip>
+                </td>
+                <td class="text-caption">
+                  <div class="font-weight-medium">{{ item.file_name }}</div>
+                  <div class="text-medium-emphasis file-issue-path">{{ item.path }}</div>
+                  <div v-if="item.error" class="text-error">{{ item.error }}</div>
+                </td>
+                <td class="text-caption">
+                  <router-link
+                    v-if="item.observation_run"
+                    :to="`/observation-runs/${item.observation_run}`"
+                    class="text-primary text-decoration-none"
+                  >
+                    {{ item.observation_run_name }}
+                  </router-link>
+                  <span v-else>—</span>
+                </td>
+                <td class="text-caption text-no-wrap">{{ item.obs_date || '—' }}</td>
+                <td class="text-caption text-no-wrap">{{ item.expires_at ? item.expires_at.slice(0, 10) : '—' }}</td>
+                <td class="text-right">
+                  <v-btn
+                    size="small"
+                    variant="text"
+                    :color="item.exempt ? 'primary' : 'warning'"
+                    :prepend-icon="item.exempt ? 'mdi-undo' : 'mdi-cancel'"
+                    :loading="aiNoticeSaving[item.pk]"
+                    @click="setAiNoticeExempt(item, !item.exempt)"
+                  >
+                    {{ item.exempt ? 'Allow again' : 'Exempt' }}
+                  </v-btn>
+                </td>
+              </tr>
+            </tbody>
+          </v-table>
+          <v-pagination
+            v-if="aiNoticePages > 1"
+            v-model="aiNoticePage"
+            :length="aiNoticePages"
+            density="compact"
+            total-visible="7"
+            class="mt-2"
+            @update:model-value="loadAiNotice"
+          />
+        </template>
+        <p v-else class="text-caption text-medium-emphasis mb-0">No affected files.</p>
+      </v-card-text>
+    </v-card>
+
+    <v-card
       v-if="auth.isSuperuser"
       variant="outlined"
       class="admin-maint-card mb-3"
@@ -541,6 +661,7 @@ const busy = ref({
   reEvaluatePlateSolved: false,
   overrideFlags: false,
   checkFiles: false,
+  aiNoticeSync: false,
 })
 const health = ref({ periodic: {}, settings: {}, features: {} })
 const overrideFlagsData = ref(null)
@@ -554,6 +675,15 @@ const fileIssuePage = ref(1)
 const fileIssuePages = ref(1)
 const loadingFileIssues = ref(false)
 const checkOnlyUnchecked = ref(true)
+const aiNoticeRows = ref([])
+const aiNoticeConfig = ref({ enabled: false, text: '', days: 183, since: '' })
+const aiNoticeCounts = ref({ active: 0, pending: 0, exempt: 0, error: 0 })
+const aiNoticeStatus = ref('')
+const aiNoticeSearch = ref('')
+const aiNoticePage = ref(1)
+const aiNoticePages = ref(1)
+const loadingAiNotice = ref(false)
+const aiNoticeSaving = ref({})
 const periodic = computed(() => health.value?.periodic ?? {})
 const dryRun = ref(true)
 const autoRefresh = ref(true)
@@ -1089,6 +1219,68 @@ const triggerCheckFiles = async () => {
 
 watch(fileIssueLevel, () => loadFileIssues(1))
 
+const AI_NOTICE_PAGE_SIZE = 50
+const AI_NOTICE_STATUS = {
+  active: { label: 'In file', color: 'success' },
+  pending: { label: 'Pending', color: 'info' },
+  exempt: { label: 'Exempt', color: 'grey' },
+  error: { label: 'Error', color: 'error' },
+}
+const aiNoticeStatusLabel = (status) => AI_NOTICE_STATUS[status]?.label || status
+const aiNoticeStatusColor = (status) => AI_NOTICE_STATUS[status]?.color || 'grey'
+
+const loadAiNotice = async (page) => {
+  if (!canReconcile.value) return
+  if (typeof page === 'number') aiNoticePage.value = page
+  loadingAiNotice.value = true
+  try {
+    const params = { page: aiNoticePage.value, page_size: AI_NOTICE_PAGE_SIZE }
+    if (aiNoticeStatus.value) params.status = aiNoticeStatus.value
+    if (aiNoticeSearch.value) params.search = aiNoticeSearch.value
+    const data = await api.adminAiNotice(params)
+    aiNoticeRows.value = data?.results || []
+    aiNoticeConfig.value = data?.config || aiNoticeConfig.value
+    aiNoticeCounts.value = data?.counts || aiNoticeCounts.value
+    aiNoticePages.value = Math.max(1, Math.ceil((data?.count || 0) / AI_NOTICE_PAGE_SIZE))
+  } catch {
+    notify.error('Failed to load AI notice files')
+  } finally {
+    loadingAiNotice.value = false
+  }
+}
+
+const triggerAiNoticeSync = async () => {
+  busy.value.aiNoticeSync = true
+  try {
+    await api.adminAiNoticeSync()
+    notify.success('AI notice sync enqueued')
+  } catch {
+    notify.error('Failed to enqueue AI notice sync')
+  } finally {
+    busy.value.aiNoticeSync = false
+    setTimeout(refreshHealth, 1500)
+  }
+}
+
+const setAiNoticeExempt = async (item, exempt) => {
+  aiNoticeSaving.value = { ...aiNoticeSaving.value, [item.pk]: true }
+  try {
+    const row = await api.adminAiNoticeExempt(item.pk, exempt)
+    if (row?.error) {
+      notify.error(`Saved, but the file could not be changed: ${row.error}`)
+    } else {
+      notify.success(exempt ? 'File exempted, keyword removed' : 'File allowed again')
+    }
+    await loadAiNotice()
+  } catch {
+    notify.error('Failed to update the file')
+  } finally {
+    aiNoticeSaving.value = { ...aiNoticeSaving.value, [item.pk]: false }
+  }
+}
+
+watch(aiNoticeStatus, () => loadAiNotice(1))
+
 const loadOverrideFlags = async () => {
   loadingOverrideFlags.value = true
   busy.value.overrideFlags = true
@@ -1122,6 +1314,7 @@ onMounted(() => {
   loadBanner()
   loadOverrideFlags()
   loadFileIssues()
+  loadAiNotice()
 })
 
 onBeforeUnmount(() => {
@@ -1257,6 +1450,10 @@ onBeforeUnmount(() => {
 .maint-kv dd {
   margin: 0;
   word-break: break-word;
+}
+
+.ai-notice-text {
+  font-style: italic;
 }
 
 .file-issue-path {

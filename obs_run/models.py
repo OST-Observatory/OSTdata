@@ -332,6 +332,12 @@ class DataFile(models.Model):
     file_issue_level = models.CharField(max_length=10, default='', blank=True, db_index=True)
     file_issues_checked_at = models.DateTimeField(null=True, blank=True)
 
+    #   Lab course AI notice (obs_run/ai_notice.py): when the AINOTICE keyword was written into the file
+    #   (None: not in the file), manual exemption from the admin, last write error
+    ai_notice_added_at = models.DateTimeField(null=True, blank=True)
+    ai_notice_exempt = models.BooleanField(default=False)
+    ai_notice_error = models.CharField(max_length=500, default='', blank=True)
+
     #   Image quality (obs_run/image_quality.py): over-exposed / empty / unreadable frames
     quality_flag = models.CharField(
         max_length=2, choices=QUALITY_FLAG_CHOICES, default=QUALITY_NOT_CHECKED, db_index=True,

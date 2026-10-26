@@ -416,6 +416,12 @@ export const api = {
     body: JSON.stringify({ only_unchecked: !!opts.only_unchecked, limit: opts.limit ?? null }),
   }),
   adminFileIssues: (params = {}) => fetchWithAuth('/admin/maintenance/file-issues/', { params }),
+  adminAiNotice: (params = {}) => fetchWithAuth('/admin/ai-notice/', { params }),
+  adminAiNoticeSync: () => fetchWithAuth('/admin/ai-notice/sync/', { method: 'POST' }),
+  adminAiNoticeExempt: (pk, exempt) => fetchWithAuth(`/admin/ai-notice/${pk}/exempt/`, {
+    method: 'POST',
+    body: JSON.stringify({ exempt: !!exempt }),
+  }),
   adminMaintenanceTriggerPlateSolve: () => fetchWithAuth('/admin/maintenance/plate-solving/', { method: 'POST' }),
   adminMaintenanceReEvaluatePlateSolved: () => fetchWithAuth('/admin/maintenance/re-evaluate-plate-solved/', { method: 'POST' }),
   getAllDataFiles: (params = {}) => fetchWithAuth('/runs/datafiles/', { params }),

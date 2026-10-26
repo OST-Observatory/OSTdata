@@ -7,6 +7,8 @@ from objects.api.solar_image_views import (
 )
 
 from .views import (
+    admin_ai_notice,
+    admin_ai_notice_exempt,
     admin_audit_log,
     admin_aux_objects_stats,
     admin_clear_all_overrides,
@@ -34,6 +36,7 @@ from .views import (
     admin_set_plate_solving_task_enabled,
     admin_spectrograph_suggestions_evaluation,
     admin_spectrograph_suggestions_recompute,
+    admin_trigger_ai_notice_sync,
     admin_trigger_aux_objects,
     admin_trigger_aux_objects_queue,
     admin_trigger_check_data_files,
@@ -70,6 +73,9 @@ urlpatterns = [
     path('maintenance/scan-missing/', admin_trigger_scan_missing, name='scan_missing'),
     path('maintenance/check-files/', admin_trigger_check_data_files, name='check_data_files'),
     path('maintenance/file-issues/', admin_file_issues, name='file_issues'),
+    path('ai-notice/', admin_ai_notice, name='ai_notice'),
+    path('ai-notice/sync/', admin_trigger_ai_notice_sync, name='ai_notice_sync'),
+    path('ai-notice/<int:pk>/exempt/', admin_ai_notice_exempt, name='ai_notice_exempt'),
     path('maintenance/orphan-objects/', admin_trigger_orphan_objects, name='orphan_objects'),
     path('maintenance/unlink-non-light-datafiles/', admin_trigger_unlink_non_light_datafiles, name='unlink_non_light_datafiles'),
     path('maintenance/refresh-dashboard-stats/', admin_trigger_refresh_dashboard_stats, name='refresh_dashboard_stats'),

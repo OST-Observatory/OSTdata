@@ -24,6 +24,7 @@ REASON_ADMIN_DELETE_ALIASES = 'admin:delete_aliases'
 REASON_ADMIN_SIMBAD_IDENTIFIERS = 'admin:simbad_identifiers'
 REASON_ADMIN_LINK_DATAFILES = 'admin:link_datafiles'
 REASON_ADMIN_UNLINK_DATAFILES = 'admin:unlink_datafiles'
+REASON_ADMIN_AI_NOTICE_EXEMPT = 'admin:ai_notice_exempt'
 
 # Background tasks
 REASON_TASK_SCAN_MISSING_RUN_JD = 'task:scan_missing:recompute_run_jd'
