@@ -323,6 +323,7 @@ const periodicTaskNames = [
   're_evaluate_plate_solved_files',
   'check_data_files',
   'sync_ai_notices',
+  'retry_simbad_objects',
 ]
 
 const jobColor = (s) => {

@@ -4,6 +4,7 @@ import hashlib
 import logging
 import os
 import re
+import threading
 import time
 import warnings
 from pathlib import Path
@@ -11,6 +12,7 @@ from pathlib import Path
 import astropy.units as u
 import matplotlib.pyplot as plt
 import numpy as np
+import requests
 from astropy.coordinates import EarthLocation, SkyCoord, get_body
 from astropy.coordinates.angles import Angle
 from astropy.io import fits
@@ -42,6 +44,75 @@ def _simbad_rate_limit():
         time.sleep(wait)
     _LAST_SIMBAD_TS = time.time()
 
+# SIMBAD outages (CDS down): without a timeout every query waits ~2 min for the connection to fail,
+# which stalls the directory watchdog file by file. Queries get an HTTP timeout; after a connection
+# failure all queries are skipped for SIMBAD_OUTAGE_PAUSE_SECONDS. Skipped/failed lookups are counted
+# per thread so evaluate_data_file can flag objects to be resolved later (retry_simbad_objects task).
+_SIMBAD_TIMEOUT = (
+    float(os.environ.get('SIMBAD_CONNECT_TIMEOUT', '10')),
+    float(os.environ.get('SIMBAD_READ_TIMEOUT', '60')),
+)
+_SIMBAD_OUTAGE_PAUSE = float(os.environ.get('SIMBAD_OUTAGE_PAUSE_SECONDS', '600'))
+_SIMBAD_DOWN_UNTIL = 0.0
+_SIMBAD_THREAD = threading.local()
+_SIMBAD_CONNECTION_MARKERS = (
+    'connection', 'timed out', 'timeout', 'unable to access', 'name or service not known',
+    'temporary failure', '502', '503', '504',
+)
+
+
+class _TimeoutAdapter(requests.adapters.HTTPAdapter):
+    """Default timeout for requests that set none (astroquery/pyvo TAP calls)."""
+
+    def __init__(self, timeout, *args, **kwargs):
+        self._timeout = timeout
+        super().__init__(*args, **kwargs)
+
+    def send(self, request, **kwargs):
+        if kwargs.get('timeout') is None:
+            kwargs['timeout'] = self._timeout
+        return super().send(request, **kwargs)
+
+
+def _new_simbad():
+    sim = Simbad()
+    session = getattr(sim, '_session', None)
+    if session is not None:
+        adapter = _TimeoutAdapter(_SIMBAD_TIMEOUT)
+        session.mount('https://', adapter)
+        session.mount('http://', adapter)
+    return sim
+
+
+def simbad_available() -> bool:
+    """False while queries are paused after a SIMBAD connection failure."""
+    return time.monotonic() >= _SIMBAD_DOWN_UNTIL
+
+
+def simbad_missed_count() -> int:
+    """SIMBAD lookups skipped or failed for connection reasons in this thread (monotonic counter)."""
+    return getattr(_SIMBAD_THREAD, 'missed', 0)
+
+
+def _simbad_missed():
+    _SIMBAD_THREAD.missed = simbad_missed_count() + 1
+
+
+def _is_simbad_connection_error(exc) -> bool:
+    if isinstance(exc, (requests.exceptions.ConnectionError, requests.exceptions.Timeout, TimeoutError,
+                        ConnectionError)):
+        return True
+    text = f'{type(exc).__name__} {exc}'.lower()
+    return any(marker in text for marker in _SIMBAD_CONNECTION_MARKERS)
+
+
+def _simbad_unreachable(exc):
+    global _SIMBAD_DOWN_UNTIL
+    _SIMBAD_DOWN_UNTIL = time.monotonic() + _SIMBAD_OUTAGE_PAUSE
+    _simbad_missed()
+    logger.warning('SIMBAD unreachable (%s): skipping SIMBAD queries for %d s', exc, _SIMBAD_OUTAGE_PAUSE)
+
+
 def _in_neg_cache(name: str) -> bool:
     return bool(name) and (str(name).strip().lower() in _SIMBAD_NEGATIVE_CACHE)
 
@@ -55,11 +126,17 @@ def _try_add_fields(simbad: Simbad, fields: tuple[str, ...]) -> bool:
         simbad.add_votable_fields(*fields)
         return True
     except Exception as e:
-        logger.warning("SIMBAD add_votable_fields failed: %s", e)
+        if _is_simbad_connection_error(e):
+            _simbad_unreachable(e)
+        else:
+            logger.warning("SIMBAD add_votable_fields failed: %s", e)
         return False
 
 def _query_object_variants(name: str):
     if _in_neg_cache(name):
+        return None
+    if not simbad_available():
+        _simbad_missed()
         return None
     base = " ".join(str(name).strip().split())
     variants = {base}
@@ -67,12 +144,14 @@ def _query_object_variants(name: str):
     if m:
         variants.add(f"{m.group(1).upper()} {int(m.group(2))}")
         variants.add(f"{m.group(1).upper()}{int(m.group(2))}")
-    custom = Simbad()
+    custom = _new_simbad()
     try:
         custom.ROW_LIMIT = 1
     except Exception:
         pass
     _try_add_fields(custom, ('otype','alltypes','ids'))
+    if not simbad_available():
+        return None
     for v in variants:
         try:
             _simbad_rate_limit()
@@ -82,6 +161,10 @@ def _query_object_variants(name: str):
             if tbl is not None and len(tbl) > 0:
                 return tbl
         except Exception as e:
+            if _is_simbad_connection_error(e):
+                # SIMBAD down: the name is not unknown, so it must not end up in the negative cache
+                _simbad_unreachable(e)
+                return None
             logger.warning("SIMBAD query_object error for %s: %s", v, e)
             break
     _add_neg_cache(name)
@@ -116,8 +199,11 @@ def _query_region_safe(ra_deg: float, dec_deg: float, radius_str: str = '0d5m0s'
     astropy.table.Table or None
         SIMBAD query results or None on error
     """
+    if not simbad_available():
+        _simbad_missed()
+        return None
     try:
-        sim = Simbad()
+        sim = _new_simbad()
         try:
             sim.ROW_LIMIT = row_limit
         except Exception:
@@ -132,7 +218,10 @@ def _query_region_safe(ra_deg: float, dec_deg: float, radius_str: str = '0d5m0s'
                 radius=radius_str,
             )
     except Exception as e:
-        logger.warning("SIMBAD query_region failed: %s", e)
+        if _is_simbad_connection_error(e):
+            _simbad_unreachable(e)
+        else:
+            logger.warning("SIMBAD query_region failed: %s", e)
         return None
 
 def compute_file_hash(path: Path, chunk_size: int = 1024 * 1024) -> str:
@@ -1308,6 +1397,64 @@ def _set_main_target(data_file, name):
 
 
 def evaluate_data_file(data_file, observation_run, print_to_terminal=False, skip_if_object_has_overrides=True, dry_run=False):
+    """
+    Evaluate data file and add associated objects (see _evaluate_data_file). A new object created while
+    SIMBAD was unreachable is flagged (Object.simbad_retry) and resolved later by retry_simbad_objects.
+    """
+    missed_before = simbad_missed_count()
+    result = _evaluate_data_file(
+        data_file, observation_run, print_to_terminal=print_to_terminal,
+        skip_if_object_has_overrides=skip_if_object_has_overrides, dry_run=dry_run,
+    )
+    if (not dry_run and simbad_missed_count() > missed_before and isinstance(result, dict)
+            and result.get('status') == 'new_object_created' and result.get('new_object') is not None):
+        new_object = result['new_object']
+        if new_object.pk and not new_object.simbad_resolved:
+            Object.objects.filter(pk=new_object.pk).update(simbad_retry=True)
+            new_object.simbad_retry = True
+            logger.info('Object %s created without SIMBAD (unreachable): resolve later', new_object.pk)
+    return result
+
+
+def retry_simbad_object(obj) -> bool:
+    """
+    Resolve an object created while SIMBAD was unreachable, the way the evaluation would have: by name
+    (the header target), else the closest SIMBAD object within 5 arcmin. Override flags are respected.
+    Returns False if SIMBAD is still unreachable (flag kept for the next run).
+    """
+    missed_before = simbad_missed_count()
+    row = None
+    table = _query_object_variants(obj.name) if (obj.name or '').strip() else None
+    if table is not None and len(table) > 0:
+        row = table[0]
+    elif simbad_missed_count() == missed_before and obj.ra not in (-1, None, 0) and obj.dec not in (-1, None, 0):
+        table = _query_region_safe(obj.ra, obj.dec, '0d5m0s', row_limit=10)
+        if table is not None and len(table) > 0:
+            row = table[0]
+    if simbad_missed_count() > missed_before:
+        return False
+    if row is not None:
+        update_object_from_simbad_result(
+            obj, row, priority_types=['NE', 'SC', 'GA', 'ST'], allow_all_types=True, bypass_override_flags=False,
+        )
+    # Also when SIMBAD knows nothing: the object stays unresolved like after a normal evaluation
+    Object.objects.filter(pk=obj.pk).update(simbad_retry=False)
+    obj.simbad_retry = False
+    return True
+
+
+def retry_simbad_objects(limit=200) -> dict:
+    """Resolve flagged objects (Object.simbad_retry) once SIMBAD is reachable again."""
+    summary = {'pending': Object.objects.filter(simbad_retry=True).count(), 'resolved': 0, 'simbad_available': True}
+    for obj in Object.objects.filter(simbad_retry=True).order_by('pk')[:limit]:
+        if not simbad_available() or not retry_simbad_object(obj):
+            summary['simbad_available'] = False
+            break
+        summary['resolved'] += 1
+    return summary
+
+
+def _evaluate_data_file(data_file, observation_run, print_to_terminal=False, skip_if_object_has_overrides=True, dry_run=False):
     """
     Evaluate data file and add associated objects
 

@@ -293,6 +293,12 @@ CELERY_BEAT_SCHEDULE['sync_ai_notices'] = {
     'schedule': crontab(minute=10, hour='1'),  # Daily at 1:10
 }
 
+# Objects created while SIMBAD was unreachable (utilities.retry_simbad_objects); cheap when none pending
+CELERY_BEAT_SCHEDULE['retry_simbad_objects'] = {
+    'task': 'obs_run.tasks.retry_simbad_objects',
+    'schedule': crontab(minute='25,55'),  # Every 30 minutes
+}
+
 ENABLE_PERSONAL_DATA_RETENTION = env.bool('ENABLE_PERSONAL_DATA_RETENTION', default=True)
 if ENABLE_PERSONAL_DATA_RETENTION:
     CELERY_BEAT_SCHEDULE['clear_expired_sessions'] = {

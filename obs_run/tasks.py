@@ -1465,3 +1465,18 @@ def sync_ai_notices(self):
     _health_set('sync_ai_notices', summary)
     logger.info(f'AI notice sync finished: {summary}')
     return summary
+
+
+@shared_task(bind=True)
+def retry_simbad_objects(self, limit: int = 200):
+    """Resolve objects created while SIMBAD was unreachable (Object.simbad_retry)."""
+    from utilities import retry_simbad_objects as run_retry
+    try:
+        summary = run_retry(limit=limit)
+    except Exception as e:
+        _health_error('retry_simbad_objects', e)
+        raise
+    _health_set('retry_simbad_objects', summary)
+    if summary['resolved'] or not summary['simbad_available']:
+        logger.info(f'SIMBAD retry: {summary}')
+    return summary

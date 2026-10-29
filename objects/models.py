@@ -51,6 +51,8 @@ class Object(models.Model):
 
     #   Can the target be resolved by Simbad
     simbad_resolved = models.BooleanField(default=False)
+    #   Created while SIMBAD was unreachable: resolved later by the retry_simbad_objects task
+    simbad_retry = models.BooleanField(default=False, db_index=True)
 
     #   Object type
     STAR_CLUSTER = 'SC'

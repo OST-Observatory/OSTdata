@@ -1852,11 +1852,21 @@ const initializeAladinLite = () => {
     return
   }
 
+  // The script comes from the CDS server: when that is down the request neither loads nor fails for
+  // minutes, so give up after a fixed time instead of spinning forever. A late load is ignored.
+  const LOAD_TIMEOUT_MS = 15000
+  let settled = false
+  const loadTimer = setTimeout(() => handleLoadError('timeout'), LOAD_TIMEOUT_MS)
+
   // Helper function to initialize Aladin using A.init promise
   const initAladin = () => {
+    if (settled) return
     if (window.A && window.A.init) {
       window.A.init
         .then(() => {
+          if (settled) return
+          settled = true
+          clearTimeout(loadTimer)
           try {
             window.A.aladin('#aladin-lite-div', {
               survey: 'P/DSS2/color',
@@ -1945,13 +1955,17 @@ const initializeAladinLite = () => {
   }
   document.head.appendChild(script)
 
-  function handleLoadError() {
-    console.warn('Aladin Lite script failed to load or initialize')
+  function handleLoadError(reason) {
+    if (settled) return
+    settled = true
+    clearTimeout(loadTimer)
+    console.warn('Aladin Lite script failed to load or initialize', reason || '')
     const aladinDiv = document.getElementById('aladin-lite-div')
     if (aladinDiv) {
       aladinDiv.innerHTML = `
         <div style="padding: 20px; text-align: center; color: #666;">
-          <p>Sky Map could not be loaded</p>
+          <p>Sky Map could not be loaded${reason === 'timeout' ? ' (sky map service not reachable)' : ''}</p>
+          <p>Coordinates: ${formatRA(object.value.ra)} ${formatDec(object.value.dec)}</p>
         </div>
       `
     }
