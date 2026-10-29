@@ -220,6 +220,9 @@
       </v-snackbar>
     </div>
 
+    <!-- Sky view of plate-solved files (one shared Aladin Lite instance) -->
+    <SkyViewDialog />
+
     <!-- Route change live announcer -->
     <div class="sr-only" aria-live="polite" aria-atomic="true">{{ documentTitle }}</div>
   </v-app>
@@ -233,6 +236,7 @@ import { useAuthStore } from '@/store/auth'
 import { useTheme, useDisplay } from 'vuetify'
 // @ts-ignore
 import { useNotifyStore } from '@/store/notify'
+import SkyViewDialog from '@/components/datafiles/SkyViewDialog.vue'
 // @ts-ignore - JS module in TS SFC
 import { api } from '@/services/api'
 

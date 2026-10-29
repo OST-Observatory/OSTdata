@@ -174,6 +174,8 @@ export const api = {
     if (params.pixel_count_max != null) queryParams.pixel_count_max = params.pixel_count_max
     return fetchWithAuth('/runs/datafiles/', { params: queryParams })
   },
+  getDataFileSkyView: (pk, w = 2048) => fetchWithAuth(`/runs/datafiles/${pk}/sky/`, { params: { w } }),
+  getDataFileSkyImageUrl: (pk, w = 2048) => `${API_BASE_URL}/runs/datafiles/${pk}/sky/image/?w=${encodeURIComponent(w)}`,
   getDataFileThumbnailUrl: (pk, w = 512) => {
     const base = API_BASE_URL
     const url = `${base}/runs/datafiles/${pk}/thumbnail/?w=${encodeURIComponent(w)}`

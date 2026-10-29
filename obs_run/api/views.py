@@ -219,6 +219,84 @@ get_datafile_thumbnail.throttle_classes = [ScopedRateThrottle]
 get_datafile_thumbnail.throttle_scope = 'thumbnails'
 
 
+def _readable_datafile_path(request, pk):
+    """(DataFile, safe file path) if the user may read the file, else (None, 404 Response)."""
+    try:
+        df = DataFile.objects.select_related('observation_run').get(pk=pk)
+    except DataFile.DoesNotExist:
+        return None, Response({"detail": "Not found"}, status=404)
+    run = df.observation_run
+    if run and not run.is_public:
+        try:
+            if request.user.is_anonymous or not request.user.can_read(run):
+                return None, Response({"detail": "Not found"}, status=404)
+        except Exception:
+            return None, Response({"detail": "Not found"}, status=404)
+    try:
+        from obs_run.services.datafile_paths import PathOutsideDataRoot, safe_datafile_path
+        return df, safe_datafile_path(df.datafile, must_exist=True)
+    except (PathOutsideDataRoot, FileNotFoundError):
+        return None, Response({"detail": "File not found"}, status=404)
+
+
+def _sky_max_dim(request):
+    from obs_run.sky_view import DEFAULT_MAX_DIM
+    try:
+        return max(256, min(int(request.query_params.get('w', DEFAULT_MAX_DIM)), DEFAULT_MAX_DIM))
+    except (TypeError, ValueError):
+        return DEFAULT_MAX_DIM
+
+
+@extend_schema(
+    summary='Sky view of a plate-solved file (WCS of the preview image, SIMBAD objects in the field)',
+    parameters=[
+        OpenApiParameter('pk', int, OpenApiParameter.PATH),
+        OpenApiParameter('w', int, OpenApiParameter.QUERY, description='Max preview width/height (256-2048)'),
+    ],
+    responses=JSON_OBJECT_RESPONSE,
+)
+@api_view(['GET'])
+def get_datafile_sky_view(request, pk):
+    from obs_run.sky_view import sky_view_payload
+
+    df, path = _readable_datafile_path(request, pk)
+    if df is None:
+        return path
+    try:
+        return Response(sky_view_payload(df, path, _sky_max_dim(request)))
+    except Exception as e:
+        logger.exception("sky view failed for datafile %s: %s", pk, e)
+        return Response({'available': False, 'reason': 'Sky view could not be created'}, status=200)
+
+
+@extend_schema(
+    summary='JPEG preview of a plate-solved file for the sky view',
+    parameters=[
+        OpenApiParameter('pk', int, OpenApiParameter.PATH),
+        OpenApiParameter('w', int, OpenApiParameter.QUERY, description='Max width/height (256-2048)'),
+    ],
+    responses={200: OpenApiTypes.BINARY},
+)
+@api_view(['GET'])
+def get_datafile_sky_image(request, pk):
+    from obs_run.sky_view import get_sky_jpeg
+
+    df, path = _readable_datafile_path(request, pk)
+    if df is None:
+        return path
+    try:
+        return HttpResponse(get_sky_jpeg(df, path, _sky_max_dim(request)), content_type='image/jpeg')
+    except Exception as e:
+        logger.exception("sky image failed for datafile %s: %s", pk, e)
+        return Response({"detail": "Sky image could not be created"}, status=400)
+
+
+get_datafile_sky_view.throttle_classes = [ScopedRateThrottle]
+get_datafile_sky_view.throttle_scope = 'thumbnails'
+get_datafile_sky_image.throttle_classes = [ScopedRateThrottle]
+get_datafile_sky_image.throttle_scope = 'thumbnails'
+
+
 @extend_schema(
     summary='DataFile FITS header',
     parameters=[OpenApiParameter('pk', int, OpenApiParameter.PATH)],

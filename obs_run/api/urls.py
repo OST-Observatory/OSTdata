@@ -33,6 +33,8 @@ from .views import (
     download_datafiles_bulk,
     download_run_datafiles,
     get_datafile_header,
+    get_datafile_sky_image,
+    get_datafile_sky_view,
     get_datafile_thumbnail,
 )
 
@@ -58,6 +60,8 @@ urlpatterns = [
     path('time-distribution/', get_time_distribution, name='time_distribution'),
     path('dashboard/stats/', getDashboardStats, name='dashboard_stats'),
     path('datafiles/<int:pk>/thumbnail/', get_datafile_thumbnail, name='datafile_thumbnail'),
+    path('datafiles/<int:pk>/sky/', get_datafile_sky_view, name='datafile_sky_view'),
+    path('datafiles/<int:pk>/sky/image/', get_datafile_sky_image, name='datafile_sky_image'),
     path('datafiles/<int:pk>/header/', get_datafile_header, name='datafile_header'),
     path('datafiles/<int:pk>/download/', download_datafile, name='datafile_download'),
     path('runs/<int:run_pk>/download/', download_run_datafiles, name='run_datafiles_download'),

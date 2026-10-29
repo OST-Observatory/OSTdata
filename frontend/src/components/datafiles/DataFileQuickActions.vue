@@ -44,6 +44,19 @@
         />
       </template>
     </v-tooltip>
+    <v-tooltip v-if="canShowSkyView(item)" text="Sky view (coordinate grid, SIMBAD objects)" location="top">
+      <template #activator="{ props }">
+        <v-btn
+          v-bind="props"
+          icon="mdi-earth"
+          size="small"
+          density="comfortable"
+          variant="text"
+          :aria-label="`Sky view of ${fileName}`"
+          @click="openSkyView(item)"
+        />
+      </template>
+    </v-tooltip>
     <slot />
   </div>
 </template>
@@ -51,12 +64,14 @@
 <script setup>
 import { computed } from 'vue'
 import { api } from '@/services/api'
+import { canShowSkyView, useSkyView } from '@/composables/useSkyView'
 
 const props = defineProps({
   item: { type: Object, required: true },
   download: { type: Boolean, default: true },
 })
 const emit = defineEmits(['preview', 'header'])
+const { openSkyView } = useSkyView()
 
 const fileName = computed(() => props.item.file_name || '')
 const isFits = computed(() => {
