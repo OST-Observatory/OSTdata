@@ -1,7 +1,9 @@
 <template>
   <!-- Sky view of a plate-solved file: the preview placed on the sky by its WCS (Aladin Lite), with a
-       coordinate grid and the run's cached SIMBAD objects. Mounted once in AppLayout (useSkyView). -->
-  <v-dialog v-model="skyViewOpen" max-width="1200" @after-enter="show">
+       coordinate grid and the run's cached SIMBAD objects. Mounted once in AppLayout (useSkyView).
+       eager: keep the content (and with it the one Aladin instance) when closed; without it Vuetify
+       removes the container on close and the instance would draw into a detached element. -->
+  <v-dialog v-model="skyViewOpen" max-width="1200" eager @after-enter="show">
     <v-card>
       <v-card-title class="d-flex align-center" style="gap: 8px">
         <v-icon icon="mdi-earth" size="20" />
@@ -117,6 +119,8 @@ async function ensureAladin(view) {
 }
 
 async function show() {
+  // The container was hidden while the dialog was closed: let Aladin take its size again
+  aladin?.fixLayoutDimensions?.()
   const item = skyViewFile.value
   const pk = item?.pk ?? item?.id
   if (pk == null || pk === shownPk) return
