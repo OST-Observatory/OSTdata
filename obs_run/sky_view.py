@@ -9,6 +9,7 @@ image row 1 (top) as pixel y = 1, so the solver's WCS only needs to be scaled to
 from __future__ import annotations
 
 import logging
+import warnings
 from io import BytesIO
 from pathlib import Path
 
@@ -18,7 +19,7 @@ from django.conf import settings
 logger = logging.getLogger(__name__)
 
 DEFAULT_MAX_DIM = 2048
-JPEG_QUALITY = 85
+JPEG_QUALITY = 80
 
 
 def datafile_wcs_header(datafile):
@@ -55,10 +56,25 @@ def datafile_wcs_header(datafile):
     return {key: (float(v) if isinstance(v, np.floating) else v) for key, v in header.items()}
 
 
-def scaled_wcs(header, width, height):
-    """WCS of the full image adapted to a preview of width x height pixels (same field)."""
-    sx = width / header['NAXIS1']
-    sy = height / header['NAXIS2']
+def block_factor(width, height, max_dim=DEFAULT_MAX_DIM):
+    """Block size averaged before stretching: the image is reduced to >= max_dim first (fast, low noise)."""
+    return max(1, max(int(width), int(height)) // max_dim)
+
+
+def covered_size(width, height, max_dim=DEFAULT_MAX_DIM):
+    """Part of the image the preview shows: cropped to whole blocks (at most block-1 pixels at the far edges)."""
+    k = block_factor(width, height, max_dim)
+    return int(width) // k * k, int(height) // k * k
+
+
+def scaled_wcs(header, width, height, covered=None):
+    """
+    WCS of the full image adapted to a preview of width x height pixels showing the first
+    covered = (columns, rows) pixels of the image (default: all of it).
+    """
+    covered_width, covered_height = covered or (header['NAXIS1'], header['NAXIS2'])
+    sx = width / covered_width
+    sy = height / covered_height
     scaled = dict(header)
     scaled.update({
         'NAXIS1': width, 'NAXIS2': height,
@@ -80,7 +96,8 @@ def _astropy_wcs(header):
 def _cache_path(datafile, max_dim):
     base = getattr(settings, 'SER_THUMBNAIL_CACHE_DIR', None) or (Path(settings.BASE_DIR) / 'data' / 'ser_thumbnails')
     digest = (datafile.content_hash or 'nohash').strip() or 'nohash'
-    return Path(base) / f'df{datafile.pk}_{digest}_sky{max_dim}.jpg'
+    # v2: block-averaged and cropped to whole blocks (the WCS of the payload assumes this)
+    return Path(base) / f'df{datafile.pk}_{digest}_sky{max_dim}_v2.jpg'
 
 
 def render_sky_jpeg(path, max_dim=DEFAULT_MAX_DIM):
@@ -98,8 +115,21 @@ def render_sky_jpeg(path, max_dim=DEFAULT_MAX_DIM):
         raise ValueError('No image data')
     if data.ndim > 2:
         data = data[0]
-    check_frame_pixels(int(data.shape[1]), int(data.shape[0]))
-    data = np.asarray(data, dtype=float)
+    height, width = data.shape
+    check_frame_pixels(int(width), int(height))
+    # Average k x k blocks before stretching: the full-resolution stretch took ~1.4 s and ~770 MB
+    # for a 6252 x 4176 frame, on the reduced image it is a fraction of that (and less noisy)
+    k = block_factor(width, height, max_dim)
+    covered_width, covered_height = covered_size(width, height, max_dim)
+    data = np.asarray(data[:covered_height, :covered_width], dtype=np.float32)
+    if k > 1:
+        blocks = data.reshape(covered_height // k, k, covered_width // k, k)
+        if np.isfinite(data).all():
+            data = blocks.mean(axis=(1, 3))
+        else:
+            with warnings.catch_warnings():
+                warnings.simplefilter('ignore', RuntimeWarning)  # blocks without finite pixels -> NaN
+                data = np.nanmean(blocks, axis=(1, 3))
     finite = np.isfinite(data)
     if not finite.any():
         raise ValueError('Invalid image data')
@@ -177,13 +207,16 @@ def sky_view_payload(datafile, path, max_dim=DEFAULT_MAX_DIM):
     # The WCS must match the JPEG exactly: take the size of the (cached) rendered image
     with Image.open(BytesIO(get_sky_jpeg(datafile, path, max_dim))) as img:
         width, height = img.size
+    covered = covered_size(header['NAXIS1'], header['NAXIS2'], max_dim)
     center = _astropy_wcs(header).all_pix2world([[(header['NAXIS1'] + 1) / 2, (header['NAXIS2'] + 1) / 2]], 1)[0]
     field = max(abs(header['CD1_1']) + abs(header['CD1_2']), abs(header['CD2_1']) + abs(header['CD2_2'])) * \
         max(header['NAXIS1'], header['NAXIS2'])
     run = datafile.observation_run
     return {
         'available': True,
-        'wcs': scaled_wcs(header, width, height),
+        'wcs': scaled_wcs(header, width, height, covered),
+        # Versioned image URL parameter: the browser may cache the image for good
+        'image_version': f"{(datafile.content_hash or 'nohash')[:16]}-{max_dim}-v2",
         'center': {'ra': float(center[0]), 'dec': float(center[1])},
         'fov_deg': float(field),
         'objects': sky_objects(datafile, header),

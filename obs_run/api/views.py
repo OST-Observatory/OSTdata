@@ -285,7 +285,12 @@ def get_datafile_sky_image(request, pk):
     if df is None:
         return path
     try:
-        return HttpResponse(get_sky_jpeg(df, path, _sky_max_dim(request)), content_type='image/jpeg')
+        response = HttpResponse(get_sky_jpeg(df, path, _sky_max_dim(request)), content_type='image/jpeg')
+        # Versioned URLs (?v=<hash>) never change; private: files of non-public runs
+        response['Cache-Control'] = (
+            'private, max-age=31536000, immutable' if request.query_params.get('v') else 'private, max-age=300'
+        )
+        return response
     except Exception as e:
         logger.exception("sky image failed for datafile %s: %s", pk, e)
         return Response({"detail": "Sky image could not be created"}, status=400)

@@ -13,7 +13,7 @@ from rest_framework.test import APITestCase
 
 from objects.models import Object
 from obs_run.models import DataFile, ObservationRun
-from obs_run.sky_view import datafile_wcs_header, scaled_wcs
+from obs_run.sky_view import covered_size, datafile_wcs_header, scaled_wcs
 
 # 4000 x 3000 px, 1"/px, rotated by 30 deg
 _SCALE = 1 / 3600
@@ -41,6 +41,18 @@ class ScaledWcsTest(TestCase):
                     full_sky = _wcs(FULL).all_pix2world([[x, y]], 1)[0]
                     small_sky = _wcs(small).all_pix2world([[(x - 0.5) * sx + 0.5, (y - 0.5) * sy + 0.5]], 1)[0]
                     np.testing.assert_allclose(small_sky, full_sky, atol=1e-9)
+
+    def test_cropped_blocks_keep_the_edges_exact(self):
+        # 4001 x 3003 px averaged in 3 x 3 blocks (max_dim 1024): 4000 x 3003 px covered, 1333 x 1001 preview
+        header = {**FULL, 'NAXIS1': 4001, 'NAXIS2': 3003}
+        covered = covered_size(4001, 3003, 1024)
+        self.assertEqual(covered, (3999, 3003))
+        small = scaled_wcs(header, 1333, 1001, covered)
+        # Outer edges of the preview = outer edges of the covered pixels
+        for (px, py), (fx, fy) in (((0.5, 0.5), (0.5, 0.5)), ((1333.5, 1001.5), (3999.5, 3003.5))):
+            np.testing.assert_allclose(
+                _wcs(small).all_pix2world([[px, py]], 1)[0], _wcs(header).all_pix2world([[fx, fy]], 1)[0], atol=1e-9,
+            )
 
 
 class SkyViewApiTest(APITestCase):
@@ -74,6 +86,10 @@ class SkyViewApiTest(APITestCase):
         self.assertEqual(image['Content-Type'], 'image/jpeg')
         with Image.open(BytesIO(image.content)) as img:
             self.assertEqual((data['wcs']['NAXIS1'], data['wcs']['NAXIS2']), img.size)
+        versioned = self.client.get(
+            f'/api/runs/datafiles/{self.datafile.pk}/sky/image/?w=256&v={data["image_version"]}',
+        )
+        self.assertIn('immutable', versioned['Cache-Control'])
         names = [(o['name'], o['main']) for o in data['objects']]
         self.assertEqual(names, [('M 42', True), ('Inside star', False)])
         self.assertAlmostEqual(data['center']['ra'], 83.82, places=6)
@@ -87,3 +103,30 @@ class SkyViewApiTest(APITestCase):
         ObservationRun.objects.filter(pk=self.run.pk).update(is_public=False)
         self.assertEqual(self.client.get(f'/api/runs/datafiles/{self.datafile.pk}/sky/').status_code, 404)
         self.assertEqual(self.client.get(f'/api/runs/datafiles/{self.datafile.pk}/sky/image/').status_code, 404)
+
+
+class SkyViewBlockAveragingTest(APITestCase):
+    @override_settings(SER_THUMBNAIL_CACHE_DIR=tempfile.mkdtemp())
+    def test_reduced_image_still_matches_its_wcs(self):
+        root = Path(settings.DATA_DIRECTORY)
+        root.mkdir(parents=True, exist_ok=True)
+        path = Path(tempfile.mkdtemp(dir=root)) / 'big.fits'
+        data = np.random.default_rng(2).normal(1000, 20, (703, 1101)).astype(np.float32)
+        data[5, 7] = np.nan  # NaN handling of the block averaging
+        fits.PrimaryHDU(data).writeto(path)
+        run = ObservationRun.objects.create(name='2026-10-31', is_public=True)
+        datafile = DataFile.objects.create(
+            observation_run=run, datafile=str(path), file_type='FITS', naxis1=1101, naxis2=703, plate_solved=True,
+            content_hash='big', wcs_crval1=10.0, wcs_crval2=20.0, wcs_crpix1=550.5, wcs_crpix2=351.5,
+            wcs_cd1_1=-1 / 3600, wcs_cd1_2=0.0, wcs_cd2_1=0.0, wcs_cd2_2=1 / 3600,
+        )
+        view = self.client.get(f'/api/runs/datafiles/{datafile.pk}/sky/?w=256').json()
+        image = self.client.get(f'/api/runs/datafiles/{datafile.pk}/sky/image/?w=256')
+        with Image.open(BytesIO(image.content)) as img:
+            self.assertEqual((view['wcs']['NAXIS1'], view['wcs']['NAXIS2']), img.size)
+        # 4 x 4 blocks over 1100 x 700 px: the preview spans exactly that part of the image
+        header = datafile_wcs_header(datafile)
+        np.testing.assert_allclose(
+            _wcs(view['wcs']).all_pix2world([[img.size[0] + 0.5, img.size[1] + 0.5]], 1)[0],
+            _wcs(header).all_pix2world([[1100.5, 700.5]], 1)[0], atol=1e-9,
+        )

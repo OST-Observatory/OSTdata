@@ -175,7 +175,9 @@ export const api = {
     return fetchWithAuth('/runs/datafiles/', { params: queryParams })
   },
   getDataFileSkyView: (pk, w = 2048) => fetchWithAuth(`/runs/datafiles/${pk}/sky/`, { params: { w } }),
-  getDataFileSkyImageUrl: (pk, w = 2048) => `${API_BASE_URL}/runs/datafiles/${pk}/sky/image/?w=${encodeURIComponent(w)}`,
+  getDataFileSkyImageUrl: (pk, w = 2048, version = '') =>
+    `${API_BASE_URL}/runs/datafiles/${pk}/sky/image/?w=${encodeURIComponent(w)}` +
+    (version ? `&v=${encodeURIComponent(version)}` : ''),
   getDataFileThumbnailUrl: (pk, w = 512) => {
     const base = API_BASE_URL
     const url = `${base}/runs/datafiles/${pk}/thumbnail/?w=${encodeURIComponent(w)}`

@@ -131,7 +131,7 @@ async function show() {
     await ensureAladin(view)
     objects.value = view.objects || []
     auxStatus.value = view.aux_objects_status
-    aladin.setOverlayImageLayer(A.image(api.getDataFileSkyImageUrl(pk), {
+    aladin.setOverlayImageLayer(A.image(api.getDataFileSkyImageUrl(pk, 2048, view.image_version), {
       name: item.file_name || 'image',
       imgFormat: 'jpeg',
       wcs: view.wcs,
