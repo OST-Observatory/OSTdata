@@ -9,6 +9,8 @@ from pathlib import Path
 import numpy as np
 from django.conf import settings
 
+from obs_run.preview_cache import touch
+
 try:
     from PIL import Image
 except Exception:  # pragma: no cover
@@ -136,7 +138,9 @@ def get_cached_thumbnail_png(
     if cache_path.is_file():
         try:
             if cache_path.stat().st_mtime >= src_mtime:
-                return cache_path.read_bytes()
+                data = cache_path.read_bytes()
+                touch(cache_path)  # last use, for the optional cache cleanup
+                return data
         except OSError:
             pass
 

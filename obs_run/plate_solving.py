@@ -611,6 +611,9 @@ def solve_and_update_datafile(datafile, service=None, save=True):
                 from ostdata.history_reason import REASON_TASK_PLATE_SOLVE, save_with_reason
                 save_with_reason(datafile, REASON_TASK_PLATE_SOLVE)
                 _maybe_enqueue_aux_objects_after_wcs(datafile)
+                # New solution: render the sky view image now (the file was just read anyway)
+                from obs_run.sky_view import prerender_sky_image
+                prerender_sky_image(datafile)
 
             return {
                 'success': True,

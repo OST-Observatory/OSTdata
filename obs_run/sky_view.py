@@ -16,6 +16,8 @@ from pathlib import Path
 import numpy as np
 from django.conf import settings
 
+from obs_run.preview_cache import touch
+
 logger = logging.getLogger(__name__)
 
 DEFAULT_MAX_DIM = 2048
@@ -148,7 +150,9 @@ def get_sky_jpeg(datafile, path, max_dim=DEFAULT_MAX_DIM):
     cache_path.parent.mkdir(parents=True, exist_ok=True)
     try:
         if cache_path.is_file() and cache_path.stat().st_mtime >= Path(path).stat().st_mtime:
-            return cache_path.read_bytes()
+            data = cache_path.read_bytes()
+            touch(cache_path)  # last use, for the optional cache cleanup
+            return data
     except OSError:
         pass
     jpeg = render_sky_jpeg(path, max_dim)
@@ -195,6 +199,21 @@ def sky_objects(datafile, header):
             'main': False,
         })
     return objects
+
+
+def prerender_sky_image(datafile):
+    """
+    Render the sky view image right after a new plate solution, so opening the sky view does not have
+    to read the (possibly network-mounted) FITS file. Older solved files are rendered on demand.
+    """
+    if not getattr(settings, 'SKY_VIEW_PRERENDER', True) or datafile_wcs_header(datafile) is None:
+        return False
+    try:
+        get_sky_jpeg(datafile, Path(str(datafile.datafile)))
+        return True
+    except Exception:
+        logger.warning('Sky image pre-rendering failed for datafile %s', datafile.pk, exc_info=True)
+        return False
 
 
 def sky_view_payload(datafile, path, max_dim=DEFAULT_MAX_DIM):

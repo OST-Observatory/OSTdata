@@ -420,6 +420,11 @@ export const api = {
     body: JSON.stringify({ only_unchecked: !!opts.only_unchecked, limit: opts.limit ?? null }),
   }),
   adminFileIssues: (params = {}) => fetchWithAuth('/admin/maintenance/file-issues/', { params }),
+  adminPreviewCache: () => fetchWithAuth('/admin/maintenance/preview-cache/'),
+  adminPreviewCacheCleanup: (opts = {}) => fetchWithAuth('/admin/maintenance/preview-cache/cleanup/', {
+    method: 'POST',
+    body: JSON.stringify({ max_age_days: opts.max_age_days ?? null, dry_run: !!opts.dry_run }),
+  }),
   adminAiNotice: (params = {}) => fetchWithAuth('/admin/ai-notice/', { params }),
   adminAiNoticeSync: () => fetchWithAuth('/admin/ai-notice/sync/', { method: 'POST' }),
   adminAiNoticeExempt: (pk, exempt) => fetchWithAuth(`/admin/ai-notice/${pk}/exempt/`, {

@@ -1480,3 +1480,17 @@ def retry_simbad_objects(self, limit: int = 200):
     if summary['resolved'] or not summary['simbad_available']:
         logger.info(f'SIMBAD retry: {summary}')
     return summary
+
+
+@shared_task(bind=True)
+def cleanup_preview_cache(self, max_age_days: int | None = None, dry_run: bool = False):
+    """Optional cleanup of cached previews (obs_run/preview_cache.py); started from the admin."""
+    from obs_run.preview_cache import cleanup_cache
+    try:
+        summary = cleanup_cache(max_age_days=max_age_days, dry_run=dry_run)
+    except Exception as e:
+        _health_error('cleanup_preview_cache', e)
+        raise
+    _health_set('cleanup_preview_cache', summary)
+    logger.info(f'Preview cache cleanup: {summary}')
+    return summary

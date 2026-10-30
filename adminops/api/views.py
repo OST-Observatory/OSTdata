@@ -37,6 +37,7 @@ from obs_run.tasks import (
     cleanup_expired_downloads,
     cleanup_orphan_objects,
     cleanup_orphans_and_hashcheck,
+    cleanup_preview_cache,
     enqueue_aux_objects_for_run,
     plate_solve_pending_files,
     process_aux_objects_queue,
@@ -905,6 +906,45 @@ def admin_ai_notice_exempt(request, pk: int):
     # Applied right away: the keyword is removed from / written into the file now
     sync_notice(datafile)
     return Response(_ai_notice_row(datafile, notice_config()))
+
+
+@extend_schema(summary='Preview cache: size per kind and free space', responses=JSON_OBJECT_RESPONSE, tags=['Admin'])
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def admin_preview_cache(request):
+    from obs_run.preview_cache import cache_status
+
+    if not _can_check_files(request.user):
+        return Response({'detail': 'Forbidden'}, status=403)
+    return Response({
+        **cache_status(),
+        'max_age_days_default': int(getattr(settings, 'PREVIEW_CACHE_MAX_AGE_DAYS', 90)),
+        'prerender': bool(getattr(settings, 'SKY_VIEW_PRERENDER', True)),
+    })
+
+
+class AdminPreviewCacheCleanupSerializer(serializers.Serializer):
+    max_age_days = serializers.IntegerField(required=False, allow_null=True, min_value=0)
+    dry_run = serializers.BooleanField(required=False, default=False)
+
+
+@extend_schema(summary='Preview cache: optional cleanup', request=AdminPreviewCacheCleanupSerializer,
+               responses=JSON_OBJECT_ACCEPTED, tags=['Admin'])
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def admin_trigger_preview_cache_cleanup(request):
+    if not _can_check_files(request.user):
+        return Response({'detail': 'Forbidden'}, status=403)
+    serializer = AdminPreviewCacheCleanupSerializer(data=request.data or {})
+    serializer.is_valid(raise_exception=True)
+    options = serializer.validated_data
+    try:
+        res = _celery_delay(cleanup_preview_cache, max_age_days=options.get('max_age_days'),
+                            dry_run=options['dry_run'])
+        return Response({'enqueued': True, 'task_id': getattr(res, 'id', None), **options}, status=202)
+    except Exception as e:
+        logger.exception("admin_trigger_preview_cache_cleanup failed: %s", e)
+        return Response({'enqueued': False, 'error': str(e)}, status=400)
 
 
 class AdminOrphanObjectsRequestSerializer(serializers.Serializer):

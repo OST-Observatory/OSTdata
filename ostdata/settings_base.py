@@ -293,6 +293,12 @@ CELERY_BEAT_SCHEDULE['sync_ai_notices'] = {
     'schedule': crontab(minute=10, hour='1'),  # Daily at 1:10
 }
 
+# Sky view (obs_run/sky_view.py): render the image right after a new plate solution; the cache of
+# previews has no size limit, the optional cleanup (admin maintenance) removes previews unused for
+# PREVIEW_CACHE_MAX_AGE_DAYS days
+SKY_VIEW_PRERENDER = env.bool('SKY_VIEW_PRERENDER', default=True)
+PREVIEW_CACHE_MAX_AGE_DAYS = env.int('PREVIEW_CACHE_MAX_AGE_DAYS', default=90)
+
 # Objects created while SIMBAD was unreachable (utilities.retry_simbad_objects); cheap when none pending
 CELERY_BEAT_SCHEDULE['retry_simbad_objects'] = {
     'task': 'obs_run.tasks.retry_simbad_objects',

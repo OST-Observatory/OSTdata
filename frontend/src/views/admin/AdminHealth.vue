@@ -324,6 +324,7 @@ const periodicTaskNames = [
   'check_data_files',
   'sync_ai_notices',
   'retry_simbad_objects',
+  'cleanup_preview_cache',
 ]
 
 const jobColor = (s) => {

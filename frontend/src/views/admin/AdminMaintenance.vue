@@ -434,6 +434,84 @@
       class="admin-maint-card mb-3"
     >
       <v-card-title class="maint-section-title text-subtitle-2 d-flex align-center flex-wrap" style="gap: 8px">
+        <v-icon icon="mdi-image-multiple-outline" size="18" />
+        <span>Preview cache</span>
+        <v-chip size="x-small" variant="flat" color="primary">
+          {{ humanBytes(previewCache.total_bytes || 0) }}
+        </v-chip>
+        <v-spacer />
+        <v-text-field
+          v-model="cacheMaxAgeDays"
+          label="Unused for days"
+          type="number"
+          min="0"
+          density="compact"
+          variant="outlined"
+          hide-details
+          class="maint-limit-field"
+        />
+        <v-switch v-model="cacheCleanupDryRun" inset hide-details color="primary" density="compact" label="Dry run" />
+        <v-btn
+          color="primary"
+          variant="tonal"
+          prepend-icon="mdi-broom"
+          :loading="busy.previewCache"
+          @click="triggerPreviewCacheCleanup"
+        >
+          Clean up
+        </v-btn>
+        <v-btn variant="text" prepend-icon="mdi-refresh" :loading="loadingPreviewCache" @click="loadPreviewCache">
+          Refresh
+        </v-btn>
+      </v-card-title>
+      <v-card-text class="maint-section-body pt-0">
+        <p class="text-caption text-medium-emphasis mb-2">
+          Rendered sky view images and video thumbnails. Sky view images of newly plate-solved files are
+          rendered right away<template v-if="!previewCache.prerender"> (switched off: SKY_VIEW_PRERENDER)</template>,
+          everything else on first view. No size limit; the cleanup removes previews unused for the given number
+          of days, of deleted or changed files and in outdated formats (re-rendered when needed).
+        </p>
+        <v-table density="compact" class="maint-flags-table bg-transparent">
+          <thead>
+            <tr>
+              <th>Kind</th>
+              <th class="text-right">Files</th>
+              <th class="text-right">Size</th>
+              <th>Last use (oldest / newest)</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="row in previewCacheRows" :key="row.key">
+              <td class="text-caption">{{ row.label }}</td>
+              <td class="text-caption text-right">{{ row.files }}</td>
+              <td class="text-caption text-right">{{ humanBytes(row.bytes || 0) }}</td>
+              <td class="text-caption text-medium-emphasis">
+                <template v-if="row.oldest">
+                  {{ formatRelative(row.oldest) }} / {{ formatRelative(row.newest) }}
+                </template>
+                <template v-else>—</template>
+              </td>
+            </tr>
+          </tbody>
+        </v-table>
+        <p class="text-caption text-medium-emphasis mt-2 mb-0">
+          Free space on the cache volume: {{ previewCache.free_bytes != null ? humanBytes(previewCache.free_bytes) : '—' }}<template
+            v-if="periodic.cleanup_preview_cache?.last_run"
+          >. Last cleanup {{ formatRelative(periodic.cleanup_preview_cache.last_run, periodic.cleanup_preview_cache.age_seconds) }}<template
+              v-if="periodic.cleanup_preview_cache.data"
+            >: {{ periodic.cleanup_preview_cache.data.dry_run ? 'would remove' : 'removed' }}
+            {{ periodic.cleanup_preview_cache.data.removed_files }} files
+            ({{ humanBytes(periodic.cleanup_preview_cache.data.removed_bytes || 0) }})</template></template>.
+        </p>
+      </v-card-text>
+    </v-card>
+
+    <v-card
+      v-if="canReconcile"
+      variant="outlined"
+      class="admin-maint-card mb-3"
+    >
+      <v-card-title class="maint-section-title text-subtitle-2 d-flex align-center flex-wrap" style="gap: 8px">
         <v-icon icon="mdi-robot-off-outline" size="18" />
         <span>Lab course AI notice</span>
         <v-chip size="x-small" :color="aiNoticeConfig.enabled ? 'success' : 'grey'" variant="flat">
@@ -662,6 +740,7 @@ const busy = ref({
   overrideFlags: false,
   checkFiles: false,
   aiNoticeSync: false,
+  previewCache: false,
 })
 const health = ref({ periodic: {}, settings: {}, features: {} })
 const overrideFlagsData = ref(null)
@@ -675,6 +754,20 @@ const fileIssuePage = ref(1)
 const fileIssuePages = ref(1)
 const loadingFileIssues = ref(false)
 const checkOnlyUnchecked = ref(true)
+const previewCache = ref({ kinds: {}, total_bytes: 0, free_bytes: null, prerender: true })
+const loadingPreviewCache = ref(false)
+const cacheMaxAgeDays = ref('90')
+const cacheCleanupDryRun = ref(true)
+const PREVIEW_CACHE_KINDS = [
+  { key: 'sky', label: 'Sky view images' },
+  { key: 'thumbnail', label: 'Video thumbnails (SER/AVI/MOV)' },
+  { key: 'other', label: 'Other files' },
+]
+const previewCacheRows = computed(() => PREVIEW_CACHE_KINDS.map(({ key, label }) => {
+  const kind = previewCache.value.kinds?.[key] || {}
+  const toIso = (sec) => (sec ? new Date(sec * 1000).toISOString() : null)
+  return { key, label, files: kind.files || 0, bytes: kind.bytes || 0, oldest: toIso(kind.oldest_use), newest: toIso(kind.newest_use) }
+}))
 const aiNoticeRows = ref([])
 const aiNoticeConfig = ref({ enabled: false, text: '', days: 183, since: '' })
 const aiNoticeCounts = ref({ active: 0, pending: 0, exempt: 0, error: 0 })
@@ -1219,6 +1312,39 @@ const triggerCheckFiles = async () => {
 
 watch(fileIssueLevel, () => loadFileIssues(1))
 
+const loadPreviewCache = async () => {
+  if (!canReconcile.value) return
+  loadingPreviewCache.value = true
+  try {
+    const data = await api.adminPreviewCache()
+    previewCache.value = data || previewCache.value
+    if (data?.max_age_days_default != null && cacheMaxAgeDays.value === '90') {
+      cacheMaxAgeDays.value = String(data.max_age_days_default)
+    }
+  } catch {
+    notify.error('Failed to load preview cache status')
+  } finally {
+    loadingPreviewCache.value = false
+  }
+}
+
+const triggerPreviewCacheCleanup = async () => {
+  busy.value.previewCache = true
+  try {
+    const days = parseInt(String(cacheMaxAgeDays.value), 10)
+    await api.adminPreviewCacheCleanup({
+      max_age_days: Number.isFinite(days) && days >= 0 ? days : null,
+      dry_run: cacheCleanupDryRun.value,
+    })
+    notify.success(`Cache cleanup enqueued (${cacheCleanupDryRun.value ? 'dry run' : 'apply'})`)
+  } catch {
+    notify.error('Failed to enqueue cache cleanup')
+  } finally {
+    busy.value.previewCache = false
+    setTimeout(() => { refreshHealth(); loadPreviewCache() }, 2000)
+  }
+}
+
 const AI_NOTICE_PAGE_SIZE = 50
 const AI_NOTICE_STATUS = {
   active: { label: 'In file', color: 'success' },
@@ -1315,6 +1441,7 @@ onMounted(() => {
   loadOverrideFlags()
   loadFileIssues()
   loadAiNotice()
+  loadPreviewCache()
 })
 
 onBeforeUnmount(() => {
