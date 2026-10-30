@@ -46,8 +46,9 @@ pillow==13.0.0
 # setuptools: GHSA-xmj3-9gf7-h52w (fixed in 84.1.0). Via tensorflow/tensorboard/pbr; 84.x only changes
 # extension building (distutils compilers), not runtime behaviour.
 setuptools==84.2.1
-# tornado: GHSA-chx6-46f5-w4vp, GHSA-c2m8-h5v5-343r, GHSA-3hv7-mjh2-fv65 (fixed in 6.5.9); via bokeh.
-tornado==6.5.10
+# tornado: GHSA-chx6-46f5-w4vp, GHSA-c2m8-h5v5-343r, GHSA-3hv7-mjh2-fv65 (fixed in 6.5.9);
+# CVE-2026-115927 / 116577 / 116578 (fixed in 6.6). Via bokeh (>=6.2); the archive runs no tornado server.
+tornado==6.6
 pyasn1==0.6.4
 keras==3.15.1
 sqlparse==0.6.0
