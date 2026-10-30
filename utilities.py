@@ -1166,6 +1166,20 @@ def update_object_from_simbad_result(obj, simbad_table_row, priority_types=['NE'
     return result
 
 
+def get_or_create_observation_run(name):
+    """
+    (run, created) for a run directory name. Safe against concurrent creation (unique run name): the
+    process losing the race gets the run the other one created.
+    """
+    from django.db import IntegrityError, transaction
+
+    try:
+        with transaction.atomic():
+            return ObservationRun.objects.get_or_create(name=name, defaults={'reduction_status': 'NE'})
+    except IntegrityError:
+        return ObservationRun.objects.get(name=name), False
+
+
 def add_new_observation_run(data_path, print_to_terminal=False,
                             add_data_files=False):
     """
@@ -1194,12 +1208,9 @@ def add_new_observation_run(data_path, print_to_terminal=False,
     #   Get name of observation run
     basename = data_path.name
     if rex1.match(basename) or rex2.match(basename) or rex3.match(basename):
-        #   Create new run
-        new_observation_run = ObservationRun(
-            name=basename,
-            reduction_status='NE',
-        )
-        new_observation_run.save()
+        #   Get or create the run: several ingest paths (directory watchdog, scan_missing) may handle
+        #   the same directory; creating unconditionally produced duplicate runs with the files split
+        new_observation_run, _created = get_or_create_observation_run(basename)
         if print_to_terminal:
             print('Run: ', basename)
 

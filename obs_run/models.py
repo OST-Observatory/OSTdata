@@ -25,8 +25,8 @@ if TYPE_CHECKING:
 
 
 class ObservationRun(models.Model):
-    #   Name
-    name = models.CharField(max_length=200)
+    #   Name, unique: one run per run directory (merge_duplicate_runs merges older duplicates)
+    name = models.CharField(max_length=200, unique=True)
 
     #   Rights management
     is_public = models.BooleanField(default=True)

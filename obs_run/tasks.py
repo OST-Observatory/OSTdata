@@ -535,15 +535,15 @@ def scan_missing_filesystem(self, dry_run: bool = True, limit: int | None = None
                 run_name = entry.name
                 run_dir = os.path.join(base, run_name)
                 # Ensure ObservationRun exists
-                try:
-                    run = ObservationRun.objects.get(name=run_name)
-                except ObservationRun.DoesNotExist:
+                run = ObservationRun.objects.filter(name=run_name).first()
+                if run is None:
                     try:
                         if not dry_run:
-                            run = ObservationRun.objects.create(name=run_name, reduction_status='NE')
+                            from utilities import get_or_create_observation_run
+                            run, created = get_or_create_observation_run(run_name)
+                            runs_created += int(created)
                         else:
-                            run = None
-                        runs_created += 1
+                            runs_created += 1
                     except Exception:
                         run = None
                         errors += 1

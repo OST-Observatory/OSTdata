@@ -3,6 +3,7 @@ This module is imported by the Django management command `watch_data`.
 Django is already configured in that execution context, so we must NOT
 override DJANGO_SETTINGS_MODULE or call django.setup() here at import time.
 """
+import fcntl
 import logging
 import os
 import threading
@@ -176,6 +177,28 @@ def observation_run_statistic_update(observation_run):
     observation_run.save()
 
 
+def acquire_single_instance_lock():
+    """
+    Only one watcher may run: two processes both handle every 'directory created' event and created the
+    same observation run twice, with the files split between them. Exits if another watcher holds the
+    lock. The lock file lives in the project (not /tmp, which systemd may make private per service).
+    """
+    lock_path = Path(env.str('WATCH_LOCK_FILE', default=str(Path(settings.BASE_DIR) / 'data' / 'watch_data.lock')))
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    handle = open(lock_path, 'a+')
+    try:
+        fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        handle.close()
+        logger.error('Another data directory watcher is already running (lock %s held); exiting.', lock_path)
+        raise SystemExit(1)
+    handle.seek(0)
+    handle.truncate()
+    handle.write(f'{os.getpid()}\n')
+    handle.flush()
+    return handle  # keep open: the lock lasts as long as this process
+
+
 class Watcher:
 
     def __init__(self, directory):
@@ -189,6 +212,8 @@ class Watcher:
         self.directory_to_watch = directory
 
     def run(self):
+        self._lock = acquire_single_instance_lock()
+
         # Log startup configuration
         logger.info("=" * 60)
         logger.info("Watcher starting...")
