@@ -15,15 +15,23 @@ def is_video_path(file_type: str | None, file_path: Path) -> bool:
     return ft in ('AVI', 'MOV') or file_path.suffix.lower() in VIDEO_SUFFIXES
 
 
-def render_video_frame_png(file_path: Path, max_dim: int = 512, frame_index: int | None = None) -> bytes:
-    """Extract one frame (middle of the video by default) and return PNG bytes."""
+# OpenCV's bundled FFmpeg can crash (SIGABRT/SIGSEGV) or hang on some videos that players handle fine:
+# Gunicorn, Celery and the watchdog only open videos in the isolated reader process (file_check_worker)
+VIDEO_READER_TIMEOUT = 60
+
+
+def render_video_frame_png(file_path: Path, max_dim: int = 512, frame_index: int | None = None,
+                           max_pixels: int | None = None) -> bytes:
+    """Extract one frame (middle of the video by default) and return PNG bytes (in-process: see above)."""
     import cv2
 
     cap = cv2.VideoCapture(str(file_path))
     try:
         if not cap.isOpened():
             raise ValueError('Video file cannot be opened')
-        check_frame_pixels(int(cap.get(cv2.CAP_PROP_FRAME_WIDTH) or 0), int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT) or 0))
+        check_frame_pixels(
+            int(cap.get(cv2.CAP_PROP_FRAME_WIDTH) or 0), int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT) or 0), max_pixels,
+        )
         frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
         if frame_index is None:
             frame_index = frame_count // 2
@@ -52,6 +60,56 @@ def render_video_frame_png(file_path: Path, max_dim: int = 512, frame_index: int
     return _frame_to_png(frame, max_dim)
 
 
+def _isolated_video_request(payload):
+    from obs_run.file_check import IsolatedWorker, WorkerFailure
+
+    with IsolatedWorker(timeout=VIDEO_READER_TIMEOUT) as worker:
+        try:
+            result = worker.request(payload)
+        except WorkerFailure as failure:
+            raise ValueError(f'Video reader {failure.reason}') from None
+    if 'error' in result:
+        raise ValueError(result['error'])
+    return result
+
+
+def render_video_frame_png_isolated(file_path: Path, max_dim: int = 512) -> bytes:
+    """render_video_frame_png() in the isolated reader process (a reader crash raises ValueError)."""
+    import base64
+
+    from django.conf import settings
+
+    result = _isolated_video_request({
+        'action': 'video_thumbnail', 'path': str(file_path), 'max_dim': max_dim,
+        'max_pixels': int(getattr(settings, 'THUMBNAIL_MAX_PIXELS', 50_000_000)),
+    })
+    return base64.b64decode(result['png'])
+
+
+def read_video_frame_size(path):
+    """(width, height) from the container metadata (in-process: use video_frame_size())."""
+    import cv2
+
+    cap = cv2.VideoCapture(str(path))
+    try:
+        if not cap.isOpened():
+            raise ValueError('Video file cannot be opened')
+        return int(cap.get(cv2.CAP_PROP_FRAME_WIDTH) or 0), int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT) or 0)
+    finally:
+        cap.release()
+
+
+def video_frame_size(path):
+    """(width, height) of an AVI/MOV file, read in the isolated reader process; (-1, -1) if unknown."""
+    try:
+        width, height = _isolated_video_request({'action': 'video_size', 'path': str(path)})['size']
+    except Exception:
+        return -1, -1
+    if width <= 0 or height <= 0:
+        return -1, -1
+    return width, height
+
+
 def get_video_thumbnail_png(
     *,
     datafile_id: int,
@@ -65,5 +123,5 @@ def get_video_thumbnail_png(
         content_hash=content_hash,
         file_path=file_path,
         max_dim=max_dim,
-        render=render_video_frame_png,
+        render=render_video_frame_png_isolated,
     )

@@ -39,9 +39,9 @@ class FileCheckTest(TestCase):
             path.write_bytes(content)
         return DataFile.objects.create(observation_run=self.run, datafile=str(path), file_type=file_type)
 
-    def _fits(self, name, truncate_by=0):
+    def _fits(self, name, truncate_by=0, shape=(100, 100)):
         path = self.tmp / name
-        fits.PrimaryHDU(np.zeros((100, 100), dtype=np.int16)).writeto(path)
+        fits.PrimaryHDU(np.zeros(shape, dtype=np.int16)).writeto(path)
         if truncate_by:
             data = path.read_bytes()
             path.write_bytes(data[:-truncate_by])
@@ -50,7 +50,15 @@ class FileCheckTest(TestCase):
     def test_fits(self):
         self.assertEqual(check_datafile(self._fits('ok.fits')), [])
         issues = check_datafile(self._fits('cut.fits', truncate_by=4000))
-        self.assertIn('error', {issue['level'] for issue in issues})
+        self.assertEqual([issue['level'] for issue in issues], ['error'])
+        self.assertIn('data bytes missing', issues[0]['message'])
+
+    def test_fits_without_final_padding_is_only_a_warning(self):
+        # 217 x 202 int16: data end at 2880 + 87668 bytes, padded file 92160 bytes; padding cut off
+        datafile = self._fits('unpadded.fits', truncate_by=92160 - (2880 + 87668), shape=(217, 202))
+        issues = check_datafile(datafile)
+        self.assertEqual([issue['level'] for issue in issues], ['warning'])
+        self.assertIn('image data are complete', issues[0]['message'])
 
     def test_missing_file(self):
         self.assertEqual(check_datafile(self._file('gone.fits', 'FITS')), [
@@ -82,6 +90,9 @@ class FileCheckTest(TestCase):
         out = StringIO()
         call_command('check_data_files', '--only-unchecked', stdout=out)
         self.assertIn('0 files checked', out.getvalue())
+        out = StringIO()
+        call_command('check_data_files', '--only-issues', stdout=out)
+        self.assertIn('1 files checked: 1 with errors', out.getvalue())
 
 
 class IsolatedCheckerTest(TestCase):
@@ -89,10 +100,26 @@ class IsolatedCheckerTest(TestCase):
         # Same signal as glibc's 'corrupted double-linked list' abort
         crash = [sys.executable, '-c', 'import os; os.abort()']
         with IsolatedChecker(command=crash) as checker:
-            issues = checker.check('/tmp/broken.avi', 'video')
+            issues = checker.check('/tmp/broken.fits', 'fits')
             self.assertEqual(issues[0]['level'], 'error')
             self.assertIn('crashed', issues[0]['message'])
-            self.assertIn('crashed', checker.check('/tmp/next.avi', 'video')[0]['message'])
+            self.assertIn('crashed', checker.check('/tmp/next.fits', 'fits')[0]['message'])
+
+    def test_video_reader_crash_asks_ffprobe(self):
+        # OpenCV's bundled FFmpeg crashing does not prove a broken video (players may read it)
+        crash = [sys.executable, '-c', 'import os; os.abort()']
+        cases = (
+            (None, 'warning', 'install ffprobe'),
+            (('mjpeg', 1280, 960), 'warning', 'readable by ffprobe (mjpeg, 1280x960)'),
+            (ValueError('Invalid data found'), 'error', 'Invalid data found'),
+        )
+        for probe, level, text in cases:
+            with self.subTest(probe=probe), IsolatedChecker(command=crash) as checker:
+                kwargs = {'side_effect': probe} if isinstance(probe, Exception) else {'return_value': probe}
+                with patch('obs_run.file_check._ffprobe_video', **kwargs):
+                    issues = checker.check('/tmp/AllSky.avi', 'video')
+                self.assertEqual(issues[0]['level'], level)
+                self.assertIn(text, issues[0]['message'])
 
     def test_hanging_reader_times_out(self):
         hang = [sys.executable, '-c', 'import time; time.sleep(60)']

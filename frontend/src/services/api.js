@@ -417,7 +417,11 @@ export const api = {
   adminMaintenanceRefreshDashboardStats: () => fetchWithAuth('/admin/maintenance/refresh-dashboard-stats/', { method: 'POST' }),
   adminMaintenanceCheckFiles: (opts = {}) => fetchWithAuth('/admin/maintenance/check-files/', {
     method: 'POST',
-    body: JSON.stringify({ only_unchecked: !!opts.only_unchecked, limit: opts.limit ?? null }),
+    body: JSON.stringify({
+      only_unchecked: !!opts.only_unchecked,
+      only_issues: !!opts.only_issues,
+      limit: opts.limit ?? null,
+    }),
   }),
   adminFileIssues: (params = {}) => fetchWithAuth('/admin/maintenance/file-issues/', { params }),
   adminPreviewCache: () => fetchWithAuth('/admin/maintenance/preview-cache/'),

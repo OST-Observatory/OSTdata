@@ -110,22 +110,11 @@ def analyze_video(datafile):
 
 
 def video_frame_size(path):
-    """(width, height) of an AVI/MOV file from its container metadata; (-1, -1) if unknown."""
-    try:
-        import cv2
-        cap = cv2.VideoCapture(str(path))
-        try:
-            if not cap.isOpened():
-                return -1, -1
-            width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH) or 0)
-            height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT) or 0)
-        finally:
-            cap.release()
-    except Exception:
-        return -1, -1
-    if width <= 0 or height <= 0:
-        return -1, -1
-    return width, height
+    """(width, height) of an AVI/MOV file; (-1, -1) if unknown. Read in the isolated reader process:
+    an OpenCV crash on an unusual video must not end the directory watchdog."""
+    from obs_run.video_thumbnails import video_frame_size as isolated_video_frame_size
+
+    return isolated_video_frame_size(path)
 
 ############################################################################
 

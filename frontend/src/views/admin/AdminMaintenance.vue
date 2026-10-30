@@ -311,13 +311,16 @@
         <v-chip size="x-small" color="error" variant="flat">{{ fileIssueCounts.error }} errors</v-chip>
         <v-chip size="x-small" color="warning" variant="flat">{{ fileIssueCounts.warning }} warnings</v-chip>
         <v-spacer />
-        <v-switch
-          v-model="checkOnlyUnchecked"
-          inset
-          hide-details
-          color="primary"
+        <v-select
+          v-model="checkScope"
+          :items="CHECK_SCOPES"
+          item-title="title"
+          item-value="value"
           density="compact"
-          label="Only unchecked"
+          variant="outlined"
+          hide-details
+          style="max-width: 230px"
+          aria-label="Files to check"
         />
         <v-btn
           color="primary"
@@ -753,7 +756,12 @@ const fileIssueSearch = ref('')
 const fileIssuePage = ref(1)
 const fileIssuePages = ref(1)
 const loadingFileIssues = ref(false)
-const checkOnlyUnchecked = ref(true)
+const CHECK_SCOPES = [
+  { title: 'Unchecked files', value: 'unchecked' },
+  { title: 'Files with issues', value: 'issues' },
+  { title: 'All files', value: 'all' },
+]
+const checkScope = ref('unchecked')
 const previewCache = ref({ kinds: {}, total_bytes: 0, free_bytes: null, prerender: true })
 const loadingPreviewCache = ref(false)
 const cacheMaxAgeDays = ref('90')
@@ -1300,8 +1308,12 @@ const loadFileIssues = async (page) => {
 const triggerCheckFiles = async () => {
   busy.value.checkFiles = true
   try {
-    await api.adminMaintenanceCheckFiles({ only_unchecked: checkOnlyUnchecked.value })
-    notify.success(`File check enqueued (${checkOnlyUnchecked.value ? 'unchecked files' : 'all files'})`)
+    await api.adminMaintenanceCheckFiles({
+      only_unchecked: checkScope.value === 'unchecked',
+      only_issues: checkScope.value === 'issues',
+    })
+    const scope = CHECK_SCOPES.find((s) => s.value === checkScope.value)?.title || checkScope.value
+    notify.success(`File check enqueued (${scope.toLowerCase()})`)
   } catch {
     notify.error('Failed to enqueue file check')
   } finally {

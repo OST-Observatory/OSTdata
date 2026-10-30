@@ -12,8 +12,14 @@ from PIL import Image
 from rest_framework import status
 from rest_framework.test import APITestCase
 
+from obs_run.file_check import IsolatedWorker, WorkerFailure
 from obs_run.models import DataFile, ObservationRun
-from obs_run.video_thumbnails import get_video_thumbnail_png, is_video_path, render_video_frame_png
+from obs_run.video_thumbnails import (
+    get_video_thumbnail_png,
+    is_video_path,
+    render_video_frame_png,
+    video_frame_size,
+)
 
 
 def _write_avi(path: Path, frames: int = 5, color: bool = False) -> None:
@@ -67,7 +73,7 @@ class VideoThumbnailHelpersTest(APITestCase):
                 render_video_frame_png(Path(tmp.name))
 
     @override_settings(SER_THUMBNAIL_CACHE_DIR=tempfile.mkdtemp())
-    @patch('obs_run.video_thumbnails.render_video_frame_png')
+    @patch('obs_run.video_thumbnails.render_video_frame_png_isolated')
     def test_get_video_thumbnail_png_uses_cache(self, render_mock):
         render_mock.return_value = b'\x89PNGcached'
         with tempfile.NamedTemporaryFile(suffix='.avi', delete=False) as tmp:
@@ -118,4 +124,31 @@ class VideoThumbnailApiTest(APITestCase):
     @override_settings(SER_THUMBNAIL_CACHE_DIR=tempfile.mkdtemp(), THUMBNAIL_MAX_PIXELS=100)
     def test_avi_frame_above_pixel_limit_is_rejected(self):
         resp = self.client.get(self.url)  # 64x48 frame > 100 pixels
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+
+
+class IsolatedVideoReaderTest(APITestCase):
+    """OpenCV crashes on some videos (SIGABRT/SIGSEGV): only the isolated reader process may die."""
+
+    def test_frame_size_from_the_reader_process(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'clip.avi'
+            _write_avi(path)
+            self.assertEqual(video_frame_size(path), (64, 48))
+            self.assertEqual(video_frame_size(Path(tmp) / 'missing.avi'), (-1, -1))
+
+    def test_reader_crash_gives_no_size_instead_of_killing_the_caller(self):
+        with patch.object(IsolatedWorker, 'request', side_effect=WorkerFailure('crashed (exit code -6)')):
+            self.assertEqual(video_frame_size('/tmp/AllSky.avi'), (-1, -1))
+
+    @override_settings(SER_THUMBNAIL_CACHE_DIR=tempfile.mkdtemp())
+    def test_reader_crash_gives_an_error_response(self):
+        root = Path(settings.DATA_DIRECTORY)
+        root.mkdir(parents=True, exist_ok=True)
+        path = Path(tempfile.mkdtemp(dir=root)) / 'AllSky.avi'
+        _write_avi(path)
+        run = ObservationRun.objects.create(name='2023-05-26', is_public=True)
+        datafile = DataFile.objects.create(observation_run=run, datafile=str(path), file_type='AVI', content_hash='crash')
+        with patch.object(IsolatedWorker, 'request', side_effect=WorkerFailure('crashed (exit code -11)')):
+            resp = self.client.get(f'/api/runs/datafiles/{datafile.pk}/thumbnail/')
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)

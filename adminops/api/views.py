@@ -698,6 +698,7 @@ def _can_check_files(user) -> bool:
 
 class AdminCheckDataFilesRequestSerializer(serializers.Serializer):
     only_unchecked = serializers.BooleanField(required=False, default=False)
+    only_issues = serializers.BooleanField(required=False, default=False)
     limit = serializers.IntegerField(required=False, allow_null=True, min_value=1)
 
 
@@ -712,7 +713,8 @@ def admin_trigger_check_data_files(request):
     serializer.is_valid(raise_exception=True)
     options = serializer.validated_data
     try:
-        res = _celery_delay(check_data_files, only_unchecked=options['only_unchecked'], limit=options.get('limit'))
+        res = _celery_delay(check_data_files, only_unchecked=options['only_unchecked'], limit=options.get('limit'),
+                            only_issues=options['only_issues'])
         return Response({'enqueued': True, 'task_id': getattr(res, 'id', None), **options}, status=202)
     except Exception as e:
         logger.exception("admin_trigger_check_data_files failed: %s", e)

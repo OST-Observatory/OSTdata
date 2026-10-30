@@ -55,9 +55,13 @@ def _frame_to_uint8(arr: np.ndarray) -> np.ndarray:
     return (scaled * 255.0).astype(np.uint8)
 
 
-def check_frame_pixels(width: int, height: int) -> None:
-    """Reject frames above THUMBNAIL_MAX_PIXELS (videos skip the source-size limit)."""
-    max_pixels = int(getattr(settings, 'THUMBNAIL_MAX_PIXELS', 50_000_000))
+def check_frame_pixels(width: int, height: int, max_pixels: int | None = None) -> None:
+    """
+    Reject frames above THUMBNAIL_MAX_PIXELS (videos skip the source-size limit). max_pixels: given by
+    callers without Django settings (isolated reader process).
+    """
+    if max_pixels is None:
+        max_pixels = int(getattr(settings, 'THUMBNAIL_MAX_PIXELS', 50_000_000))
     if width <= 0 or height <= 0:
         raise ValueError('Invalid frame dimensions')
     if width * height > max_pixels:

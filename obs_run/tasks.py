@@ -1440,11 +1440,11 @@ def recompute_spectrograph_suggestions(self):
 
 
 @shared_task(bind=True)
-def check_data_files(self, only_unchecked: bool = False, limit: int | None = None):
+def check_data_files(self, only_unchecked: bool = False, limit: int | None = None, only_issues: bool = False):
     """File integrity check (obs_run/file_check.py): truncated/unreadable files and non-compliant headers."""
     from obs_run.file_check import check_data_files as run_check
     try:
-        summary = run_check(only_unchecked=only_unchecked, limit=limit)
+        summary = run_check(only_unchecked=only_unchecked, limit=limit, only_issues=only_issues)
     except Exception as e:
         _health_error('check_data_files', e)
         raise
