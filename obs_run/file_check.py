@@ -22,6 +22,8 @@ VIDEO_SUFFIXES = ('.avi', '.mov')
 
 #   astropy messages that mean the data cannot be read completely
 _FITS_ERROR_MARKERS = ('truncated', 'missing', 'corrupt', 'empty or corrupt')
+#   astropy messages without any meaning for the data (not reported): zero bytes after the last HDU
+_FITS_IGNORED_MARKERS = ('unexpected extra padding',)
 
 
 def _issue(level, message):
@@ -60,6 +62,8 @@ def _check_fits(path):
     truncation_reported = False
     for warning in caught:
         message = str(warning.message)
+        if any(marker in message.lower() for marker in _FITS_IGNORED_MARKERS):
+            continue
         if 'truncated' in message.lower() and data_end is not None:
             # astropy compares with the padded size: also files whose data are complete but whose last
             # block lacks the padding (common, readable by DS9 etc.) are reported as truncated

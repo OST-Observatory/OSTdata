@@ -60,6 +60,12 @@ class FileCheckTest(TestCase):
         self.assertEqual([issue['level'] for issue in issues], ['warning'])
         self.assertIn('image data are complete', issues[0]['message'])
 
+    def test_fits_with_extra_zero_padding_is_no_issue(self):
+        datafile = self._fits('extra.fits')
+        with open(datafile.datafile, 'ab') as fh:
+            fh.write(bytes(2880))
+        self.assertEqual(check_datafile(datafile), [])
+
     def test_missing_file(self):
         self.assertEqual(check_datafile(self._file('gone.fits', 'FITS')), [
             {'level': 'error', 'message': 'File missing on disk'},
