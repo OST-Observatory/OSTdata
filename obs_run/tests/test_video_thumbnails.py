@@ -1,7 +1,9 @@
 """Tests for AVI/MOV thumbnail generation and API endpoint."""
+import shutil
 import tempfile
 from io import BytesIO
 from pathlib import Path
+from unittest import skipUnless
 from unittest.mock import patch
 
 import cv2
@@ -18,6 +20,7 @@ from obs_run.video_thumbnails import (
     get_video_thumbnail_png,
     is_video_path,
     render_video_frame_png,
+    render_video_frame_png_isolated,
     video_frame_size,
 )
 
@@ -149,6 +152,71 @@ class IsolatedVideoReaderTest(APITestCase):
         _write_avi(path)
         run = ObservationRun.objects.create(name='2023-05-26', is_public=True)
         datafile = DataFile.objects.create(observation_run=run, datafile=str(path), file_type='AVI', content_hash='crash')
-        with patch.object(IsolatedWorker, 'request', side_effect=WorkerFailure('crashed (exit code -11)')):
+        crash = patch.object(IsolatedWorker, 'request', side_effect=WorkerFailure('crashed (exit code -11)'))
+        with crash, patch('obs_run.video_thumbnails.ffmpeg_available', return_value=False):
             resp = self.client.get(f'/api/runs/datafiles/{datafile.pk}/thumbnail/')
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+
+
+def _ffmpeg_avi(path, source, pix_fmt):
+    """Uncompressed AVI (rawvideo), like the all-sky camera videos OpenCV crashes on."""
+    import subprocess
+
+    subprocess.run(
+        ['ffmpeg', '-nostdin', '-v', 'error', '-f', 'lavfi', '-i', source, '-frames:v', '5',
+         '-c:v', 'rawvideo', '-pix_fmt', pix_fmt, str(path)],
+        check=True, capture_output=True, timeout=60,
+    )
+
+
+@skipUnless(shutil.which('ffmpeg') and shutil.which('ffprobe'), 'ffmpeg not installed')
+class FfmpegFallbackTest(APITestCase):
+    """Previews and frame size via the ffmpeg command line when OpenCV crashes."""
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+        crash = patch.object(IsolatedWorker, 'request', side_effect=WorkerFailure('crashed (exit code -11)'))
+        crash.start()
+        self.addCleanup(crash.stop)
+
+    def test_mono_rawvideo(self):
+        path = self.tmp / 'AllSky.avi'
+        _ffmpeg_avi(path, 'testsrc=size=64x48:rate=5', 'gray')
+        self.assertEqual(video_frame_size(path), (64, 48))
+        with Image.open(BytesIO(render_video_frame_png_isolated(path, max_dim=32))) as img:
+            self.assertEqual(img.mode, 'L')
+            self.assertLessEqual(max(img.size), 32)
+
+    def test_color_keeps_channel_order(self):
+        path = self.tmp / 'color.avi'
+        _ffmpeg_avi(path, 'color=c=red:size=64x48:rate=5', 'bgr24')
+        with Image.open(BytesIO(render_video_frame_png_isolated(path, max_dim=64))) as img:
+            self.assertEqual(img.mode, 'RGB')
+            r, _g, b = img.getpixel((32, 24))
+            self.assertGreater(r, b)
+
+    def test_without_ffmpeg_the_opencv_error_stays(self):
+        path = self.tmp / 'AllSky2.avi'
+        _ffmpeg_avi(path, 'testsrc=size=64x48:rate=5', 'gray')
+        with patch('obs_run.video_thumbnails.ffmpeg_available', return_value=False):
+            with self.assertRaisesMessage(ValueError, 'crashed'):
+                render_video_frame_png_isolated(path)
+            self.assertEqual(video_frame_size(path), (-1, -1))
+
+    @override_settings(SER_THUMBNAIL_CACHE_DIR=tempfile.mkdtemp())
+    def test_preview_endpoint_uses_ffmpeg(self):
+        root = Path(settings.DATA_DIRECTORY)
+        root.mkdir(parents=True, exist_ok=True)
+        path = Path(tempfile.mkdtemp(dir=root)) / 'AllSky.avi'
+        _ffmpeg_avi(path, 'testsrc=size=64x48:rate=5', 'gray')
+        run = ObservationRun.objects.create(name='2023-05-28', is_public=True)
+        datafile = DataFile.objects.create(observation_run=run, datafile=str(path), file_type='AVI', content_hash='raw')
+        resp = self.client.get(f'/api/runs/datafiles/{datafile.pk}/thumbnail/')
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertTrue(resp.content.startswith(b'\x89PNG'))
+
+    def test_unreadable_file_reports_both_readers(self):
+        path = self.tmp / 'broken.avi'
+        path.write_bytes(b'not a video')
+        with self.assertRaisesMessage(ValueError, 'ffmpeg:'):
+            render_video_frame_png_isolated(path)

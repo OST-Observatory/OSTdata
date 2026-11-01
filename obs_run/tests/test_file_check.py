@@ -109,17 +109,22 @@ class IsolatedCheckerTest(TestCase):
         # OpenCV's bundled FFmpeg crashing does not prove a broken video (players may read it)
         crash = [sys.executable, '-c', 'import os; os.abort()']
         cases = (
-            (None, 'warning', 'install ffprobe'),
-            (('mjpeg', 1280, 960), 'warning', 'readable by ffprobe (mjpeg, 1280x960)'),
-            (ValueError('Invalid data found'), 'error', 'Invalid data found'),
+            (None, None, 'warning', 'install ffprobe'),
+            (('rawvideo', 640, 480), None, 'warning', 'readable by ffprobe (rawvideo, 640x480)'),
+            (('rawvideo', 640, 480), '/usr/bin/ffmpeg', None, None),  # previews via ffmpeg: no issue
+            (ValueError('Invalid data found'), None, 'error', 'Invalid data found'),
         )
-        for probe, level, text in cases:
-            with self.subTest(probe=probe), IsolatedChecker(command=crash) as checker:
+        for probe, ffmpeg, level, text in cases:
+            with self.subTest(probe=probe, ffmpeg=ffmpeg), IsolatedChecker(command=crash) as checker:
                 kwargs = {'side_effect': probe} if isinstance(probe, Exception) else {'return_value': probe}
-                with patch('obs_run.file_check._ffprobe_video', **kwargs):
+                with patch('obs_run.file_check._ffprobe_video', **kwargs), \
+                        patch('shutil.which', return_value=ffmpeg):
                     issues = checker.check('/tmp/AllSky.avi', 'video')
-                self.assertEqual(issues[0]['level'], level)
-                self.assertIn(text, issues[0]['message'])
+                if level is None:
+                    self.assertEqual(issues, [])
+                else:
+                    self.assertEqual(issues[0]['level'], level)
+                    self.assertIn(text, issues[0]['message'])
 
     def test_hanging_reader_times_out(self):
         hang = [sys.executable, '-c', 'import time; time.sleep(60)']

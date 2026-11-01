@@ -117,10 +117,10 @@ def _check_video(path):
     cap = cv2.VideoCapture(str(path))
     try:
         if not cap.isOpened():
-            return [_issue(ERROR, 'Video file cannot be opened')]
+            return reader_failure_issues(path, 'video', 'cannot open the file')
         ok, _frame = cap.read()
         if not ok:
-            return [_issue(ERROR, 'Video file contains no readable frame')]
+            return reader_failure_issues(path, 'video', 'reads no frame')
         return []
     finally:
         cap.release()
@@ -179,6 +179,8 @@ def reader_failure_issues(path, kind, reason):
     failing on a codec/container players handle fine: ask ffprobe (if installed) before calling the
     file broken.
     """
+    import shutil
+
     if kind != 'video':
         return [_issue(ERROR, f'File reader {reason}: the file is probably corrupt')]
     try:
@@ -191,9 +193,12 @@ def reader_failure_issues(path, kind, reason):
             '(install ffprobe on the server for a second check)'
         ))]
     codec, width, height = probe
+    if shutil.which('ffmpeg'):
+        # The archive falls back to ffmpeg for previews (obs_run/video_thumbnails.py): nothing to fix
+        return []
     return [_issue(WARNING, (
         f'Video readable by ffprobe ({codec}, {width}x{height}), but not by OpenCV ({reason}): '
-        'no preview in the archive'
+        'no preview in the archive (install ffmpeg on the server)'
     ))]
 
 
