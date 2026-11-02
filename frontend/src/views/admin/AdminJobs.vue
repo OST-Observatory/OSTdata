@@ -222,11 +222,14 @@
           <div class="d-inline-block">
             <v-btn
               icon
+              size="small"
+              density="comfortable"
               variant="text"
               :aria-label="`Details for job ${item.id}`"
               @click="openDetails(item)"
             >
               <v-icon>mdi-information</v-icon>
+              <v-tooltip activator="parent" location="top">Details</v-tooltip>
             </v-btn>
           </div>
         </template>

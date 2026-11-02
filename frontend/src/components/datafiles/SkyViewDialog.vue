@@ -9,7 +9,9 @@
         <v-icon icon="mdi-earth" size="20" />
         <span class="text-truncate">Sky view: {{ skyViewFile?.file_name }}</span>
         <v-spacer />
-        <v-btn icon="mdi-close" variant="text" size="small" aria-label="Close" @click="skyViewOpen = false" />
+        <v-btn icon="mdi-close" variant="text" size="small" aria-label="Close" @click="skyViewOpen = false">
+          <v-tooltip activator="parent" location="bottom">Close</v-tooltip>
+        </v-btn>
       </v-card-title>
       <v-card-text>
         <div class="d-flex flex-wrap align-center mb-2 sky-controls">

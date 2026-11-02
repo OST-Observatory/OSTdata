@@ -328,10 +328,18 @@
         </div>
         <div class="d-flex align-center">
           <span class="text-body-2 mr-4">{{ paginationInfo }}</span>
-          <v-btn icon="mdi-page-first" variant="text" aria-label="First page" :disabled="currentPage === 1" @click="handlePageChange(1)" class="mx-1" />
-          <v-btn icon="mdi-chevron-left" variant="text" aria-label="Previous page" :disabled="currentPage === 1" @click="handlePageChange(currentPage - 1)" class="mx-1" />
-          <v-btn icon="mdi-chevron-right" variant="text" aria-label="Next page" :disabled="currentPage >= totalPages" @click="handlePageChange(currentPage + 1)" class="mx-1" />
-          <v-btn icon="mdi-page-last" variant="text" aria-label="Last page" :disabled="currentPage >= totalPages" @click="handlePageChange(totalPages)" class="mx-1" />
+          <v-btn icon="mdi-page-first" variant="text" aria-label="First page" :disabled="currentPage === 1" @click="handlePageChange(1)" class="mx-1">
+            <v-tooltip activator="parent" location="top">First page</v-tooltip>
+          </v-btn>
+          <v-btn icon="mdi-chevron-left" variant="text" aria-label="Previous page" :disabled="currentPage === 1" @click="handlePageChange(currentPage - 1)" class="mx-1">
+            <v-tooltip activator="parent" location="top">Previous page</v-tooltip>
+          </v-btn>
+          <v-btn icon="mdi-chevron-right" variant="text" aria-label="Next page" :disabled="currentPage >= totalPages" @click="handlePageChange(currentPage + 1)" class="mx-1">
+            <v-tooltip activator="parent" location="top">Next page</v-tooltip>
+          </v-btn>
+          <v-btn icon="mdi-page-last" variant="text" aria-label="Last page" :disabled="currentPage >= totalPages" @click="handlePageChange(totalPages)" class="mx-1">
+            <v-tooltip activator="parent" location="top">Last page</v-tooltip>
+          </v-btn>
         </div>
       </v-card-actions>
     </v-card>

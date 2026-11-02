@@ -128,10 +128,18 @@
             <span class="text-body-2 mr-4">
               {{ paginationInfo }}
             </span>
-            <v-btn icon="mdi-page-first" variant="text" :disabled="currentPage === 1" @click="handlePageChange(1)" class="mx-1 pagination-btn" aria-label="First page" />
-            <v-btn icon="mdi-chevron-left" variant="text" :disabled="currentPage === 1" @click="handlePageChange(currentPage - 1)" class="mx-1 pagination-btn" aria-label="Previous page" />
-            <v-btn icon="mdi-chevron-right" variant="text" :disabled="currentPage >= totalPages" @click="handlePageChange(currentPage + 1)" class="mx-1 pagination-btn" aria-label="Next page" />
-            <v-btn icon="mdi-page-last" variant="text" :disabled="currentPage >= totalPages" @click="handlePageChange(totalPages)" class="mx-1 pagination-btn" aria-label="Last page" />
+            <v-btn icon="mdi-page-first" variant="text" :disabled="currentPage === 1" @click="handlePageChange(1)" class="mx-1 pagination-btn" aria-label="First page">
+              <v-tooltip activator="parent" location="top">First page</v-tooltip>
+            </v-btn>
+            <v-btn icon="mdi-chevron-left" variant="text" :disabled="currentPage === 1" @click="handlePageChange(currentPage - 1)" class="mx-1 pagination-btn" aria-label="Previous page">
+              <v-tooltip activator="parent" location="top">Previous page</v-tooltip>
+            </v-btn>
+            <v-btn icon="mdi-chevron-right" variant="text" :disabled="currentPage >= totalPages" @click="handlePageChange(currentPage + 1)" class="mx-1 pagination-btn" aria-label="Next page">
+              <v-tooltip activator="parent" location="top">Next page</v-tooltip>
+            </v-btn>
+            <v-btn icon="mdi-page-last" variant="text" :disabled="currentPage >= totalPages" @click="handlePageChange(totalPages)" class="mx-1 pagination-btn" aria-label="Last page">
+              <v-tooltip activator="parent" location="top">Last page</v-tooltip>
+            </v-btn>
             <v-btn
               variant="text"
               color="primary"
