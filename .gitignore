@@ -7,13 +7,13 @@
 *.pot
 *.py[co]
 *.sqlite3
-populate*.py
 __pycache__
 MANIFEST
 logs/
-populate*
-observed_systems*
-upload_*
+# Local helper scripts/exports in the project root (anchored: must not hide app modules or tests)
+/populate*
+/observed_systems*
+/upload_*
 ostdata/.env
 *.log
 *.back
@@ -22,7 +22,7 @@ db.sqlite3.save
 read_cr2.py
 read_ser.py
 ok_but_wrong/
-test_data*
+/test_data*
 favicon_old.ico
 generate_skychart/
 *.env
@@ -33,7 +33,8 @@ cnn_training_data.json
 # Generated / local data exports (keep project text files versioned)
 logs/**/*.txt
 logs/**/*.csv
-*.csv#
+# Database and other data exports
+*.csv
 !requirements.txt
 !**/robots.txt
 !media/docs/Bulk_system_example.csv
@@ -42,6 +43,17 @@ logs/**/*.csv
 data/solar_system_images/*
 !data/solar_system_images/.gitkeep
 
-# Generated SER thumbnail cache
+# Generated preview cache (SER/video thumbnails, sky view images)
 data/ser_thumbnails/*
 !data/ser_thumbnails/.gitkeep
+
+# Temporary ZIP files of download jobs
+data/download_jobs/*
+!data/download_jobs/.gitkeep
+
+# Default DATA_DIRECTORY of a development setup and the data watchdog lock
+data/archive/
+data/watch_data.lock
+
+# collectstatic output (STATIC_ROOT)
+/static/
