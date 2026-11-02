@@ -8,7 +8,8 @@
               variant="outlined"
               color="primary"
               prepend-icon="mdi-eye"
-              :disabled="!selected.length || !canPublish"
+              :disabled="!selected.length || !canPublish || (!!bulkBusy && bulkBusy !== 'publish')"
+              :loading="bulkBusy === 'publish'"
               :size="isMobile ? 'default' : undefined"
               @click="bulkPublish(true)"
             >
@@ -23,7 +24,8 @@
               variant="outlined"
               color="secondary"
               prepend-icon="mdi-eye-off"
-              :disabled="!selected.length || !canPublish"
+              :disabled="!selected.length || !canPublish || (!!bulkBusy && bulkBusy !== 'unpublish')"
+              :loading="bulkBusy === 'unpublish'"
               :size="isMobile ? 'default' : undefined"
               @click="bulkPublish(false)"
             >
@@ -501,6 +503,7 @@ import EmptyState from '@/components/ui/EmptyState.vue'
 import ErrorState from '@/components/ui/ErrorState.vue'
 import LoadingState from '@/components/ui/LoadingState.vue'
 import TagChip from '@/components/ui/TagChip.vue'
+import { confirmAction } from '@/composables/useConfirm'
 
 const runs = ref([])
 const selected = ref([])
@@ -701,7 +704,12 @@ const copyShareLink = async () => {
 const removeRun = async (item) => {
   if (!canDeleteRun.value || !(item?.pk || item?.id)) return
   const id = item.pk || item.id
-  if (!confirm(`Delete observation run ${item.name}? This cannot be undone.`)) return
+  const ok = await confirmAction({
+    title: `Delete observation run ${item.name}?`,
+    text: 'The run and its data file entries are removed from the archive (the files on disk are kept). This cannot be undone.',
+    confirmText: 'Delete',
+  })
+  if (!ok) return
   try {
     await api.deleteObservationRun(id)
     notify.success('Run deleted')
@@ -732,9 +740,11 @@ const reEvaluateRun = async (item) => {
   }
 }
 
+const bulkBusy = ref('')
 const bulkPublish = async (makePublic) => {
-  if (!canPublish.value || !selected.value.length) return
+  if (!canPublish.value || !selected.value.length || bulkBusy.value) return
   const ids = selected.value.map(x => x.pk || x.id).filter(Boolean)
+  bulkBusy.value = makePublic ? 'publish' : 'unpublish'
   try {
     await Promise.all(ids.map(id => api.updateObservationRun(id, { is_public: !!makePublic })))
     notify.success(`${makePublic ? 'Published' : 'Unpublished'} ${ids.length} run(s)`) 
@@ -742,6 +752,8 @@ const bulkPublish = async (makePublic) => {
     await fetchRuns()
   } catch (e) {
     notify.error('Bulk update failed')
+  } finally {
+    bulkBusy.value = ''
   }
 }
 

@@ -80,6 +80,7 @@
               color="error"
               variant="outlined"
               :disabled="selectedCount === 0 || !canBatchCancel"
+              :loading="batchBusy === 'cancel'"
               prepend-icon="mdi-close-octagon"
               @click="batchCancel"
             >
@@ -91,6 +92,7 @@
           </div>
           <div class="d-inline-block">
             <v-btn
+              color="primary"
               variant="outlined"
               prepend-icon="mdi-clock-plus"
               :disabled="selectedCount === 0 || !canTTLModify"
@@ -104,10 +106,11 @@
           </div>
           <div class="d-inline-block">
             <v-btn
-              color="secondary"
+              color="error"
               variant="outlined"
               prepend-icon="mdi-timer-off"
               :disabled="selectedCount === 0 || !canTTLModify"
+              :loading="batchBusy === 'expire'"
               @click="batchExpireNow"
             >
               Expire now
@@ -323,7 +326,7 @@
         <v-card-actions>
           <v-spacer />
           <v-btn variant="text" @click="extendDialog = false">Cancel</v-btn>
-          <v-btn color="primary" variant="flat" @click="confirmExtend">Extend</v-btn>
+          <v-btn color="primary" variant="flat" :loading="extendSaving" @click="confirmExtend">Extend</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -339,6 +342,7 @@
   import { useNotifyStore } from '@/store/notify'
   import { formatDateTime } from '@/utils/datetime'
   import { useAuthStore } from '@/store/auth'
+  import { confirmAction } from '@/composables/useConfirm'
   
   const loading = ref(false)
   const items = ref([])
@@ -518,7 +522,13 @@
   
   const cancel = async (job) => {
     if (!job?.id || !canCancel(job)) return
-    if (!confirm(`Cancel job #${job.id}?`)) return
+    const ok = await confirmAction({
+      title: `Cancel download job #${job.id}?`,
+      text: 'The ZIP file is not created; the job cannot be resumed.',
+      confirmText: 'Cancel job',
+      cancelText: 'Keep job',
+    })
+    if (!ok) return
     try {
       await api.adminCancelDownloadJob(job.id)
       await fetchJobs()
@@ -527,14 +537,26 @@
     }
   }
   
+  const batchBusy = ref('')
   const batchCancel = async () => {
-    if (selectedCount.value === 0 || !canBatchCancel.value) return
-    if (!confirm(`Cancel ${selectedCount.value} selected job(s)?`)) return
+    if (selectedCount.value === 0 || !canBatchCancel.value || batchBusy.value) return
+    const ok = await confirmAction({
+      title: `Cancel ${selectedCount.value} download job(s)?`,
+      text: 'Their ZIP files are not created; the jobs cannot be resumed.',
+      confirmText: 'Cancel jobs',
+      cancelText: 'Keep jobs',
+    })
+    if (!ok) return
+    batchBusy.value = 'cancel'
     try {
       await api.adminBatchCancelJobs(selectedIds.value)
       selected.value = []
       await fetchJobs()
-    } catch (e) {}
+    } catch (e) {
+      // notify handled by the API layer
+    } finally {
+      batchBusy.value = ''
+    }
   }
   const batchCancelHint = computed(() => {
     if (selectedCount.value === 0) return 'Select jobs first'
@@ -543,6 +565,7 @@
   })
 
   const extendDialog = ref(false)
+  const extendSaving = ref(false)
   const extendHours = ref(48)
   const confirmExtend = async () => {
     if (selectedCount.value === 0 || !canTTLModify.value) { extendDialog.value = false; return }
@@ -551,12 +574,18 @@
       notify.error('Please enter a positive number of hours')
       return
     }
+    if (extendSaving.value) return
+    extendSaving.value = true
     try {
       await api.adminBatchExtendJobsExpiry(selectedIds.value, hours)
       extendDialog.value = false
       selected.value = []
       await fetchJobs()
-    } catch (e) {}
+    } catch (e) {
+      // notify handled by the API layer
+    } finally {
+      extendSaving.value = false
+    }
   }
   const extendHint = computed(() => {
     if (selectedCount.value === 0) return 'Select jobs first'
@@ -565,13 +594,23 @@
   })
 
   const batchExpireNow = async () => {
-    if (selectedCount.value === 0 || !canTTLModify.value) return
-    if (!confirm(`Expire ${selectedCount.value} selected job(s) now? This will delete ZIP files.`)) return
+    if (selectedCount.value === 0 || !canTTLModify.value || batchBusy.value) return
+    const ok = await confirmAction({
+      title: `Expire ${selectedCount.value} download job(s) now?`,
+      text: 'Their ZIP files are deleted and can no longer be downloaded.',
+      confirmText: 'Expire now',
+    })
+    if (!ok) return
+    batchBusy.value = 'expire'
     try {
       await api.adminBatchExpireJobsNow(selectedIds.value)
       selected.value = []
       await fetchJobs()
-    } catch (e) {}
+    } catch (e) {
+      // notify handled by the API layer
+    } finally {
+      batchBusy.value = ''
+    }
   }
   const expireHint = computed(() => {
     if (selectedCount.value === 0) return 'Select jobs first'

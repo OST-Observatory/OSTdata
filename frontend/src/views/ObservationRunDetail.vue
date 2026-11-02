@@ -464,7 +464,7 @@
           <v-card-actions>
             <v-spacer />
             <v-btn variant="text" @click="closeNotesDialog" ref="notesCloseBtn">Cancel</v-btn>
-            <v-btn color="primary" variant="flat" @click="saveRunNotes">Save</v-btn>
+            <v-btn color="primary" variant="flat" :loading="savingNotes" @click="saveRunNotes">Save</v-btn>
           </v-card-actions>
         </v-card>
       </v-dialog>
@@ -486,7 +486,7 @@
           <v-card-actions>
             <v-spacer />
             <v-btn variant="text" @click="closeTagDialog" ref="tagCloseBtn">Cancel</v-btn>
-            <v-btn color="primary" variant="flat" @click="saveRunTags">Save</v-btn>
+            <v-btn color="primary" variant="flat" :loading="savingTags" @click="saveRunTags">Save</v-btn>
           </v-card-actions>
         </v-card>
       </v-dialog>
@@ -1065,6 +1065,7 @@ import { ensureBokeh } from '@/utils/bokeh'
 import DataFileQuickActions from '@/components/datafiles/DataFileQuickActions.vue'
 import { exposureTypeColor } from '@/constants/classification'
 import TagChip from '@/components/ui/TagChip.vue'
+import { confirmAction } from '@/composables/useConfirm'
 
 const route = useRoute()
 const notify = useNotifyStore()
@@ -1204,6 +1205,8 @@ const obsTypeDialog = ref(false)
 const editSpectroscopy = ref(false)
 const editPhotometry = ref(false)
 const savingObsType = ref(false)
+const savingTags = ref(false)
+const savingNotes = ref(false)
 const obsTypeCloseBtn = ref(null)
 
 // Admin run edit
@@ -1350,6 +1353,13 @@ const clearSingleOverride = async (fieldName) => {
 
 const clearAllOverrides = async () => {
   if (!canClearRunOverrides.value || !runId) return
+  const ok = await confirmAction({
+    title: 'Clear all override flags of this run?',
+    text: 'The values stay as they are, but automatic updates (header analysis, SIMBAD, re-evaluation) may change them again.',
+    confirmText: 'Clear overrides',
+    color: 'warning',
+  })
+  if (!ok) return
   clearingOverrides.value = true
   try {
     await api.adminClearAllOverrides('run', runId)
@@ -1942,7 +1952,8 @@ const closeNotesDialog = () => {
 }
 
 const saveRunNotes = async () => {
-  if (!canEditNotes.value) return
+  if (!canEditNotes.value || savingNotes.value) return
+  savingNotes.value = true
   try {
     await api.updateObservationRun(runId, { note: newNote.value })
     const data = await api.getObservationRun(runId)
@@ -1951,6 +1962,8 @@ const saveRunNotes = async () => {
     try { notify.success('Notes updated') } catch {}
   } catch (e) {
     console.error(e)
+  } finally {
+    savingNotes.value = false
   }
 }
 
@@ -2008,7 +2021,8 @@ const closeTagDialog = () => {
 }
 
 const saveRunTags = async () => {
-  if (!canEditTags.value) return
+  if (!canEditTags.value || savingTags.value) return
+  savingTags.value = true
   try {
     await api.updateObservationRun(runId, { tag_ids: selectedTags.value })
     const data = await api.getObservationRun(runId)
@@ -2017,6 +2031,8 @@ const saveRunTags = async () => {
     try { notify.success('Tags updated') } catch {}
   } catch (e) {
     console.error(e)
+  } finally {
+    savingTags.value = false
   }
 }
 

@@ -186,6 +186,7 @@ import { onMounted, ref } from 'vue'
 import { api } from '@/services/api'
 import { useNotifyStore } from '@/store/notify'
 import { useCreateObject } from '@/composables/useCreateObject'
+import { confirmAction } from '@/composables/useConfirm'
 
 const notify = useNotifyStore()
 const loading = ref(false)
@@ -255,6 +256,12 @@ const onFileSelected = async (event) => {
 
 const removeImage = async (item) => {
   if (!item?.pk) return
+  const ok = await confirmAction({
+    title: `Remove the preview image of ${item.name}?`,
+    text: 'The uploaded image file is deleted.',
+    confirmText: 'Remove',
+  })
+  if (!ok) return
   try {
     deletingId.value = item.pk
     await api.adminDeleteSolarSystemImage(item.pk)

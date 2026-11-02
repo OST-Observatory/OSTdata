@@ -235,6 +235,7 @@ import EmptyState from '@/components/ui/EmptyState.vue'
 import LoadingState from '@/components/ui/LoadingState.vue'
 import { useAuthStore } from '@/store/auth'
 import { formatDateTime, formatRelativeFromNow, parseApiDateTime } from '@/utils/datetime'
+import { confirmAction } from '@/composables/useConfirm'
 
 const loading = ref(false)
 const items = ref([])
@@ -335,7 +336,12 @@ const toggleStudent = async (user, val) => {
 
 const remove = async (user) => {
   if (!user?.id) return
-  if (!confirm(`Delete user ${user.username}? This cannot be undone.`)) return
+  const ok = await confirmAction({
+    title: `Delete user ${user.username}?`,
+    text: 'This cannot be undone.',
+    confirmText: 'Delete',
+  })
+  if (!ok) return
   try {
     await api.adminDeleteUser(user.id)
     notify.success('User deleted')

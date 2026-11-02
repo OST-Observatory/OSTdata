@@ -8,6 +8,7 @@
             color="error"
             variant="outlined"
             prepend-icon="mdi-delete"
+            :loading="deletingMany"
             @click="removeMany"
             :aria-label="`Delete ${selected.length} selected tags`"
           >
@@ -224,6 +225,7 @@ import EmptyState from '@/components/ui/EmptyState.vue'
 import ErrorState from '@/components/ui/ErrorState.vue'
 import LoadingState from '@/components/ui/LoadingState.vue'
 import { readableTextColor } from '@/utils/color'
+import { confirmAction } from '@/composables/useConfirm'
 
 const items = ref([])
 const selected = ref([])
@@ -381,6 +383,12 @@ const save = async () => {
 
 const remove = async (item) => {
   if (!canEdit.value || !item?.pk) return
+  const ok = await confirmAction({
+    title: `Delete tag ${item.name}?`,
+    text: 'The tag is removed from all objects and observation runs. This cannot be undone.',
+    confirmText: 'Delete',
+  })
+  if (!ok) return
   try {
     await api.deleteTag(item.pk)
     notify.success('Tag deleted')
@@ -390,10 +398,17 @@ const remove = async (item) => {
   }
 }
 
+const deletingMany = ref(false)
 const removeMany = async () => {
-  if (!canAdmin.value || !selected.value.length) return
+  if (!canAdmin.value || !selected.value.length || deletingMany.value) return
   const cnt = selected.value.length
-  if (!confirm(`Delete ${cnt} selected tag(s)? This cannot be undone.`)) return
+  const ok = await confirmAction({
+    title: `Delete ${cnt} tag(s)?`,
+    text: 'The tags are removed from all objects and observation runs. This cannot be undone.',
+    confirmText: 'Delete',
+  })
+  if (!ok) return
+  deletingMany.value = true
   try {
     const ids = selected.value.map(x => x.pk).filter(Boolean)
     await Promise.all(ids.map(id => api.deleteTag(id)))
@@ -403,6 +418,8 @@ const removeMany = async () => {
   } catch (e) {
     console.error(e)
     notify.error('Bulk delete failed')
+  } finally {
+    deletingMany.value = false
   }
 }
 

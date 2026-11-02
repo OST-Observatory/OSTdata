@@ -12,7 +12,8 @@
                   variant="outlined"
                   color="primary"
                   prepend-icon="mdi-eye"
-                  :disabled="!selected.length || !canPublish"
+                  :disabled="!selected.length || !canPublish || (!!bulkBusy && bulkBusy !== 'publish')"
+                  :loading="bulkBusy === 'publish'"
                   @click="bulkPublishObjects(true)"
                 >Publish ({{ selected.length }})</v-btn>
               </template>
@@ -26,7 +27,8 @@
                   variant="outlined"
                   color="secondary"
                   prepend-icon="mdi-eye-off"
-                  :disabled="!selected.length || !canPublish"
+                  :disabled="!selected.length || !canPublish || (!!bulkBusy && bulkBusy !== 'unpublish')"
+                  :loading="bulkBusy === 'unpublish'"
                   @click="bulkPublishObjects(false)"
                 >Unpublish ({{ selected.length }})</v-btn>
               </template>
@@ -536,11 +538,16 @@
               density="comfortable"
               hide-details
             />
+            <v-alert type="warning" variant="tonal" density="compact" class="mt-3">
+              Data files, observation runs, identifiers{{ mergeCombineTags ? ' and tags' : '' }} of the other
+              {{ selected.length - 1 }} object(s) move to the target; the other objects are deleted.
+              This cannot be undone.
+            </v-alert>
           </v-card-text>
           <v-card-actions>
             <v-spacer />
             <v-btn variant="text" @click="mergeOpen = false">Cancel</v-btn>
-            <v-btn color="primary" variant="flat" @click="confirmMerge" :disabled="!mergeTargetId">Merge</v-btn>
+            <v-btn color="error" variant="flat" :loading="mergeSaving" :disabled="!mergeTargetId" @click="confirmMerge">Merge</v-btn>
           </v-card-actions>
         </v-card>
       </v-dialog>
@@ -633,6 +640,7 @@ import EmptyState from '@/components/ui/EmptyState.vue'
 import ErrorState from '@/components/ui/ErrorState.vue'
 import LoadingState from '@/components/ui/LoadingState.vue'
 import TagChip from '@/components/ui/TagChip.vue'
+import { confirmAction } from '@/composables/useConfirm'
 
 // Data
 const router = useRouter()
@@ -985,7 +993,12 @@ const copyShareLink = async () => {
 
 const removeObject = async (item) => {
   if (!canEdit.value || !item?.pk) return
-  if (!confirm(`Delete object ${item.name}? This cannot be undone.`)) return
+  const ok = await confirmAction({
+    title: `Delete object ${item.name}?`,
+    text: 'This cannot be undone.',
+    confirmText: 'Delete',
+  })
+  if (!ok) return
   try {
     await api.deleteObject(item.pk)
     notify.success('Object deleted')
@@ -996,9 +1009,11 @@ const removeObject = async (item) => {
   }
 }
 
+const bulkBusy = ref('')
 const bulkPublishObjects = async (makePublic) => {
-  if (!canMerge.value || !selected.value.length) return
+  if (!canPublish.value || !selected.value.length || bulkBusy.value) return
   const ids = selected.value.map(x => x.pk).filter(Boolean)
+  bulkBusy.value = makePublic ? 'publish' : 'unpublish'
   try {
     await Promise.all(ids.map(id => api.updateObject(id, { is_public: !!makePublic })))
     notify.success(`${makePublic ? 'Published' : 'Unpublished'} ${ids.length} object(s)`) 
@@ -1006,12 +1021,15 @@ const bulkPublishObjects = async (makePublic) => {
     await fetchObjects()
   } catch (e) {
     notify.error('Bulk update failed')
+  } finally {
+    bulkBusy.value = ''
   }
 }
 
 const mergeOpen = ref(false)
 const mergeTargetId = ref(null)
 const mergeCombineTags = ref(true)
+const mergeSaving = ref(false)
 const openMergeDialog = () => {
   if (!selected.value.length) return
   mergeTargetId.value = selected.value[0]?.pk || null
@@ -1026,7 +1044,7 @@ const confirmMerge = async () => {
     return
   }
   const sources = ids.filter(id => id !== tgt)
-  if (!confirm(`Merge ${sources.length} object(s) into #${tgt}? This will move relations and delete sources.`)) return
+  mergeSaving.value = true
   try {
     await api.mergeObjects(tgt, sources, mergeCombineTags.value)
     notify.success(`Merged ${sources.length} object(s) into #${tgt}`)
@@ -1035,6 +1053,8 @@ const confirmMerge = async () => {
     await fetchObjects()
   } catch (e) {
     notify.error('Merge failed')
+  } finally {
+    mergeSaving.value = false
   }
 }
 const safeConvertRA = (value) => {

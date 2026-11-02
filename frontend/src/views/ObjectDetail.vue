@@ -1306,7 +1306,7 @@
         <v-card-actions>
           <v-spacer></v-spacer>
           <v-btn variant="text" @click="closeTagDialog" ref="tagCloseBtn">Cancel</v-btn>
-          <v-btn color="primary" variant="flat" @click="saveTags">Save</v-btn>
+          <v-btn color="primary" variant="flat" :loading="savingTags" @click="saveTags">Save</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -1328,7 +1328,7 @@
         <v-card-actions>
           <v-spacer />
           <v-btn variant="text" @click="closeNotesDialog" ref="notesCloseBtn">Cancel</v-btn>
-          <v-btn color="primary" variant="flat" @click="saveNotes">Save</v-btn>
+          <v-btn color="primary" variant="flat" :loading="savingNotes" @click="saveNotes">Save</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -1346,6 +1346,7 @@ import { pollDownloadJobUntilReady } from '@/utils/downloadJobPoll'
 import DataFileQuickActions from '@/components/datafiles/DataFileQuickActions.vue'
 import { exposureTypeColor } from '@/constants/classification'
 import TagChip from '@/components/ui/TagChip.vue'
+import { confirmAction } from '@/composables/useConfirm'
 
 const route = useRoute()
 const authStore = useAuthStore()
@@ -1421,6 +1422,8 @@ const runPageSizeOptions = [
 ]
 const basicDialog = ref(false)
 const savingBasic = ref(false)
+const savingTags = ref(false)
+const savingNotes = ref(false)
 const basicCloseBtn = ref(null)
 const editObjectType = ref(null)
 const editSpectroscopy = ref(false)
@@ -1972,7 +1975,8 @@ const closeTagDialog = () => {
 }
 
 const saveTags = async () => {
-  if (!canEditTags.value) return
+  if (!canEditTags.value || savingTags.value) return
+  savingTags.value = true
   try {
     const objectId = route.params.id
     await api.updateObject(objectId, { tag_ids: selectedTags.value })
@@ -1981,6 +1985,8 @@ const saveTags = async () => {
     try { notify.success('Tags updated') } catch {}
   } catch (error) {
     console.error('Error saving tags:', error)
+  } finally {
+    savingTags.value = false
   }
 }
 
@@ -2023,6 +2029,13 @@ const clearSingleOverride = async (fieldName) => {
 
 const clearAllOverrides = async () => {
   if (!canObjectAdminEdit.value || !object.value?.pk) return
+  const ok = await confirmAction({
+    title: 'Clear all override flags of this object?',
+    text: 'The values stay as they are, but automatic updates (header analysis, SIMBAD, re-evaluation) may change them again.',
+    confirmText: 'Clear overrides',
+    color: 'warning',
+  })
+  if (!ok) return
   clearingOverrides.value = true
   try {
     await api.adminClearAllOverrides('object', object.value.pk)
@@ -2065,7 +2078,8 @@ const closeNotesDialog = () => {
 }
 
 const saveNotes = async () => {
-  if (!canEditNotes.value) return
+  if (!canEditNotes.value || savingNotes.value) return
+  savingNotes.value = true
   try {
     const objectId = route.params.id
     await api.updateObject(objectId, { note: newNote.value })
@@ -2074,6 +2088,8 @@ const saveNotes = async () => {
     try { notify.success('Notes updated') } catch {}
   } catch (error) {
     console.error('Error saving notes:', error)
+  } finally {
+    savingNotes.value = false
   }
 }
 

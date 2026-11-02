@@ -183,7 +183,7 @@
                     class="maint-limit-field"
                   />
                   <v-btn
-                    color="primary"
+                    :color="orphDryRun ? 'primary' : 'error'"
                     variant="tonal"
                     prepend-icon="mdi-magnify-scan"
                     :loading="busy.orphans"
@@ -196,7 +196,7 @@
                 <template v-else-if="task.controlsType === 'orphanObj'">
                   <v-switch v-model="orphObjDryRun" inset hide-details color="primary" density="compact" label="Dry run" />
                   <v-btn
-                    color="primary"
+                    :color="orphObjDryRun ? 'primary' : 'error'"
                     variant="tonal"
                     prepend-icon="mdi-account-remove"
                     :loading="busy.orphanObj"
@@ -209,7 +209,7 @@
                 <template v-else-if="task.controlsType === 'unlink'">
                   <v-switch v-model="unlinkNonLightDryRun" inset hide-details color="primary" density="compact" label="Dry run" />
                   <v-btn
-                    color="primary"
+                    :color="unlinkNonLightDryRun ? 'primary' : 'error'"
                     variant="tonal"
                     prepend-icon="mdi-link-off"
                     :loading="busy.unlinkNonLight"
@@ -727,6 +727,7 @@ import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { api } from '@/services/api'
 import { useNotifyStore } from '@/store/notify'
 import { useAuthStore } from '@/store/auth'
+import { confirmAction } from '@/composables/useConfirm'
 
 const notify = useNotifyStore()
 const auth = useAuthStore()
@@ -1063,6 +1064,14 @@ const stopRefresh = () => {
 }
 
 const triggerOrphans = async () => {
+  if (!orphDryRun.value) {
+    const ok = await confirmAction({
+      title: 'Delete orphaned data file entries?',
+      text: 'Entries without observation run or whose file no longer exists on disk are deleted from the archive. This cannot be undone.',
+      confirmText: 'Delete entries',
+    })
+    if (!ok) return
+  }
   busy.value.orphans = true
   try {
     const limitVal = parseInt(String(orphLimit.value), 10)
@@ -1108,6 +1117,12 @@ const saveBanner = async () => {
 }
 
 const clearBanner = async () => {
+  const ok = await confirmAction({
+    title: 'Clear the maintenance banner?',
+    text: 'The banner is hidden and its text is deleted.',
+    confirmText: 'Clear banner',
+  })
+  if (!ok) return
   busy.value.banner = true
   try {
     await api.adminClearBanner()
@@ -1166,6 +1181,14 @@ const triggerScanMissing = async () => {
 }
 
 const triggerOrphanObjects = async () => {
+  if (!orphObjDryRun.value) {
+    const ok = await confirmAction({
+      title: 'Delete objects without data files?',
+      text: 'Objects that no data file is linked to any more are deleted. This cannot be undone.',
+      confirmText: 'Delete objects',
+    })
+    if (!ok) return
+  }
   busy.value.orphanObj = true
   try {
     const opts = { dry_run: !!orphObjDryRun.value }
@@ -1180,6 +1203,14 @@ const triggerOrphanObjects = async () => {
 }
 
 const triggerUnlinkNonLight = async () => {
+  if (!unlinkNonLightDryRun.value) {
+    const ok = await confirmAction({
+      title: 'Unlink calibration frames from objects?',
+      text: 'Data files that are not light frames (bias, darks, flats, ...) are removed from their objects.',
+      confirmText: 'Unlink',
+    })
+    if (!ok) return
+  }
   busy.value.unlinkNonLight = true
   try {
     const opts = { dry_run: !!unlinkNonLightDryRun.value }
@@ -1436,6 +1467,13 @@ const loadOverrideFlags = async () => {
 }
 
 const clearAllOverrides = async (modelType, instanceId) => {
+  const ok = await confirmAction({
+    title: 'Clear all override flags of this entry?',
+    text: 'The values stay as they are, but automatic updates (header analysis, SIMBAD, re-evaluation) may change them again.',
+    confirmText: 'Clear overrides',
+    color: 'warning',
+  })
+  if (!ok) return
   const key = `${modelType}-${instanceId}`
   clearingOverrides.value[key] = true
   try {
