@@ -262,6 +262,7 @@ class IsolatedWorker:
     def request(self, payload):
         import json
         import select
+        import subprocess
 
         if self.proc is None or self.proc.poll() is not None:
             self._start()
@@ -271,9 +272,16 @@ class IsolatedWorker:
             ready, _, _ = select.select([self.proc.stdout], [], [], self.timeout)
             line = self.proc.stdout.readline() if ready else ''
         except (BrokenPipeError, OSError):
-            line = ''
+            ready, line = True, ''
         if line:
             return json.loads(line)
+        if ready:
+            # End of output: the child is exiting, but its exit status may only be available a moment
+            # after the pipe was closed (otherwise a crash would be reported as a timeout)
+            try:
+                self.proc.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                pass
         if self.proc.poll() is None:
             reason = f'did not finish within {self.timeout} s'
         else:
