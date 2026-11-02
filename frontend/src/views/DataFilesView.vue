@@ -86,8 +86,8 @@
               </v-col>
             </v-row>
             <div class="d-flex align-center mt-2" style="gap: 8px">
-              <v-btn color="primary" variant="outlined" prepend-icon="mdi-filter-check" @click="fetchFiles">Apply Filters</v-btn>
-              <v-btn color="secondary" variant="text" prepend-icon="mdi-filter-remove" @click="resetFilters">Reset Filters</v-btn>
+              <v-btn color="primary" variant="flat" prepend-icon="mdi-filter-check" @click="fetchFiles">Apply filters</v-btn>
+              <v-btn color="secondary" variant="text" prepend-icon="mdi-filter-remove" @click="resetFilters">Reset filters</v-btn>
             </div>
           </v-expansion-panel-text>
         </v-expansion-panel>
@@ -99,16 +99,16 @@
       <v-card-text class="d-flex align-center justify-space-between flex-wrap" style="gap: 8px">
         <div class="text-body-2">{{ selectedCount }} selected</div>
         <div class="d-flex align-center flex-wrap" style="gap: 8px">
-          <v-btn v-if="canPlateSolve" color="primary" variant="outlined" prepend-icon="mdi-star-four-points" :loading="busy.plateSolve" @click="bulkPlateSolve">Trigger Plate Solve</v-btn>
-          <v-btn v-if="canEditClassification" color="primary" variant="outlined" prepend-icon="mdi-pencil" @click="openClassificationDialog(null)">Edit Classification</v-btn>
+          <v-btn v-if="canPlateSolve" color="primary" variant="outlined" prepend-icon="mdi-star-four-points" :loading="busy.plateSolve" @click="bulkPlateSolve">Trigger plate solve</v-btn>
+          <v-btn v-if="canEditClassification" color="primary" variant="outlined" prepend-icon="mdi-pencil" @click="openClassificationDialog(null)">Edit classification</v-btn>
           <template v-if="showSuggestions && canSpectrograph">
-            <v-btn color="success" variant="outlined" prepend-icon="mdi-check-all" :loading="busy.suggestions" @click="bulkAcceptSuggestions">Accept Suggestions</v-btn>
-            <v-btn color="secondary" variant="outlined" prepend-icon="mdi-close-circle-outline" :loading="busy.suggestions" @click="bulkKeepCurrent">Keep Current Values</v-btn>
+            <v-btn color="success" variant="outlined" prepend-icon="mdi-check-all" :loading="busy.suggestions" @click="bulkAcceptSuggestions">Accept suggestions</v-btn>
+            <v-btn color="secondary" variant="outlined" prepend-icon="mdi-close-circle-outline" :loading="busy.suggestions" @click="bulkKeepCurrent">Keep current values</v-btn>
           </template>
           <v-btn v-if="canReEvaluate" color="primary" variant="outlined" prepend-icon="mdi-refresh" :loading="busy.reEvaluate" @click="bulkReEvaluate">Re-evaluate</v-btn>
-          <v-btn v-if="canClearOverrides" color="secondary" variant="outlined" prepend-icon="mdi-flag-off" :loading="busy.clearOverrides" @click="bulkClearOverrides">Clear Overrides</v-btn>
-          <v-btn v-if="canLinkObject" color="primary" variant="outlined" prepend-icon="mdi-link" :loading="busy.linkObject" @click="openLinkObjectDialog(null)">Link to Object</v-btn>
-          <v-btn v-if="canUnlinkObject" color="secondary" variant="outlined" prepend-icon="mdi-link-off" :loading="busy.unlinkObject" @click="openUnlinkConfirm(null)">Unlink from Objects</v-btn>
+          <v-btn v-if="canClearOverrides" color="secondary" variant="outlined" prepend-icon="mdi-lock-open-variant-outline" :loading="busy.clearOverrides" @click="bulkClearOverrides">Clear overrides</v-btn>
+          <v-btn v-if="canLinkObject" color="primary" variant="outlined" prepend-icon="mdi-link" :loading="busy.linkObject" @click="openLinkObjectDialog(null)">Link to object</v-btn>
+          <v-btn v-if="canUnlinkObject" color="secondary" variant="outlined" prepend-icon="mdi-link-off" :loading="busy.unlinkObject" @click="openUnlinkConfirm(null)">Unlink from objects</v-btn>
           <v-btn color="primary" variant="outlined" prepend-icon="mdi-download" :loading="busy.download" @click="bulkDownloadSelected">Download selected</v-btn>
         </div>
       </v-card-text>
@@ -314,7 +314,7 @@
                   <v-divider />
                 </template>
                 <v-list-item v-if="canPlateSolve" prepend-icon="mdi-star-four-points" title="Trigger plate solve" @click="triggerPlateSolveSingle(item)" />
-                <v-list-item v-if="canClearOverrides" prepend-icon="mdi-flag-off" title="Clear override flags" @click="clearOverrideSingleItem(item)" />
+                <v-list-item v-if="canClearOverrides" prepend-icon="mdi-lock-open-variant-outline" title="Clear override flags" @click="clearOverrideSingleItem(item)" />
               </v-list>
             </v-menu>
           </DataFileQuickActions>
@@ -328,10 +328,10 @@
         </div>
         <div class="d-flex align-center">
           <span class="text-body-2 mr-4">{{ paginationInfo }}</span>
-          <v-btn icon="mdi-page-first" variant="text" :disabled="currentPage === 1" @click="handlePageChange(1)" class="mx-1" />
-          <v-btn icon="mdi-chevron-left" variant="text" :disabled="currentPage === 1" @click="handlePageChange(currentPage - 1)" class="mx-1" />
-          <v-btn icon="mdi-chevron-right" variant="text" :disabled="currentPage >= totalPages" @click="handlePageChange(currentPage + 1)" class="mx-1" />
-          <v-btn icon="mdi-page-last" variant="text" :disabled="currentPage >= totalPages" @click="handlePageChange(totalPages)" class="mx-1" />
+          <v-btn icon="mdi-page-first" variant="text" aria-label="First page" :disabled="currentPage === 1" @click="handlePageChange(1)" class="mx-1" />
+          <v-btn icon="mdi-chevron-left" variant="text" aria-label="Previous page" :disabled="currentPage === 1" @click="handlePageChange(currentPage - 1)" class="mx-1" />
+          <v-btn icon="mdi-chevron-right" variant="text" aria-label="Next page" :disabled="currentPage >= totalPages" @click="handlePageChange(currentPage + 1)" class="mx-1" />
+          <v-btn icon="mdi-page-last" variant="text" aria-label="Last page" :disabled="currentPage >= totalPages" @click="handlePageChange(totalPages)" class="mx-1" />
         </div>
       </v-card-actions>
     </v-card>
@@ -415,14 +415,14 @@
             </template>
           </v-autocomplete>
         </v-card-text>
-        <v-card-actions><v-spacer /><v-btn variant="text" @click="linkObjectDialog = false">Cancel</v-btn><v-btn color="primary" :loading="linkObjectSaving" :disabled="!linkObjectForm.selectedObject" @click="saveLinkObject">Link</v-btn></v-card-actions>
+        <v-card-actions><v-spacer /><v-btn variant="text" @click="linkObjectDialog = false">Cancel</v-btn><v-btn color="primary" variant="flat" :loading="linkObjectSaving" :disabled="!linkObjectForm.selectedObject" @click="saveLinkObject">Link</v-btn></v-card-actions>
       </v-card>
     </v-dialog>
 
     <!-- Unlink from Objects confirmation dialog -->
     <v-dialog v-model="unlinkConfirmDialog" max-width="480" persistent>
       <v-card>
-        <v-card-title>Unlink from Objects</v-card-title>
+        <v-card-title>Unlink from objects</v-card-title>
         <v-card-text>
           {{ unlinkConfirmBulk
             ? `Remove object association for ${unlinkConfirmIds.length} selected file(s)?`

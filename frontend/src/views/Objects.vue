@@ -232,11 +232,12 @@
                             v-bind="props"
                             block
                             color="primary"
+                            variant="flat"
                             @click="applyCoordinateFilter"
                             :disabled="!ra || !dec || !radius"
                             prepend-icon="mdi-filter-check"
                           >
-                            Apply Coordinates Filter
+                            Apply coordinate filter
                           </v-btn>
                         </template>
                       </v-tooltip>
@@ -252,7 +253,7 @@
                             @click="resetFilters"
                             prepend-icon="mdi-filter-remove"
                           >
-                            Reset Filters
+                            Reset filters
                           </v-btn>
                         </template>
                       </v-tooltip>
@@ -362,16 +363,7 @@
           <!-- Tags column -->
           <template v-slot:item.tags="{ item }">
             <div class="d-flex flex-wrap gap-1">
-              <v-chip
-                v-for="tag in normalizeTags(item.tags)"
-                :key="tag.name"
-                :color="tag.color || 'primary'"
-                size="x-small"
-                variant="outlined"
-                class="mr-1"
-              >
-                {{ tag.name }}
-              </v-chip>
+              <TagChip v-for="tag in normalizeTags(item.tags)" :key="tag.name" :tag="tag" size="x-small" />
               <span v-if="!item?.tags || normalizeTags(item.tags).length === 0" class="text-secondary text-caption">—</span>
             </div>
           </template>
@@ -400,8 +392,9 @@
                 <v-btn
                   v-bind="props"
                   icon
+                  size="small"
+                  density="comfortable"
                   variant="text"
-                  color="primary"
                   class="action-btn"
                   @click="openEditDialog(item)"
                   :aria-label="`Edit object ${item.name}`"
@@ -415,6 +408,8 @@
                 <v-btn
                   v-bind="props"
                   icon
+                  size="small"
+                  density="comfortable"
                   variant="text"
                   color="error"
                   class="action-btn"
@@ -545,7 +540,7 @@
           <v-card-actions>
             <v-spacer />
             <v-btn variant="text" @click="mergeOpen = false">Cancel</v-btn>
-            <v-btn color="primary" @click="confirmMerge" :disabled="!mergeTargetId">Merge</v-btn>
+            <v-btn color="primary" variant="flat" @click="confirmMerge" :disabled="!mergeTargetId">Merge</v-btn>
           </v-card-actions>
         </v-card>
       </v-dialog>
@@ -618,7 +613,7 @@
           <v-card-actions>
             <v-spacer />
             <v-btn variant="text" @click="editOpen = false">Cancel</v-btn>
-            <v-btn color="primary" variant="elevated" @click="saveEdit" :loading="editSaving">Save</v-btn>
+            <v-btn color="primary" variant="flat" @click="saveEdit" :loading="editSaving">Save</v-btn>
           </v-card-actions>
         </v-card>
       </v-dialog>
@@ -637,6 +632,7 @@ import { useNotifyStore } from '@/store/notify'
 import EmptyState from '@/components/ui/EmptyState.vue'
 import ErrorState from '@/components/ui/ErrorState.vue'
 import LoadingState from '@/components/ui/LoadingState.vue'
+import TagChip from '@/components/ui/TagChip.vue'
 
 // Data
 const router = useRouter()
@@ -921,17 +917,6 @@ const handleSort = (newSortBy) => {
     sortBy.value = 'name'  // default sorting
   }
   syncQueryAndFetch()
-}
-
-const getRunStatusColor = (status) => {
-  const statusColors = {
-    'NE': 'grey',      // New
-    'PR': 'blue',      // Processing
-    'CO': 'green',     // Complete
-    'FA': 'red',       // Failed
-    'PA': 'orange'     // Partial
-  }
-  return statusColors[status] || 'grey'
 }
 
 const formatExposureTime = (seconds) => {
@@ -1246,43 +1231,6 @@ const saveEdit = async () => {
 .v-data-table :deep(.v-data-table__wrapper) {
   overflow-x: auto;
   overflow-y: visible;
-}
-
-/* Unify link hover/focus styles like other tables */
-:deep(.table-link) {
-  color: var(--v-theme-primary);
-  text-decoration: none;
-  font-weight: 600;
-  transition: all var(--v-theme-transition-fast);
-  position: relative;
-  padding: 2px 4px;
-  border-radius: var(--v-theme-radius-sm);
-  background-color: rgba(var(--v-theme-primary-light), 0.3);
-  display: inline-block;
-  margin: -2px -4px;
-}
-
-:deep(.table-link:hover) {
-  color: var(--v-theme-primary-dark);
-  background-color: rgba(var(--v-theme-primary-light), 0.9);
-  transform: translateY(-1px);
-}
-
-:deep(.table-link::after) {
-  content: '';
-  position: absolute;
-  width: 100%;
-  height: 2px;
-  bottom: 0;
-  left: 0;
-  background-color: var(--v-theme-primary);
-  transform: scaleX(0);
-  transition: transform var(--v-theme-transition-fast);
-  border-radius: var(--v-theme-radius-sm);
-}
-
-:deep(.table-link:hover::after) {
-  transform: scaleX(1);
 }
 
 .items-per-page-select {

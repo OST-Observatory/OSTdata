@@ -31,11 +31,12 @@ export function qualityFlagLabel(code) {
   return (QUALITY_FLAG_ITEMS.find(i => i.value === code) || {}).label || code
 }
 
-const EXPOSURE_TYPE_COLORS = { BI: 'blue', DA: 'grey-darken-2', FL: 'green', LI: 'orange', WA: 'purple', UK: 'grey' }
-const SPECTROGRAPH_COLORS = { D: 'blue', B: 'green', E: 'purple', N: 'grey' }
+// Categorical theme colors (plugins/vuetify.ts): readable in both themes
+const EXPOSURE_TYPE_COLORS = { BI: 'cat-blue', DA: 'cat-slate', FL: 'cat-green', LI: 'cat-orange', WA: 'cat-purple', UK: 'cat-gray' }
+const SPECTROGRAPH_COLORS = { D: 'cat-blue', B: 'cat-green', E: 'cat-purple', N: 'cat-gray' }
 
 export function exposureTypeColor(code) {
-  return EXPOSURE_TYPE_COLORS[code] || 'grey'
+  return EXPOSURE_TYPE_COLORS[String(code || '').toUpperCase()] || 'cat-gray'
 }
 
 export function exposureTypeLabel(code) {
@@ -43,7 +44,7 @@ export function exposureTypeLabel(code) {
 }
 
 export function spectrographColor(code) {
-  return SPECTROGRAPH_COLORS[code] || 'grey'
+  return SPECTROGRAPH_COLORS[code] || 'cat-gray'
 }
 
 export function spectrographLabel(code) {
@@ -51,25 +52,25 @@ export function spectrographLabel(code) {
 }
 
 // Cameras (canonical names of obs_run/utils.py INSTRUMENT_CATALOG); colors differ from the spectrograph
-// colors so photometry and spectroscopy chips stay distinguishable
+// colors so photometry and spectroscopy chips stay distinguishable (the chip text names the camera)
 const CAMERA_COLORS = {
-  'QHY 600M': 'teal',
-  'QHY 268M': 'indigo',
-  'QHY 5III485C': 'pink',
-  'QHY 5III462C': 'pink-darken-2',
-  'SBIG ST-8': 'brown',
-  'SBIG ST-7': 'brown-lighten-1',
-  'SBIG STF-8300': 'deep-orange',
-  'SBIG ST-i': 'blue-grey',
-  'Skyris 445C': 'lime-darken-2',
-  'ZWO ASI174MM': 'cyan-darken-2',
-  'ZWO ASI174MM Mini': 'cyan-darken-2',
-  'ZWO ASI220MM': 'cyan',
-  'ZWO ASI678MM': 'light-blue-darken-2',
-  'ZWO ASI2600MC Pro': 'amber-darken-3',
-  'ZWO ASI294MM Pro': 'orange-darken-3',
+  'QHY 600M': 'cat-teal',
+  'QHY 268M': 'cat-indigo',
+  'QHY 5III485C': 'cat-pink',
+  'QHY 5III462C': 'cat-pink',
+  'SBIG ST-8': 'cat-brown',
+  'SBIG ST-7': 'cat-brown',
+  'SBIG STF-8300': 'cat-orange',
+  'SBIG ST-i': 'cat-slate',
+  'Skyris 445C': 'cat-olive',
+  'ZWO ASI174MM': 'cat-cyan',
+  'ZWO ASI174MM Mini': 'cat-cyan',
+  'ZWO ASI220MM': 'cat-cyan',
+  'ZWO ASI678MM': 'cat-cyan',
+  'ZWO ASI2600MC Pro': 'cat-orange',
+  'ZWO ASI294MM Pro': 'cat-orange',
 }
-const CAMERA_FALLBACK_COLORS = ['teal-darken-2', 'indigo-lighten-1', 'deep-orange-darken-2', 'blue-grey-darken-1', 'pink-lighten-1']
+const CAMERA_FALLBACK_COLORS = ['cat-teal', 'cat-indigo', 'cat-orange', 'cat-slate', 'cat-pink']
 
 export function cameraColor(name) {
   if (CAMERA_COLORS[name]) return CAMERA_COLORS[name]

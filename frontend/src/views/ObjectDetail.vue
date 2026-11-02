@@ -159,7 +159,7 @@
                   icon="mdi-pencil"
                   size="small"
                   variant="text"
-                  @click="openNotesDialog"
+                  @click="openNotesDialog" aria-label="Edit notes"
                 ></v-btn>
               </template>
             </v-tooltip>
@@ -183,22 +183,14 @@
                   icon="mdi-pencil"
                   size="small"
                   variant="text"
-                  @click="openTagDialog"
+                  @click="openTagDialog" aria-label="Edit tags"
                 ></v-btn>
               </template>
             </v-tooltip>
           </v-card-title>
           <v-card-text>
             <div v-if="normalizedObjectTags.length" class="d-flex flex-wrap gap-2">
-              <v-chip
-                v-for="(tag, idx) in normalizedObjectTags"
-                :key="tag.pk || tag.name || idx"
-                :color="tag.color"
-                variant="outlined"
-                size="small"
-              >
-                {{ tag.name }}
-              </v-chip>
+              <TagChip v-for="(tag, idx) in normalizedObjectTags" :key="tag.pk || tag.name || idx" :tag="tag" />
             </div>
             <div v-else class="text-grey">No tags assigned</div>
           </v-card-text>
@@ -242,7 +234,7 @@
                   <v-btn
                     v-bind="props"
                     v-if="hasAnyOverride"
-                    prepend-icon="mdi-refresh"
+                    prepend-icon="mdi-lock-open-variant-outline"
                     size="default"
                     variant="outlined"
                     color="warning"
@@ -289,8 +281,8 @@
                         <template #activator="{ props }">
                           <v-btn
                             v-bind="props"
-                            icon="mdi-close-circle"
-                            size="x-small"
+                            icon="mdi-lock-open-variant-outline"
+                            size="small"
                             variant="text"
                             color="warning"
                             @click.stop="clearSingleOverride('name')"
@@ -311,8 +303,8 @@
                         <template #activator="{ props }">
                           <v-btn
                             v-bind="props"
-                            icon="mdi-close-circle"
-                            size="x-small"
+                            icon="mdi-lock-open-variant-outline"
+                            size="small"
                             variant="text"
                             color="warning"
                             @click.stop="clearSingleOverride('is_public')"
@@ -333,8 +325,8 @@
                         <template #activator="{ props }">
                           <v-btn
                             v-bind="props"
-                            icon="mdi-close-circle"
-                            size="x-small"
+                            icon="mdi-lock-open-variant-outline"
+                            size="small"
                             variant="text"
                             color="warning"
                             @click.stop="clearSingleOverride('ra')"
@@ -355,8 +347,8 @@
                         <template #activator="{ props }">
                           <v-btn
                             v-bind="props"
-                            icon="mdi-close-circle"
-                            size="x-small"
+                            icon="mdi-lock-open-variant-outline"
+                            size="small"
                             variant="text"
                             color="warning"
                             @click.stop="clearSingleOverride('dec')"
@@ -377,8 +369,8 @@
                         <template #activator="{ props }">
                           <v-btn
                             v-bind="props"
-                            icon="mdi-close-circle"
-                            size="x-small"
+                            icon="mdi-lock-open-variant-outline"
+                            size="small"
                             variant="text"
                             color="warning"
                             @click.stop="clearSingleOverride('first_hjd')"
@@ -399,8 +391,8 @@
                         <template #activator="{ props }">
                           <v-btn
                             v-bind="props"
-                            icon="mdi-close-circle"
-                            size="x-small"
+                            icon="mdi-lock-open-variant-outline"
+                            size="small"
                             variant="text"
                             color="warning"
                             @click.stop="clearSingleOverride('is_main')"
@@ -421,8 +413,8 @@
                         <template #activator="{ props }">
                           <v-btn
                             v-bind="props"
-                            icon="mdi-close-circle"
-                            size="x-small"
+                            icon="mdi-lock-open-variant-outline"
+                            size="small"
                             variant="text"
                             color="warning"
                             @click.stop="clearSingleOverride('photometry')"
@@ -443,8 +435,8 @@
                         <template #activator="{ props }">
                           <v-btn
                             v-bind="props"
-                            icon="mdi-close-circle"
-                            size="x-small"
+                            icon="mdi-lock-open-variant-outline"
+                            size="small"
                             variant="text"
                             color="warning"
                             @click.stop="clearSingleOverride('spectroscopy')"
@@ -465,8 +457,8 @@
                         <template #activator="{ props }">
                           <v-btn
                             v-bind="props"
-                            icon="mdi-close-circle"
-                            size="x-small"
+                            icon="mdi-lock-open-variant-outline"
+                            size="small"
                             variant="text"
                             color="warning"
                             @click.stop="clearSingleOverride('simbad_resolved')"
@@ -487,8 +479,8 @@
                         <template #activator="{ props }">
                           <v-btn
                             v-bind="props"
-                            icon="mdi-close-circle"
-                            size="x-small"
+                            icon="mdi-lock-open-variant-outline"
+                            size="small"
                             variant="text"
                             color="warning"
                             @click.stop="clearSingleOverride('object_type')"
@@ -509,8 +501,8 @@
                         <template #activator="{ props }">
                           <v-btn
                             v-bind="props"
-                            icon="mdi-close-circle"
-                            size="x-small"
+                            icon="mdi-lock-open-variant-outline"
+                            size="small"
                             variant="text"
                             color="warning"
                             @click.stop="clearSingleOverride('note')"
@@ -616,7 +608,7 @@
     <!-- Update Identifiers from SIMBAD Dialog -->
     <v-dialog v-model="simbadIdentifiersDialog" max-width="540" aria-labelledby="simbad-identifiers-title">
       <v-card>
-        <v-card-title id="simbad-identifiers-title">Update Identifiers from SIMBAD</v-card-title>
+        <v-card-title id="simbad-identifiers-title">Update identifiers from SIMBAD</v-card-title>
         <v-card-text>
           <v-row dense>
             <v-col cols="12">
@@ -643,7 +635,7 @@
                     :loading="simbadUpdating"
                     @click="updateIdentifiersFromSimbad"
                   >
-                    Update Identifiers
+                    Update identifiers
                   </v-btn>
                 </template>
               </v-tooltip>
@@ -684,7 +676,7 @@
         </v-card-text>
         <v-card-actions>
           <v-spacer />
-          <v-btn variant="text" @click="simbadIdentifiersDialog = false">Close</v-btn>
+          <v-btn variant="text" color="primary" @click="simbadIdentifiersDialog = false">Close</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -713,8 +705,8 @@
         </v-card-text>
         <v-card-actions>
           <v-spacer />
-          <v-btn color="primary" variant="flat" :loading="savingBasic" @click="saveBasicData">Save</v-btn>
           <v-btn variant="text" @click="closeBasicDialog" ref="basicCloseBtn">Cancel</v-btn>
+          <v-btn color="primary" variant="flat" :loading="savingBasic" @click="saveBasicData">Save</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -838,15 +830,7 @@
                     <td>{{ formatExposureTime(item.expo_time, 1) }}</td>
                     <td>
                       <div class="d-flex flex-wrap gap-1">
-                        <v-chip
-                          v-for="tag in (item.tags || [])"
-                          :key="tag.pk || tag.name"
-                          :color="tag.color"
-                          variant="outlined"
-                          size="x-small"
-                        >
-                          {{ tag.name }}
-                        </v-chip>
+                        <TagChip v-for="tag in (item.tags || [])" :key="tag.pk || tag.name" :tag="tag" size="x-small" />
                       </div>
                     </td>
                     <td>
@@ -1037,7 +1021,7 @@
                     <div class="d-flex align-center mt-2" style="gap: 8px">
                       <v-tooltip text="Reset all filters" location="top">
                         <template #activator="{ props }">
-                          <v-btn v-bind="props" variant="text" color="primary" prepend-icon="mdi-filter-remove" @click="resetDfFilters" aria-label="Reset filters">Reset Filters</v-btn>
+                          <v-btn v-bind="props" variant="text" color="secondary" prepend-icon="mdi-filter-remove" @click="resetDfFilters" aria-label="Reset filters">Reset filters</v-btn>
                         </template>
                       </v-tooltip>
                     </div>
@@ -1049,17 +1033,17 @@
               <div class="d-flex align-center flex-wrap mb-2 px-4" style="gap: 12px" role="toolbar" aria-label="Data files actions">
                 <v-tooltip text="Download all files of this object" location="top">
                 <template #activator="{ props }">
-                  <v-btn v-bind="props" color="primary" variant="flat" @click="handleDownloadAllObjectFiles" :loading="downloadingAll" aria-label="Download all files">Download all</v-btn>
+                  <v-btn v-bind="props" color="primary" variant="flat" prepend-icon="mdi-download" @click="handleDownloadAllObjectFiles" :loading="downloadingAll" aria-label="Download all files">Download all</v-btn>
                 </template>
               </v-tooltip>
               <v-tooltip text="Download currently filtered files" location="top">
                 <template #activator="{ props }">
-                  <v-btn v-bind="props" color="primary" variant="text" :disabled="!filteredDataFiles.length" @click="handleDownloadFilteredObjectFiles" aria-label="Download filtered files">Download filtered</v-btn>
+                  <v-btn v-bind="props" color="primary" variant="outlined" prepend-icon="mdi-download" :disabled="!filteredDataFiles.length" @click="handleDownloadFilteredObjectFiles" aria-label="Download filtered files">Download filtered</v-btn>
                 </template>
               </v-tooltip>
               <v-tooltip :text="`Download selected files (${selectedIds.length})`" location="top">
                 <template #activator="{ props }">
-                  <v-btn v-bind="props" color="primary" variant="text" :disabled="!selectedIds.length" @click="downloadSelectedObjectFiles" :aria-label="`Download selected (${selectedIds.length})`">Download selected ({{ selectedIds.length }})</v-btn>
+                  <v-btn v-bind="props" color="primary" variant="outlined" prepend-icon="mdi-download" :disabled="!selectedIds.length" @click="downloadSelectedObjectFiles" :aria-label="`Download selected (${selectedIds.length})`">Download selected ({{ selectedIds.length }})</v-btn>
                 </template>
               </v-tooltip>
               </div>
@@ -1321,8 +1305,8 @@
         </v-card-text>
         <v-card-actions>
           <v-spacer></v-spacer>
-          <v-btn color="primary" @click="saveTags">Save</v-btn>
-          <v-btn @click="closeTagDialog" ref="tagCloseBtn">Cancel</v-btn>
+          <v-btn variant="text" @click="closeTagDialog" ref="tagCloseBtn">Cancel</v-btn>
+          <v-btn color="primary" variant="flat" @click="saveTags">Save</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -1343,8 +1327,8 @@
         </v-card-text>
         <v-card-actions>
           <v-spacer />
-          <v-btn color="primary" @click="saveNotes">Save</v-btn>
           <v-btn variant="text" @click="closeNotesDialog" ref="notesCloseBtn">Cancel</v-btn>
+          <v-btn color="primary" variant="flat" @click="saveNotes">Save</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -1360,6 +1344,8 @@ import { useNotifyStore } from '@/store/notify'
 import { buildDownloadPrepMessage } from '@/config/downloadJobs'
 import { pollDownloadJobUntilReady } from '@/utils/downloadJobPoll'
 import DataFileQuickActions from '@/components/datafiles/DataFileQuickActions.vue'
+import { exposureTypeColor } from '@/constants/classification'
+import TagChip from '@/components/ui/TagChip.vue'
 
 const route = useRoute()
 const authStore = useAuthStore()
@@ -1843,7 +1829,7 @@ const initializeAladinLite = () => {
     const aladinDiv = document.getElementById('aladin-lite-div')
     if (aladinDiv) {
       aladinDiv.innerHTML = `
-        <div style="padding: 20px; text-align: center; color: #666;">
+        <div style="padding: 20px; text-align: center; color: rgba(var(--v-theme-on-surface), 0.7);">
           <p>No coordinates available for sky map</p>
         </div>
       `
@@ -1883,7 +1869,7 @@ const initializeAladinLite = () => {
             const aladinDiv = document.getElementById('aladin-lite-div')
             if (aladinDiv) {
               aladinDiv.innerHTML = `
-                <div style="padding: 20px; text-align: center; color: #666;">
+                <div style="padding: 20px; text-align: center; color: rgba(var(--v-theme-on-surface), 0.7);">
                   <p>Sky Map not available</p>
                   <p>Coordinates: ${formatRA(object.value.ra)} ${formatDec(object.value.dec)}</p>
                 </div>
@@ -1963,7 +1949,7 @@ const initializeAladinLite = () => {
     const aladinDiv = document.getElementById('aladin-lite-div')
     if (aladinDiv) {
       aladinDiv.innerHTML = `
-        <div style="padding: 20px; text-align: center; color: #666;">
+        <div style="padding: 20px; text-align: center; color: rgba(var(--v-theme-on-surface), 0.7);">
           <p>Sky Map could not be loaded${reason === 'timeout' ? ' (sky map service not reachable)' : ''}</p>
           <p>Coordinates: ${formatRA(object.value.ra)} ${formatDec(object.value.dec)}</p>
         </div>
@@ -2115,10 +2101,7 @@ const formatDate = (date) => {
   return new Date(date).toLocaleDateString()
 }
 
-const getExposureTypeColor = (t) => {
-  const c = { BI: 'blue', DA: 'grey-darken-2', FL: 'green', LI: 'orange', WA: 'purple', UK: 'grey' }
-  return c[(t || '').toUpperCase()] || 'grey'
-}
+const getExposureTypeColor = exposureTypeColor
 
 const formatExposureTime = (time, decimals = null) => {
   if (time == null || time === '' || Number(time) === 0) return '-'
@@ -2181,9 +2164,9 @@ const getStatusColor = (status) => {
     'FR': 'success',
     'PR': 'warning',
     'ER': 'error',
-    'NE': 'grey'
+    'NE': 'cat-gray'
   }
-  return colors[status] || 'grey'
+  return colors[status] || 'cat-gray'
 }
 
 const getStatusIcon = (status) => {
@@ -2726,43 +2709,6 @@ watch(object, (val) => {
 }
 .v-data-table :deep(td) {
   padding: 8px 16px !important;
-}
-
-/* Make links consistent with ObservationRuns.vue */
-.custom-table :deep(a:not(.v-btn):not(.v-chip)) {
-  color: var(--v-theme-primary);
-  text-decoration: none;
-  font-weight: 600;
-  transition: all var(--v-theme-transition-fast);
-  position: relative;
-  padding: 2px 4px;
-  border-radius: var(--v-theme-radius-sm);
-  background-color: rgba(var(--v-theme-primary-light), 0.3);
-  display: inline-block;
-  margin: -2px -4px;
-}
-
-.custom-table :deep(a:not(.v-btn):not(.v-chip):hover) {
-  color: var(--v-theme-primary-dark);
-  background-color: rgba(var(--v-theme-primary-light), 0.9);
-  transform: translateY(-1px);
-}
-
-.custom-table :deep(a:not(.v-btn):not(.v-chip)::after) {
-  content: '';
-  position: absolute;
-  width: 100%;
-  height: 2px;
-  bottom: 0;
-  left: 0;
-  background-color: var(--v-theme-primary);
-  transform: scaleX(0);
-  transition: transform var(--v-theme-transition-fast);
-  border-radius: var(--v-theme-radius-sm);
-}
-
-.custom-table :deep(a:not(.v-btn):not(.v-chip):hover::after) {
-  transform: scaleX(1);
 }
 
 /* Single-line truncation with ellipsis for links */

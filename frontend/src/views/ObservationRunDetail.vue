@@ -148,15 +148,7 @@
             </v-card-title>
             <v-card-text>
               <div v-if="Array.isArray(run?.tags) && run.tags.length" class="d-flex flex-wrap gap-2">
-                <v-chip
-                  v-for="(tag, idx) in run.tags"
-                  :key="tag?.pk || tag?.name || idx"
-                  :color="tag?.color"
-                  variant="outlined"
-                  size="small"
-                >
-                  {{ tag?.name || tag }}
-                </v-chip>
+                <TagChip v-for="(tag, idx) in run.tags" :key="tag?.pk || tag?.name || idx" :tag="tag" />
               </div>
               <div v-else class="text-grey">No tags assigned</div>
             </v-card-text>
@@ -176,7 +168,7 @@
                     <v-btn
                       v-bind="props"
                       v-if="hasAnyOverride"
-                      prepend-icon="mdi-refresh"
+                      prepend-icon="mdi-lock-open-variant-outline"
                       size="default"
                       variant="outlined"
                       color="warning"
@@ -223,8 +215,8 @@
                           <template #activator="{ props }">
                             <v-btn
                               v-bind="props"
-                              icon="mdi-close-circle"
-                              size="x-small"
+                              icon="mdi-lock-open-variant-outline"
+                              size="small"
                               variant="text"
                               color="warning"
                               @click.stop="clearSingleOverride('name')"
@@ -245,8 +237,8 @@
                           <template #activator="{ props }">
                             <v-btn
                               v-bind="props"
-                              icon="mdi-close-circle"
-                              size="x-small"
+                              icon="mdi-lock-open-variant-outline"
+                              size="small"
                               variant="text"
                               color="warning"
                               @click.stop="clearSingleOverride('is_public')"
@@ -267,8 +259,8 @@
                           <template #activator="{ props }">
                             <v-btn
                               v-bind="props"
-                              icon="mdi-close-circle"
-                              size="x-small"
+                              icon="mdi-lock-open-variant-outline"
+                              size="small"
                               variant="text"
                               color="warning"
                               @click.stop="clearSingleOverride('reduction_status')"
@@ -289,8 +281,8 @@
                           <template #activator="{ props }">
                             <v-btn
                               v-bind="props"
-                              icon="mdi-close-circle"
-                              size="x-small"
+                              icon="mdi-lock-open-variant-outline"
+                              size="small"
                               variant="text"
                               color="warning"
                               @click.stop="clearSingleOverride('photometry')"
@@ -311,8 +303,8 @@
                           <template #activator="{ props }">
                             <v-btn
                               v-bind="props"
-                              icon="mdi-close-circle"
-                              size="x-small"
+                              icon="mdi-lock-open-variant-outline"
+                              size="small"
                               variant="text"
                               color="warning"
                               @click.stop="clearSingleOverride('spectroscopy')"
@@ -333,8 +325,8 @@
                           <template #activator="{ props }">
                             <v-btn
                               v-bind="props"
-                              icon="mdi-close-circle"
-                              size="x-small"
+                              icon="mdi-lock-open-variant-outline"
+                              size="small"
                               variant="text"
                               color="warning"
                               @click.stop="clearSingleOverride('note')"
@@ -355,8 +347,8 @@
                           <template #activator="{ props }">
                             <v-btn
                               v-bind="props"
-                              icon="mdi-close-circle"
-                              size="x-small"
+                              icon="mdi-lock-open-variant-outline"
+                              size="small"
                               variant="text"
                               color="warning"
                               @click.stop="clearSingleOverride('mid_observation_jd')"
@@ -456,8 +448,8 @@
           </v-card-text>
           <v-card-actions>
             <v-spacer />
-            <v-btn color="primary" variant="flat" :loading="savingObsType" @click="saveObsType">Save</v-btn>
             <v-btn variant="text" @click="closeObsTypeDialog" ref="obsTypeCloseBtn">Cancel</v-btn>
+            <v-btn color="primary" variant="flat" :loading="savingObsType" @click="saveObsType">Save</v-btn>
           </v-card-actions>
         </v-card>
       </v-dialog>
@@ -471,8 +463,8 @@
           </v-card-text>
           <v-card-actions>
             <v-spacer />
-            <v-btn color="primary" @click="saveRunNotes">Save</v-btn>
             <v-btn variant="text" @click="closeNotesDialog" ref="notesCloseBtn">Cancel</v-btn>
+            <v-btn color="primary" variant="flat" @click="saveRunNotes">Save</v-btn>
           </v-card-actions>
         </v-card>
       </v-dialog>
@@ -493,8 +485,8 @@
           </v-card-text>
           <v-card-actions>
             <v-spacer />
-            <v-btn color="primary" @click="saveRunTags">Save</v-btn>
             <v-btn variant="text" @click="closeTagDialog" ref="tagCloseBtn">Cancel</v-btn>
+            <v-btn color="primary" variant="flat" @click="saveRunTags">Save</v-btn>
           </v-card-actions>
         </v-card>
       </v-dialog>
@@ -725,7 +717,7 @@
                 <div class="d-flex align-center mt-2" style="gap: 8px">
                   <v-tooltip text="Reset all filters" location="top">
                     <template #activator="{ props }">
-                      <v-btn v-bind="props" variant="text" color="primary" prepend-icon="mdi-filter-remove" @click="resetDfFilters" aria-label="Reset filters">Reset Filters</v-btn>
+                      <v-btn v-bind="props" variant="text" color="secondary" prepend-icon="mdi-filter-remove" @click="resetDfFilters" aria-label="Reset filters">Reset filters</v-btn>
                     </template>
                   </v-tooltip>
                 </div>
@@ -735,17 +727,17 @@
           <div class="d-flex align-center flex-wrap mb-2 px-4" style="gap: 12px">
             <v-tooltip text="Download all files of this run" location="top">
               <template #activator="{ props }">
-                <v-btn v-bind="props" color="primary" variant="flat" @click="handleDownloadAll" :loading="downloadingAll" aria-label="Download all files">Download all</v-btn>
+                <v-btn v-bind="props" color="primary" variant="flat" prepend-icon="mdi-download" @click="handleDownloadAll" :loading="downloadingAll" aria-label="Download all files">Download all</v-btn>
               </template>
             </v-tooltip>
             <v-tooltip text="Download currently filtered files" location="top">
               <template #activator="{ props }">
-                <v-btn v-bind="props" color="primary" variant="text" :disabled="!dataFilesTotal" @click="handleDownloadFiltered" aria-label="Download filtered files">Download filtered</v-btn>
+                <v-btn v-bind="props" color="primary" variant="outlined" prepend-icon="mdi-download" :disabled="!dataFilesTotal" @click="handleDownloadFiltered" aria-label="Download filtered files">Download filtered</v-btn>
               </template>
             </v-tooltip>
             <v-tooltip :text="`Download selected files (${selectedIds.length})`" location="top">
               <template #activator="{ props }">
-                <v-btn v-bind="props" color="primary" variant="text" :disabled="!selectedIds.length" @click="downloadSelected" :aria-label="`Download selected (${selectedIds.length})`">Download selected ({{ selectedIds.length }})</v-btn>
+                <v-btn v-bind="props" color="primary" variant="outlined" prepend-icon="mdi-download" :disabled="!selectedIds.length" @click="downloadSelected" :aria-label="`Download selected (${selectedIds.length})`">Download selected ({{ selectedIds.length }})</v-btn>
               </template>
             </v-tooltip>
           </div>
@@ -1071,6 +1063,8 @@ import { formatDateTime } from '@/utils/datetime'
 import { getStatusColor } from '@/utils/status'
 import { ensureBokeh } from '@/utils/bokeh'
 import DataFileQuickActions from '@/components/datafiles/DataFileQuickActions.vue'
+import { exposureTypeColor } from '@/constants/classification'
+import TagChip from '@/components/ui/TagChip.vue'
 
 const route = useRoute()
 const notify = useNotifyStore()
@@ -1393,10 +1387,7 @@ const formatTimeOnly = (date) => {
   return fmt.format(d)
 }
 
-const getExposureTypeColor = (t) => {
-  const c = { BI: 'blue', DA: 'grey-darken-2', FL: 'green', LI: 'orange', WA: 'purple', UK: 'grey' }
-  return c[(t || '').toUpperCase()] || 'grey'
-}
+const getExposureTypeColor = exposureTypeColor
 
 const formatExposureTime = (seconds) => {
   if (!seconds) return '0s'
@@ -2214,43 +2205,6 @@ const binningOptions = computed(() => {
 .notes-text {
   white-space: pre-wrap;
   word-break: break-word;
-}
-
-/* Link styling similar to Dashboard tables (text links only: buttons and chips keep their own look) */
-.custom-table :deep(a:not(.v-btn):not(.v-chip)) {
-  color: var(--v-theme-primary);
-  text-decoration: none;
-  font-weight: 600;
-  transition: all var(--v-theme-transition-fast);
-  position: relative;
-  padding: 2px 4px;
-  border-radius: var(--v-theme-radius-sm);
-  background-color: rgba(var(--v-theme-primary-light), 0.3);
-  display: inline-block;
-  margin: -2px -4px;
-}
-
-.custom-table :deep(a:not(.v-btn):not(.v-chip):hover) {
-  color: var(--v-theme-primary-dark);
-  background-color: rgba(var(--v-theme-primary-light), 0.9);
-  transform: translateY(-1px);
-}
-
-.custom-table :deep(a:not(.v-btn):not(.v-chip)::after) {
-  content: '';
-  position: absolute;
-  width: 100%;
-  height: 2px;
-  bottom: 0;
-  left: 0;
-  background-color: var(--v-theme-primary);
-  transform: scaleX(0);
-  transition: transform var(--v-theme-transition-fast);
-  border-radius: var(--v-theme-radius-sm);
-}
-
-.custom-table :deep(a:not(.v-btn):not(.v-chip):hover::after) {
-  transform: scaleX(1);
 }
 
 .conditions-wrapper {

@@ -16,10 +16,11 @@
           <div class="d-inline-block">
             <v-btn
               color="primary"
+              variant="flat"
               prepend-icon="mdi-plus"
               :disabled="!canEdit"
               @click="openEdit()"
-            >New Tag</v-btn>
+            >New tag</v-btn>
             <v-tooltip v-if="!canEdit" activator="parent" location="top">
               No permission
             </v-tooltip>
@@ -50,7 +51,7 @@
                 prepend-icon="mdi-filter-remove"
                 @click="resetFilters"
               >
-                Reset Filters
+                Reset filters
               </v-btn>
             </v-col>
           </v-row>
@@ -94,11 +95,13 @@
           </template>
 
           <template #item.actions="{ item }">
-            <v-btn icon variant="text" color="primary" class="action-btn" v-if="canEdit" @click="openEdit(item)" :aria-label="`Edit tag ${item.name}`">
+            <v-btn icon size="small" density="comfortable" variant="text" class="action-btn" v-if="canEdit" @click="openEdit(item)" :aria-label="`Edit tag ${item.name}`">
               <v-icon>mdi-pencil</v-icon>
+              <v-tooltip activator="parent" location="top">Edit tag</v-tooltip>
             </v-btn>
-            <v-btn icon variant="text" color="error" class="action-btn" v-if="canEdit" @click="remove(item)" :aria-label="`Delete tag ${item.name}`">
+            <v-btn icon size="small" density="comfortable" variant="text" color="error" class="action-btn" v-if="canEdit" @click="remove(item)" :aria-label="`Delete tag ${item.name}`">
               <v-icon>mdi-delete</v-icon>
+              <v-tooltip activator="parent" location="top">Delete tag</v-tooltip>
             </v-btn>
           </template>
         </v-data-table>
@@ -169,7 +172,7 @@
                   :rules="[rules.required, rules.hex]"
                   hide-details="auto"
                 />
-                <v-chip :style="{ backgroundColor: form.color || '#999', color: '#fff' }" class="mr-3" variant="flat">
+                <v-chip :style="{ backgroundColor: form.color || '#999', color: readableTextColor(form.color || '#999') || '#000' }" class="mr-3" variant="flat">
                   {{ form.color || '#------' }}
                 </v-chip>
                 <v-menu v-model="pickerOpen" :close-on-content-click="false" location="bottom">
@@ -212,6 +215,7 @@ import { useQuerySync } from '@/composables/useQuerySync'
 import EmptyState from '@/components/ui/EmptyState.vue'
 import ErrorState from '@/components/ui/ErrorState.vue'
 import LoadingState from '@/components/ui/LoadingState.vue'
+import { readableTextColor } from '@/utils/color'
 
 const items = ref([])
 const selected = ref([])

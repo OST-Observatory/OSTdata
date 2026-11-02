@@ -62,7 +62,7 @@
           </v-col>
           <v-col cols="12" sm="12" md="3" class="d-flex align-end">
             <v-btn color="secondary" variant="text" prepend-icon="mdi-filter-remove" @click="resetFilters">
-              Reset Filters
+              Reset filters
             </v-btn>
           </v-col>
         </v-row>
@@ -191,6 +191,8 @@
           <div class="d-inline-block">
             <v-btn
               icon
+              size="small"
+              density="comfortable"
               variant="text"
               :disabled="!canDownload(item)"
               :aria-label="`Download job ${item.id}`"
@@ -198,10 +200,13 @@
             >
               <v-icon>mdi-download</v-icon>
             </v-btn>
+            <v-tooltip activator="parent" location="top">Download</v-tooltip>
           </div>
           <div class="d-inline-block">
             <v-btn
               icon
+              size="small"
+              density="comfortable"
               variant="text"
               color="error"
               :disabled="!canCancel(item)"
@@ -210,8 +215,8 @@
             >
               <v-icon>mdi-close-circle</v-icon>
             </v-btn>
-            <v-tooltip v-if="cancelHint(item)" activator="parent" location="top">
-              {{ cancelHint(item) }}
+            <v-tooltip activator="parent" location="top">
+              {{ cancelHint(item) || 'Cancel job' }}
             </v-tooltip>
           </div>
           <div class="d-inline-block">
@@ -291,7 +296,7 @@
         </v-card-text>
         <v-card-actions>
           <v-spacer />
-          <v-btn variant="text" @click="detailsOpen = false">Close</v-btn>
+          <v-btn variant="text" color="primary" @click="detailsOpen = false">Close</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -315,7 +320,7 @@
         <v-card-actions>
           <v-spacer />
           <v-btn variant="text" @click="extendDialog = false">Cancel</v-btn>
-          <v-btn color="primary" @click="confirmExtend">Extend</v-btn>
+          <v-btn color="primary" variant="flat" @click="confirmExtend">Extend</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>

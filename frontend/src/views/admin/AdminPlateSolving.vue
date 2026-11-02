@@ -112,7 +112,7 @@
           </v-col>
           <v-col cols="12" class="d-flex align-end">
             <v-btn color="secondary" variant="text" prepend-icon="mdi-filter-remove" @click="resetFilters">
-              Reset Filters
+              Reset filters
             </v-btn>
           </v-col>
         </v-row>
@@ -134,7 +134,7 @@
             :loading="triggering"
             @click="triggerSolve"
           >
-            Trigger Solve ({{ selectedCount }})
+            Trigger solve ({{ selectedCount }})
           </v-btn>
         </div>
       </v-card-text>
@@ -211,30 +211,22 @@
         </template>
 
         <template #item.actions="{ item }">
-          <div class="d-flex align-center" style="gap: 4px">
-            <v-btn
-              icon="mdi-eye"
-              size="small"
-              variant="text"
-              @click="openPreview(item)"
-              :aria-label="`Preview ${item.file_name}`"
-            />
-            <v-btn
-              icon="mdi-code-tags"
-              size="small"
-              variant="text"
-              @click="openHeader(item)"
-              :aria-label="`View header for ${item.file_name}`"
-            />
-            <v-btn
-              icon="mdi-star-four-points"
-              size="small"
-              variant="text"
-              @click="triggerSolveSingle(item)"
-              :loading="triggeringSingle === item.pk"
-              :aria-label="`Trigger solve for ${item.file_name}`"
-            />
-          </div>
+          <DataFileQuickActions :item="item" @preview="openPreview" @header="openHeader">
+            <v-tooltip text="Trigger plate solve" location="top">
+              <template #activator="{ props }">
+                <v-btn
+                  v-bind="props"
+                  icon="mdi-star-four-points"
+                  size="small"
+                  density="comfortable"
+                  variant="text"
+                  @click="triggerSolveSingle(item)"
+                  :loading="triggeringSingle === item.pk"
+                  :aria-label="`Trigger plate solve for ${item.file_name}`"
+                />
+              </template>
+            </v-tooltip>
+          </DataFileQuickActions>
         </template>
       </v-data-table>
 
@@ -361,6 +353,8 @@ import { api } from '@/services/api'
 import { useNotifyStore } from '@/store/notify'
 import EmptyState from '@/components/ui/EmptyState.vue'
 import LoadingState from '@/components/ui/LoadingState.vue'
+import DataFileQuickActions from '@/components/datafiles/DataFileQuickActions.vue'
+import { exposureTypeColor } from '@/constants/classification'
 
 const notify = useNotifyStore()
 const loading = ref(false)
@@ -438,17 +432,7 @@ const headerEntries = computed(() => {
   return headerData.value
 })
 
-const getExposureTypeColor = (type) => {
-  const colors = {
-    'BI': 'blue',
-    'DA': 'grey-darken-2',
-    'FL': 'green',
-    'LI': 'orange',
-    'WA': 'purple',
-    'UK': 'grey',
-  }
-  return colors[type] || 'grey'
-}
+const getExposureTypeColor = exposureTypeColor
 
 const formatHeaderValue = (value) => {
   if (value === null || value === undefined) return '—'

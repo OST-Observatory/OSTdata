@@ -1,0 +1,27 @@
+/**
+ * Form fields used across views.
+ */
+
+/*
+ * Browser autofill: Firefox paints a yellow and Chrome a light blue box behind the input text only
+ * (not behind the inner icon), which clashes with the dark theme. Instead, the whole field gets a
+ * subtle primary tint, so autofilled fields stay recognizable in both themes. The inset shadow covers
+ * the browser's background, which the user agent style sets with !important.
+ */
+.v-field:has(input:autofill) {
+  --ost-autofill-bg: color-mix(in srgb, rgb(var(--v-theme-surface)) 88%, rgb(var(--v-theme-primary)) 12%);
+  background-color: var(--ost-autofill-bg);
+}
+
+.v-field input:autofill {
+  box-shadow: 0 0 0 1000px var(--ost-autofill-bg, rgb(var(--v-theme-surface))) inset !important;
+  -webkit-text-fill-color: rgb(var(--v-theme-on-surface));
+  caret-color: rgb(var(--v-theme-on-surface));
+}
+
+/* Separate rule: browsers drop a whole selector list if they do not know one of its selectors */
+.v-field input:-webkit-autofill {
+  box-shadow: 0 0 0 1000px var(--ost-autofill-bg, rgb(var(--v-theme-surface))) inset !important;
+  -webkit-text-fill-color: rgb(var(--v-theme-on-surface));
+  caret-color: rgb(var(--v-theme-on-surface));
+}

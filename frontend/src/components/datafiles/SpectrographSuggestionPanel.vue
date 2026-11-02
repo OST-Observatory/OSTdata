@@ -6,7 +6,7 @@
       <span v-if="evaluation?.computed_at" class="text-caption text-medium-emphasis">
         Computed {{ formatDate(evaluation.computed_at) }}
       </span>
-      <v-btn size="small" variant="text" prepend-icon="mdi-refresh" :loading="loading" @click="load">Reload</v-btn>
+      <v-btn size="small" variant="text" prepend-icon="mdi-refresh" :loading="loading" @click="load">Refresh</v-btn>
       <v-btn size="small" color="primary" variant="outlined" prepend-icon="mdi-calculator" :loading="recomputing" @click="recompute">
         Recompute
       </v-btn>

@@ -18,6 +18,7 @@
                 :rules="[rules.required]"
                 required
                 autocomplete="username"
+                autofocus
                 :aria-describedby="error ? 'login-error' : undefined"
               ></v-text-field>
               
@@ -46,12 +47,14 @@
               <v-btn
                 type="submit"
                 color="primary"
+                variant="flat"
                 block
                 size="large"
+                prepend-icon="mdi-login"
                 :loading="loading"
                 :disabled="loading"
               >
-                Login
+                Log in
               </v-btn>
             </v-form>
             <p class="text-caption text-center text-medium-emphasis mt-4 mb-0">

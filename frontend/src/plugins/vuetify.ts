@@ -1,21 +1,60 @@
 // Styles
 import '@mdi/font/css/materialdesignicons.css'
 import 'vuetify/styles'
+import '@/styles/base.css'
 import '@/styles/switch-contrast.css'
 import '@/styles/admin-cards.css'
 import '@/styles/dark-theme.css'
 import '@/styles/surface-borders.css'
+import '@/styles/forms.css'
 
 // Vuetify
 import { createVuetify, type ThemeDefinition } from 'vuetify'
 import * as components from 'vuetify/components'
 import * as directives from 'vuetify/directives'
 
+/*
+ * Categorical colors for chips that tell categories apart (exposure types, spectrographs, cameras):
+ * one tone per theme, chosen so the text of tonal chips reaches 4.5:1 (WCAG AA) on cards.
+ * Use them as color="cat-<name>" instead of Material palette colors (e.g. "teal"), which are too
+ * light on white or too dark on the dark surfaces.
+ */
+const categoricalLight = {
+  'cat-blue': '#0963aa',
+  'cat-green': '#2e6e31',
+  'cat-orange': '#905000',
+  'cat-purple': '#8e24aa',
+  'cat-slate': '#4d646f',
+  'cat-gray': '#626262',
+  'cat-teal': '#006d63',
+  'cat-indigo': '#3f51b5',
+  'cat-pink': '#ba124b',
+  'cat-brown': '#795548',
+  'cat-cyan': '#006a77',
+  'cat-olive': '#646317',
+}
+
+const categoricalDark = {
+  'cat-blue': '#60b4f6',
+  'cat-green': '#68c06c',
+  'cat-orange': '#fe8d00',
+  'cat-purple': '#d795e9',
+  'cat-slate': '#9db2bb',
+  'cat-gray': '#adadad',
+  'cat-teal': '#00c1af',
+  'cat-indigo': '#a2abdf',
+  'cat-pink': '#f48baf',
+  'cat-brown': '#c4a69b',
+  'cat-cyan': '#00bed5',
+  'cat-olive': '#b3b229',
+}
+
 const ostdataTheme: ThemeDefinition = {
   dark: false,
   colors: {
-    // Primary colors - Based on a fresh, airy blue
-    primary: '#1584cb',          // Main blue
+    // Primary colors - Based on a fresh, airy blue. Text colors (primary and status) reach at least
+    // 4.5:1 (WCAG AA) on white surfaces and the page background, also for text/outlined buttons.
+    primary: '#1170ad',          // Main blue
     'primary-dark': '#0d5c8f',   // Darker shade for hover states
     'primary-light': '#e8f4fc',  // Very light blue for backgrounds
     'on-primary': '#ffffff',     // White text on primary
@@ -27,14 +66,18 @@ const ostdataTheme: ThemeDefinition = {
     'on-secondary': '#ffffff',   // White text on secondary
     
     // Status colors - Adjusted to match the new scheme
-    success: '#38a169',          // Fresh green
+    success: '#2a794f',          // Green
     'on-success': '#ffffff',
-    warning: '#dd6b20',          // Warm orange
+    warning: '#aa5218',          // Warm orange
     'on-warning': '#ffffff',
-    error: '#e53e3e',           // Bright red
+    error: '#c53030',            // Red
     'on-error': '#ffffff',
-    info: '#3182ce',            // Info blue
+    info: '#2b6cb0',             // Info blue
     'on-info': '#ffffff',
+
+    // App bar and footer (kept apart from secondary, which is also used for content)
+    chrome: '#2c5282',
+    'on-chrome': '#ffffff',
     
     // Surface colors
     surface: '#ffffff',          // Pure white for cards
@@ -45,6 +88,8 @@ const ostdataTheme: ThemeDefinition = {
     // Background colors
     background: '#eaf2f8',       // Slightly darker blue for main background
     'on-background': '#2d3748',  // Dark gray for text
+
+    ...categoricalLight,
   },
   variables: {
     // Shadows - Lighter for the airy feel
@@ -89,25 +134,31 @@ const ostdataTheme: ThemeDefinition = {
 const darkTheme: ThemeDefinition = {
   dark: true,
   colors: {
-    // Primary: same family as light #1584cb, tuned for dark surfaces
-    primary: '#5eb8e8',
+    // Primary: same family as the light theme, tuned for dark surfaces. Text colors (primary,
+    // secondary and status) reach at least 4.5:1 (WCAG AA) on all surface levels.
+    primary: '#66bdea',
     'primary-dark': '#3da3d9',
     'primary-light': '#9ad4f5',
     'on-primary': '#0c1824',
 
-    // App bar / footer — deep blue (parallel to light secondary #2c5282)
-    secondary: '#2f4f73',
-    'secondary-dark': '#243f5c',
-    'secondary-light': '#6b8fb8',
-    'on-secondary': '#eef4fc',
+    // Secondary: muted light blue for content (buttons, chips); the deep blue of the app bar and
+    // footer is "chrome", it would be invisible on dark surfaces
+    secondary: '#95b3d4',
+    'secondary-dark': '#7a9cc2',
+    'secondary-light': '#c2d4e8',
+    'on-secondary': '#0c1824',
+
+    // App bar / footer — deep blue (parallel to light chrome #2c5282)
+    chrome: '#2f4f73',
+    'on-chrome': '#eef4fc',
 
     success: '#5cc48a',
     'on-success': '#0c1824',
     warning: '#e8ad52',
     'on-warning': '#1a1408',
-    error: '#f0787e',
+    error: '#f3969b',
     'on-error': '#1f0c0d',
-    info: '#5eb8e8',
+    info: '#66bdea',
     'on-info': '#0c1824',
 
     // Layered surfaces (clear steps above background)
@@ -121,6 +172,8 @@ const darkTheme: ThemeDefinition = {
     'on-surface-light': '#e8eef6',
     'surface-variant': '#33445c',
     'on-surface-variant': '#b8c6d9',
+
+    ...categoricalDark,
   },
   variables: {
     'theme-shadow-app-bar': '0 2px 12px rgba(8, 20, 36, 0.55)',
@@ -179,6 +232,18 @@ export default createVuetify({
     VCardText: {
       class: 'pt-2 pb-4',
     },
+    /*
+     * Button emphasis (set variant/color explicitly, the default is a plain text button):
+     * - flat + primary: the one main action of a dialog, form or page (Save, Search, Apply filters)
+     * - flat + error: confirming a destructive action
+     * - tonal + primary: actions inside the many task cards of admin pages (e.g. Maintenance)
+     * - outlined + primary: page-level refresh and further toolbar actions (Download selected)
+     * - text: Cancel (no color, left of the main action), Close of info dialogs (primary),
+     *   Reset filters (secondary), refresh inside a card section (no color)
+     * - table row actions: icon, size small, density comfortable, no color (delete/cancel: error),
+     *   with tooltip and aria-label; data file rows use DataFileQuickActions
+     * Labels in sentence case ("Download selected", not "Download Selected").
+     */
     VBtn: {
       ripple: false,
       variant: 'text',
@@ -210,12 +275,33 @@ export default createVuetify({
       variant: 'outlined',
       density: 'comfortable',
     },
+    VTextarea: {
+      variant: 'outlined',
+      density: 'comfortable',
+    },
+    VSelect: {
+      variant: 'outlined',
+      density: 'comfortable',
+    },
+    VAutocomplete: {
+      variant: 'outlined',
+      density: 'comfortable',
+    },
+    VCombobox: {
+      variant: 'outlined',
+      density: 'comfortable',
+    },
+    VFileInput: {
+      variant: 'outlined',
+      density: 'comfortable',
+    },
     VChip: {
       size: 'small',
       variant: 'tonal',
     },
     VSwitch: {
       color: 'primary',
+      inset: true,
       class: 'hi-contrast-switch',
     },
   },

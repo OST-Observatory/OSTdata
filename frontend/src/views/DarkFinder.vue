@@ -177,6 +177,7 @@
             </v-row>
             <v-btn
               color="primary"
+              variant="flat"
               prepend-icon="mdi-magnify"
               :loading="searching"
               @click="searchDarks"
@@ -370,6 +371,7 @@
               </v-row>
               <v-btn
                 color="primary"
+                variant="flat"
                 prepend-icon="mdi-magnify"
                 :loading="searching"
                 @click="searchDarksFromParsed"
@@ -390,22 +392,23 @@
         <div>
           <v-btn
             color="primary"
+            variant="flat"
+            prepend-icon="mdi-download"
+            :loading="downloading"
+            @click="downloadAll"
+            class="mr-2"
+          >
+            Download all
+          </v-btn>
+          <v-btn
+            color="primary"
             variant="outlined"
             prepend-icon="mdi-download"
             :loading="downloading"
             :disabled="selectedIds.length === 0"
             @click="downloadSelected"
-            class="mr-2"
           >
-            Download Selected ({{ selectedIds.length }})
-          </v-btn>
-          <v-btn
-            color="primary"
-            prepend-icon="mdi-download"
-            :loading="downloading"
-            @click="downloadAll"
-          >
-            Download All
+            Download selected ({{ selectedIds.length }})
           </v-btn>
         </div>
       </v-card-title>

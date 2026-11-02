@@ -19,7 +19,7 @@
             />
           </v-col>
           <v-col cols="12" sm="12" md="4">
-            <v-btn color="primary" prepend-icon="mdi-play" :loading="ldapLoading" @click="runLdapTest">
+            <v-btn color="primary" variant="flat" prepend-icon="mdi-play" :loading="ldapLoading" @click="runLdapTest">
               Run test
             </v-btn>
           </v-col>
@@ -181,8 +181,9 @@
         </template>
         <template #item.actions="{ item }">
           <div v-if="canDelete">
-            <v-btn icon variant="text" color="error" class="action-btn" @click="remove(item)" :aria-label="`Delete ${item.username}`">
+            <v-btn icon size="small" density="comfortable" variant="text" color="error" class="action-btn" @click="remove(item)" :aria-label="`Delete ${item.username}`">
               <v-icon>mdi-delete</v-icon>
+              <v-tooltip activator="parent" location="top">Delete user</v-tooltip>
             </v-btn>
           </div>
         </template>
@@ -196,8 +197,8 @@
           Manage which roles have which permissions. Superusers bypass ACL.
         </div>
         <div class="mb-2 d-flex align-center" style="gap: 12px">
-          <v-btn color="secondary" variant="outlined" prepend-icon="mdi-refresh" :loading="aclLoading" @click="loadAcl">Refresh</v-btn>
-          <v-btn color="primary" prepend-icon="mdi-content-save" :loading="aclSaving" @click="saveAcl">Save changes</v-btn>
+          <v-btn color="primary" variant="outlined" prepend-icon="mdi-refresh" :loading="aclLoading" @click="loadAcl">Refresh</v-btn>
+          <v-btn color="primary" variant="flat" prepend-icon="mdi-content-save" :loading="aclSaving" @click="saveAcl">Save changes</v-btn>
         </div>
         <v-table density="comfortable">
           <thead>

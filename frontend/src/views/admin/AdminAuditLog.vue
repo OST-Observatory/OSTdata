@@ -176,7 +176,7 @@
 
             <template #expanded-row="{ columns, item }">
               <tr>
-                <td :colspan="columns.length" class="pa-4 bg-grey-lighten-5">
+                <td :colspan="columns.length" class="pa-4 bg-surface-variant">
                   <div v-if="row(item).change_reason" class="mb-3">
                     <div class="text-caption text-medium-emphasis mb-1">Context</div>
                     <v-chip size="small" variant="outlined" color="secondary" class="font-mono-chip">

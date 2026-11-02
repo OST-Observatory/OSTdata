@@ -19,7 +19,7 @@
         />
         <v-btn
           color="primary"
-          variant="tonal"
+          variant="outlined"
           prepend-icon="mdi-refresh"
           :loading="loading"
           @click="refreshHealth"
@@ -73,7 +73,7 @@
             Save
           </v-btn>
           <v-btn variant="text" prepend-icon="mdi-refresh" :loading="busy.banner" @click="loadBanner">
-            Reload
+            Refresh
           </v-btn>
           <v-btn variant="text" color="error" prepend-icon="mdi-close-circle" :loading="busy.banner" @click="clearBanner">
             Clear
@@ -639,8 +639,7 @@
         <span>Override flags</span>
         <v-spacer />
         <v-btn
-          color="primary"
-          variant="tonal"
+          variant="text"
           prepend-icon="mdi-refresh"
           :loading="busy.overrideFlags"
           @click="loadOverrideFlags"
@@ -699,13 +698,17 @@
                   </td>
                   <td class="text-right">
                     <v-btn
-                      size="x-small"
+                      size="small"
                       variant="text"
-                      icon="mdi-refresh"
+                      color="warning"
+                      icon="mdi-lock-open-variant-outline"
                       :loading="clearingOverrides[`${block.modelType}-${item.id}`]"
                       aria-label="Clear all override flags"
                       @click="clearAllOverrides(block.modelType, item.id)"
-                    />
+                    >
+                      <v-icon>mdi-lock-open-variant-outline</v-icon>
+                      <v-tooltip activator="parent" location="left">Clear all override flags</v-tooltip>
+                    </v-btn>
                   </td>
                 </tr>
               </tbody>

@@ -72,7 +72,7 @@
               </template>
               <template #item.tags="{ item }">
                 <div class="d-flex flex-wrap gap-1">
-                  <v-chip v-for="tag in (item.tags || [])" :key="tag?.name || tag" size="x-small" class="mr-1">{{ tag?.name || tag }}</v-chip>
+                  <TagChip v-for="tag in (item.tags || [])" :key="tag?.name || tag" :tag="tag" size="x-small" />
                 </div>
               </template>
               <template #item.observation_runs="{ item }">
@@ -158,15 +158,7 @@
               <template #item.n_dark="{ item }">{{ getCount(item, ['n_dark', 'n_darks', 'darks']) ?? '—' }}</template>
               <template #item.tags="{ item }">
                 <div class="d-flex flex-wrap gap-1">
-                  <v-chip
-                    v-for="tag in normalizeTags(item.tags)"
-                    :key="tag.name"
-                    size="x-small"
-                    variant="outlined"
-                    :color="tag.color || 'primary'"
-                  >
-                    {{ tag.name }}
-                  </v-chip>
+                  <TagChip v-for="tag in normalizeTags(item.tags)" :key="tag.name" :tag="tag" size="x-small" />
                   <span v-if="!item?.tags || normalizeTags(item.tags).length === 0" class="text-secondary text-caption">—</span>
                 </div>
               </template>
@@ -198,6 +190,7 @@ import { ref } from 'vue'
 import { api } from '@/services/api'
 import { getStatusColor } from '@/utils/status'
 import { formatDateTime, jdToDate } from '@/utils/datetime'
+import TagChip from '@/components/ui/TagChip.vue'
 
 const query = ref('')
 const searching = ref(false)
@@ -447,40 +440,6 @@ function parseRadius(str) {
 }
 .home-search-field :deep(input) {
   font-size: 1.1rem;
-}
-
-/* Table links – same style as Objects.vue and ObservationRuns.vue */
-.custom-table :deep(.table-link) {
-  color: var(--v-theme-primary);
-  text-decoration: none;
-  font-weight: 600;
-  transition: all var(--v-theme-transition-fast);
-  position: relative;
-  padding: 2px 4px;
-  border-radius: var(--v-theme-radius-sm);
-  background-color: rgba(var(--v-theme-primary-light), 0.3);
-  display: inline-block;
-  margin: -2px -4px;
-}
-.custom-table :deep(.table-link:hover) {
-  color: var(--v-theme-primary-dark);
-  background-color: rgba(var(--v-theme-primary-light), 0.9);
-  transform: translateY(-1px);
-}
-.custom-table :deep(.table-link::after) {
-  content: '';
-  position: absolute;
-  width: 100%;
-  height: 2px;
-  bottom: 0;
-  left: 0;
-  background-color: var(--v-theme-primary);
-  transform: scaleX(0);
-  transition: transform var(--v-theme-transition-fast);
-  border-radius: var(--v-theme-radius-sm);
-}
-.custom-table :deep(.table-link:hover::after) {
-  transform: scaleX(1);
 }
 
 .cell-truncate {

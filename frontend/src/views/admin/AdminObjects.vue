@@ -16,7 +16,7 @@
         </p>
         <v-btn
           color="primary"
-          size="large"
+          variant="flat"
           prepend-icon="mdi-plus"
           aria-label="Create new object"
           @click="createObjectDialog = true"
@@ -29,7 +29,7 @@
     <div class="d-flex align-center justify-space-between mb-4 flex-wrap" style="gap: 12px">
       <h2 class="text-h6">Solar-system preview images</h2>
       <div class="d-flex align-center flex-wrap" style="gap: 8px">
-        <v-btn variant="outlined" prepend-icon="mdi-refresh" :loading="loading" @click="fetchItems">
+        <v-btn color="primary" variant="outlined" prepend-icon="mdi-refresh" :loading="loading" @click="fetchItems">
           Refresh
         </v-btn>
       </div>
@@ -168,6 +168,7 @@
           <v-btn variant="text" @click="closeCreateObjectDialog">Cancel</v-btn>
           <v-btn
             color="primary"
+            variant="flat"
             :loading="creatingObject"
             :disabled="!createObjectForm.name?.trim()"
             @click="submitCreateObject"

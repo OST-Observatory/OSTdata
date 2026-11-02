@@ -4,20 +4,20 @@
     <v-app-bar
       app
       class="app-bar"
-      color="secondary"
+      color="chrome"
       elevation="2"
       fixed
       height="64"
     >
-      <v-app-bar-title class="text-h6 font-weight-bold on-secondary app-title-fixed">
-        <router-link to="/" class="text-decoration-none on-secondary" style="color: inherit;">
+      <v-app-bar-title class="text-h6 font-weight-bold on-chrome app-title-fixed">
+        <router-link to="/" class="text-decoration-none on-chrome" style="color: inherit;">
           OST Data Archive
         </router-link>
       </v-app-bar-title>
       <v-breadcrumbs
         v-if="breadcrumbsDisplay.length && !isMobile"
         :items="breadcrumbsDisplay"
-        class="breadcrumbs-appbar on-secondary ml-3"
+        class="breadcrumbs-appbar on-chrome ml-3"
         aria-label="Breadcrumbs"
       >
         <template #item="{ item }">
@@ -36,48 +36,48 @@
       <v-spacer></v-spacer>
       
       <nav v-if="!isMobile" class="primary-nav" aria-label="Primary">
-      <v-btn icon to="/" aria-label="Home" class="on-secondary nav-btn nav-gap" :class="{ 'nav-active': route.path === '/' }" :aria-current="route.path === '/' ? 'page' : undefined" @mouseenter="prefetchRoute('/dashboard')">
+      <v-btn icon to="/" aria-label="Home" class="on-chrome nav-btn nav-gap" :class="{ 'nav-active': route.path === '/' }" :aria-current="route.path === '/' ? 'page' : undefined" @mouseenter="prefetchRoute('/dashboard')">
         <v-icon>mdi-home</v-icon>
         <v-tooltip activator="parent" location="bottom">Home</v-tooltip>
       </v-btn>
-      <v-btn icon to="/dashboard" aria-label="Open Dashboard" class="on-secondary nav-btn nav-gap" :class="{ 'nav-active': isActive('/dashboard')}" :aria-current="(isActive('/dashboard')) ? 'page' : undefined" @mouseenter="prefetchRoute('/dashboard')">
+      <v-btn icon to="/dashboard" aria-label="Open Dashboard" class="on-chrome nav-btn nav-gap" :class="{ 'nav-active': isActive('/dashboard')}" :aria-current="(isActive('/dashboard')) ? 'page' : undefined" @mouseenter="prefetchRoute('/dashboard')">
         <v-icon>mdi-speedometer</v-icon>
         <v-tooltip activator="parent" location="bottom">Dashboard</v-tooltip>
       </v-btn>
 
-      <v-btn icon to="/observation-runs" aria-label="Open Observation runs" class="on-secondary nav-btn nav-gap" :class="{ 'nav-active': isActive('/observation-runs') }" :aria-current="isActive('/observation-runs') ? 'page' : undefined" @mouseenter="prefetchRoute('/observation-runs')">
+      <v-btn icon to="/observation-runs" aria-label="Open Observation runs" class="on-chrome nav-btn nav-gap" :class="{ 'nav-active': isActive('/observation-runs') }" :aria-current="isActive('/observation-runs') ? 'page' : undefined" @mouseenter="prefetchRoute('/observation-runs')">
         <v-icon>mdi-telescope</v-icon>
         <v-tooltip activator="parent" location="bottom">Observation runs</v-tooltip>
       </v-btn>
 
-      <v-btn icon to="/objects" aria-label="Open Objects" class="on-secondary nav-btn nav-gap" :class="{ 'nav-active': isActive('/objects') }" :aria-current="isActive('/objects') ? 'page' : undefined" @mouseenter="prefetchRoute('/objects')">
+      <v-btn icon to="/objects" aria-label="Open Objects" class="on-chrome nav-btn nav-gap" :class="{ 'nav-active': isActive('/objects') }" :aria-current="isActive('/objects') ? 'page' : undefined" @mouseenter="prefetchRoute('/objects')">
         <v-icon>mdi-creation</v-icon>
         <v-tooltip activator="parent" location="bottom">Objects</v-tooltip>
       </v-btn>
 
-      <v-btn icon to="/tags" aria-label="Open Tags" class="on-secondary nav-btn nav-gap" :class="{ 'nav-active': isActive('/tags') }" :aria-current="isActive('/tags') ? 'page' : undefined" @mouseenter="prefetchRoute('/tags')">
+      <v-btn icon to="/tags" aria-label="Open Tags" class="on-chrome nav-btn nav-gap" :class="{ 'nav-active': isActive('/tags') }" :aria-current="isActive('/tags') ? 'page' : undefined" @mouseenter="prefetchRoute('/tags')">
         <v-icon>mdi-tag-outline</v-icon>
         <v-tooltip activator="parent" location="bottom">Tags</v-tooltip>
       </v-btn>
 
-      <v-btn icon to="/datafiles" aria-label="Open Data Files" class="on-secondary nav-btn nav-gap" :class="{ 'nav-active': isActive('/datafiles') }" :aria-current="isActive('/datafiles') ? 'page' : undefined" @mouseenter="prefetchRoute('/datafiles')">
+      <v-btn icon to="/datafiles" aria-label="Open Data Files" class="on-chrome nav-btn nav-gap" :class="{ 'nav-active': isActive('/datafiles') }" :aria-current="isActive('/datafiles') ? 'page' : undefined" @mouseenter="prefetchRoute('/datafiles')">
         <v-icon>mdi-file-document-multiple</v-icon>
         <v-tooltip activator="parent" location="bottom">Data Files</v-tooltip>
       </v-btn>
 
-      <v-btn icon to="/dark-finder" aria-label="Open Dark Finder" class="on-secondary nav-btn nav-gap" :class="{ 'nav-active': isActive('/dark-finder') }" :aria-current="isActive('/dark-finder') ? 'page' : undefined" @mouseenter="prefetchRoute('/dark-finder')">
+      <v-btn icon to="/dark-finder" aria-label="Open Dark Finder" class="on-chrome nav-btn nav-gap" :class="{ 'nav-active': isActive('/dark-finder') }" :aria-current="isActive('/dark-finder') ? 'page' : undefined" @mouseenter="prefetchRoute('/dark-finder')">
         <v-icon>mdi-image-filter-black-white</v-icon>
         <v-tooltip activator="parent" location="bottom">Dark Frame Finder</v-tooltip>
       </v-btn>
 
-      <v-btn v-if="canAccessAdmin" icon to="/admin" aria-label="Open Admin" class="on-secondary nav-btn nav-gap" :class="{ 'nav-active': isActive('/admin') }" :aria-current="isActive('/admin') ? 'page' : undefined">
+      <v-btn v-if="canAccessAdmin" icon to="/admin" aria-label="Open Admin" class="on-chrome nav-btn nav-gap" :class="{ 'nav-active': isActive('/admin') }" :aria-current="isActive('/admin') ? 'page' : undefined">
         <v-icon>mdi-shield-account</v-icon>
         <v-tooltip activator="parent" location="bottom">Admin</v-tooltip>
       </v-btn>
 
       <v-btn
         icon
-        class="on-secondary nav-btn nav-gap"
+        class="on-chrome nav-btn nav-gap"
         :aria-label="themeToggleAriaLabel"
         @click="toggleTheme"
       >
@@ -87,14 +87,14 @@
 
       <v-menu v-if="isAuthenticated" v-model="accountMenuOpen">
         <template v-slot:activator="{ props }">
-          <v-btn icon v-bind="props" class="on-secondary nav-btn nav-gap" aria-label="Account menu" :aria-expanded="accountMenuOpen ? 'true' : 'false'">
+          <v-btn icon v-bind="props" class="on-chrome nav-btn nav-gap" aria-label="Account menu" :aria-expanded="accountMenuOpen ? 'true' : 'false'">
             <v-icon>mdi-account-circle</v-icon>
             <v-tooltip activator="parent" location="bottom">{{ username }}</v-tooltip>
           </v-btn>
         </template>
         <v-list class="nav-menu">
           <v-list-item @click="logout" class="nav-item">
-            <v-list-item-title class="text-primary">Log Out</v-list-item-title>
+            <v-list-item-title class="text-primary">Log out</v-list-item-title>
           </v-list-item>
           <v-list-item to="/change-password" class="nav-item">
             <v-list-item-title class="text-primary">Change password</v-list-item-title>
@@ -102,25 +102,16 @@
         </v-list>
       </v-menu>
 
-      <v-menu v-else v-model="loginMenuOpen">
-        <template v-slot:activator="{ props }">
-          <v-btn icon v-bind="props" class="on-secondary nav-btn nav-gap" aria-label="Open login menu" :aria-expanded="loginMenuOpen ? 'true' : 'false'">
-            <v-icon>mdi-lock</v-icon>
-            <v-tooltip activator="parent" location="bottom">Log In</v-tooltip>
-          </v-btn>
-        </template>
-        <v-list class="nav-menu">
-          <v-list-item :to="{ path: '/login', query: { next: route.fullPath } }" class="nav-item">
-            <v-list-item-title class="text-primary">Log In</v-list-item-title>
-          </v-list-item>
-        </v-list>
-      </v-menu>
+      <v-btn v-else icon :to="loginTarget" aria-label="Log in" class="on-chrome nav-btn nav-gap" :class="{ 'nav-active': route.path === '/login' }" :aria-current="route.path === '/login' ? 'page' : undefined">
+        <v-icon>mdi-login</v-icon>
+        <v-tooltip activator="parent" location="bottom">Log in</v-tooltip>
+      </v-btn>
       </nav>
 
       <!-- Mobile overflow menu -->
       <v-menu v-if="isMobile">
         <template #activator="{ props }">
-          <v-btn icon v-bind="props" class="on-secondary nav-btn nav-gap" aria-label="Open menu">
+          <v-btn icon v-bind="props" class="on-chrome nav-btn nav-gap" aria-label="Open menu">
             <v-icon>mdi-menu</v-icon>
           </v-btn>
         </template>
@@ -138,11 +129,11 @@
           <v-list-item @click="toggleTheme"><v-list-item-title>{{ isDark ? 'Light theme' : 'Dark theme' }}</v-list-item-title></v-list-item>
           <v-divider></v-divider>
           <template v-if="isAuthenticated">
-            <v-list-item @click="logout"><v-list-item-title>Log Out</v-list-item-title></v-list-item>
+            <v-list-item @click="logout"><v-list-item-title>Log out</v-list-item-title></v-list-item>
             <v-list-item to="/change-password"><v-list-item-title>Change password</v-list-item-title></v-list-item>
           </template>
           <template v-else>
-            <v-list-item :to="{ path: '/login', query: { next: route.fullPath } }"><v-list-item-title>Log In</v-list-item-title></v-list-item>
+            <v-list-item :to="loginTarget"><v-list-item-title>Log in</v-list-item-title></v-list-item>
           </template>
         </v-list>
       </v-menu>
@@ -261,7 +252,10 @@ const themeToggleTooltip = computed(() =>
 )
 const themeToggleAriaLabel = computed(() => themeToggleTooltip.value)
 const accountMenuOpen = ref(false)
-const loginMenuOpen = ref(false)
+// On the login page itself keep its target instead of nesting /login?next=/login?next=...
+const loginTarget = computed(() =>
+  route.path === '/login' ? route.fullPath : { path: '/login', query: { next: route.fullPath } },
+)
 const documentTitle = computed(() => document?.title || 'OST Data Archive')
 const prefetchRoute = async (path: string) => {
   try {
@@ -503,8 +497,8 @@ const isActive = (base: string) => {
 }
 
 .footer {
-  background-color: rgb(var(--v-theme-secondary));
-  color: rgb(var(--v-theme-on-secondary));
+  background-color: rgb(var(--v-theme-chrome));
+  color: rgb(var(--v-theme-on-chrome));
   border-top: var(--v-theme-app-bar-border);
   padding: 16px 0;
   transition: opacity 0.3s;
@@ -516,7 +510,7 @@ const isActive = (base: string) => {
 }
 
 .footer-text {
-  color: rgb(var(--v-theme-on-secondary));
+  color: rgb(var(--v-theme-on-chrome));
   font-size: 0.75rem !important;
   line-height: 1.2;
 }
@@ -528,7 +522,8 @@ const isActive = (base: string) => {
 }
 
 .footer-link:hover {
-  color: rgb(var(--v-theme-primary));
+  color: rgb(var(--v-theme-on-chrome));
+  text-decoration: underline;
 }
 
 .nav-menu {
@@ -553,15 +548,15 @@ const isActive = (base: string) => {
   background-color: rgba(var(--v-theme-primary), var(--v-theme-hover-opacity)) !important;
 }
 
-/* Ensure icons in the app bar are visible on secondary background */
-.on-secondary :deep(.v-icon) {
-  color: rgb(var(--v-theme-on-secondary)) !important;
+/* Ensure icons in the app bar are visible on the chrome background */
+.on-chrome :deep(.v-icon) {
+  color: rgb(var(--v-theme-on-chrome)) !important;
 }
 
 /* Subtle background for nav buttons to make them visible even without hover */
 .nav-btn {
-  background-color: rgba(var(--v-theme-on-secondary), 0.08) !important;
-  border: 1px solid rgba(var(--v-theme-on-secondary), 0.18) !important;
+  background-color: rgba(var(--v-theme-on-chrome), 0.08) !important;
+  border: 1px solid rgba(var(--v-theme-on-chrome), 0.18) !important;
   border-radius: 50% !important;
   transition: background-color 0.2s ease, box-shadow 0.2s ease, transform 0.1s ease, border-color 0.2s ease !important;
 }
@@ -574,8 +569,8 @@ const isActive = (base: string) => {
 /* Pronounced ring hover/focus effect to improve discoverability */
 .nav-btn:hover,
 .nav-btn:focus-visible {
-  background-color: rgba(var(--v-theme-on-secondary), 0.16) !important;
-  border-color: rgba(var(--v-theme-on-secondary), 0.36) !important;
+  background-color: rgba(var(--v-theme-on-chrome), 0.16) !important;
+  border-color: rgba(var(--v-theme-on-chrome), 0.36) !important;
   box-shadow: 0 0 0 2px rgba(var(--v-theme-primary), 0.6) inset, 0 2px 6px rgba(0, 0, 0, 0.25) !important;
 }
 
@@ -616,7 +611,7 @@ a:hover {
 }
 
 .breadcrumbs-appbar :deep(.v-breadcrumbs-item) {
-  color: rgb(var(--v-theme-on-secondary)) !important;
+  color: rgb(var(--v-theme-on-chrome)) !important;
 }
 
 /* Desktop primary nav layout and responsive spacing */
@@ -637,18 +632,5 @@ a:hover {
 @media (max-width: 1120px) {
   .breadcrumbs-appbar { max-width: 36%; }
   .primary-nav { gap: 4px; }
-}
-
-/* Screen-reader only utility */
-.sr-only {
-  position: absolute !important;
-  width: 1px !important;
-  height: 1px !important;
-  padding: 0 !important;
-  margin: -1px !important;
-  overflow: hidden !important;
-  clip: rect(0, 0, 1px, 1px) !important;
-  white-space: nowrap !important;
-  border: 0 !important;
 }
 </style>

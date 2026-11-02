@@ -115,12 +115,12 @@
             <v-col cols="12">
               <v-btn
                 variant="text"
-                color="primary"
+                color="secondary"
                 prepend-icon="mdi-filter-remove"
                 @click="resetFilters"
                 block
               >
-                Reset Filters
+                Reset filters
               </v-btn>
             </v-col>
             </v-row>
@@ -269,15 +269,7 @@
 
           <template v-slot:item.tags="{ item }">
             <div class="d-flex flex-wrap chip-list">
-              <v-chip
-                v-for="tag in normalizeTags(item.tags)"
-                :key="tag.name"
-                :color="tag.color || 'primary'"
-                size="x-small"
-                variant="outlined"
-              >
-                {{ tag.name }}
-              </v-chip>
+              <TagChip v-for="tag in normalizeTags(item.tags)" :key="tag.name" :tag="tag" size="x-small" />
               <span v-if="!item?.tags || normalizeTags(item.tags).length === 0" class="text-secondary text-caption">—</span>
             </div>
           </template>
@@ -294,8 +286,9 @@
                 <v-btn
                   v-bind="props"
                   icon
+                  size="small"
+                  density="comfortable"
                   variant="text"
-                  color="secondary"
                   class="action-btn"
                   :loading="reEvalRunId === item.pk"
                   @click="reEvaluateRun(item)"
@@ -310,8 +303,9 @@
                 <v-btn
                   v-bind="props"
                   icon
+                  size="small"
+                  density="comfortable"
                   variant="text"
-                  color="primary"
                   class="action-btn"
                   @click="openRunEdit(item)"
                   :aria-label="`Edit run ${item.name}`"
@@ -325,6 +319,8 @@
                 <v-btn
                   v-bind="props"
                   icon
+                  size="small"
+                  density="comfortable"
                   variant="text"
                   color="error"
                   class="action-btn"
@@ -476,7 +472,7 @@
           <v-card-actions>
             <v-spacer />
             <v-btn variant="text" @click="runEditOpen = false">Cancel</v-btn>
-            <v-btn color="primary" variant="elevated" @click="saveRunEdit" :loading="runEditSaving">Save</v-btn>
+            <v-btn color="primary" variant="flat" @click="saveRunEdit" :loading="runEditSaving">Save</v-btn>
           </v-card-actions>
         </v-card>
       </v-dialog>
@@ -496,6 +492,7 @@ import { useAuthStore } from '@/store/auth'
 import EmptyState from '@/components/ui/EmptyState.vue'
 import ErrorState from '@/components/ui/ErrorState.vue'
 import LoadingState from '@/components/ui/LoadingState.vue'
+import TagChip from '@/components/ui/TagChip.vue'
 
 const runs = ref([])
 const selected = ref([])
@@ -959,43 +956,6 @@ watch(runs, (val) => {
   outline: 2px solid rgb(var(--v-theme-primary));
   outline-offset: 2px;
   border-radius: 50%;
-}
-
-/* Make links obvious like on Dashboard tables */
-.custom-table :deep(a:not(.v-btn):not(.v-chip)) {
-  color: var(--v-theme-primary);
-  text-decoration: none;
-  font-weight: 600;
-  transition: all var(--v-theme-transition-fast);
-  position: relative;
-  padding: 2px 4px;
-  border-radius: var(--v-theme-radius-sm);
-  background-color: rgba(var(--v-theme-primary-light), 0.3);
-  display: inline-block;
-  margin: -2px -4px;
-}
-
-.custom-table :deep(a:not(.v-btn):not(.v-chip):hover) {
-  color: var(--v-theme-primary-dark);
-  background-color: rgba(var(--v-theme-primary-light), 0.9);
-  transform: translateY(-1px);
-}
-
-.custom-table :deep(a:not(.v-btn):not(.v-chip)::after) {
-  content: '';
-  position: absolute;
-  width: 100%;
-  height: 2px;
-  bottom: 0;
-  left: 0;
-  background-color: var(--v-theme-primary);
-  transform: scaleX(0);
-  transition: transform var(--v-theme-transition-fast);
-  border-radius: var(--v-theme-radius-sm);
-}
-
-.custom-table :deep(a:not(.v-btn):not(.v-chip):hover::after) {
-  transform: scaleX(1);
 }
 
 .v-data-table :deep(th) {

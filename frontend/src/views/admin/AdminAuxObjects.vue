@@ -102,6 +102,7 @@
         <div class="d-flex flex-wrap gap-2 mt-4">
           <v-btn
             color="primary"
+            variant="flat"
             prepend-icon="mdi-magnify-scan"
             :loading="triggerMissingLoading"
             :disabled="!featureEnabled"

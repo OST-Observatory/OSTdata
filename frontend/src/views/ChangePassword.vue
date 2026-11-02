@@ -4,7 +4,7 @@
       <v-col cols="12" sm="8" md="6" lg="4">
         <v-card class="elevation-12">
           <v-card-title class="text-center text-h4 py-4">
-            Change Password
+            Change password
           </v-card-title>
           
           <v-card-text>
@@ -61,12 +61,13 @@
               <v-btn
                 type="submit"
                 color="primary"
+                variant="flat"
                 block
                 size="large"
                 :loading="loading"
                 :disabled="loading"
               >
-                Change Password
+                Change password
               </v-btn>
             </v-form>
           </v-card-text>

@@ -28,7 +28,7 @@
         />
         <v-btn
           color="primary"
-          variant="tonal"
+          variant="outlined"
           prepend-icon="mdi-refresh"
           :loading="loading"
           :disabled="!canView"
