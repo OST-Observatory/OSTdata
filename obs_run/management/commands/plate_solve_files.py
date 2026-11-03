@@ -75,7 +75,7 @@ class Command(BaseCommand):
         parser.add_argument(
             '--retry-failed',
             action='store_true',
-            help='Include failed files still in their retry pause (e.g. after installing another solver)',
+            help='Also try solvers that failed for a file before (default: each solver once per file)',
         )
         parser.add_argument(
             '--tool',
@@ -102,6 +102,8 @@ class Command(BaseCommand):
         delay_seconds = 60.0 / rate
 
         compare = options['compare']
+        # Re-solving solved files or explicit retries: all solvers, also those that failed before
+        retry_all = compare or force or options['retry_failed']
         if compare:
             # Read-only: allowed also while the plate solving task is switched off
             dry_run = True
@@ -110,7 +112,9 @@ class Command(BaseCommand):
             self.stdout.write(self.style.WARNING('Plate solving is disabled in settings'))
             return
         else:
-            queryset = plate_solve_candidates(force=force, ignore_backoff=options['retry_failed'])
+            queryset = plate_solve_candidates(
+                force=force, retry_failed=options['retry_failed'], tools=options['tool'],
+            )
 
         if limit:
             queryset = queryset[:limit]
@@ -158,7 +162,7 @@ class Command(BaseCommand):
                 
                 if compare:
                     old_wcs = _wcs_of(datafile)
-                    result = solve_and_update_datafile(datafile, service=service, save=False)
+                    result = solve_and_update_datafile(datafile, service=service, save=False, retry_failed=retry_all)
                     new_wcs = _wcs_of(datafile) if result['success'] else None
                     if old_wcs is None or new_wcs is None:
                         failed += 1
@@ -176,7 +180,7 @@ class Command(BaseCommand):
                 elif dry_run:
                     self.stdout.write(self.style.WARNING('  [DRY RUN] Would attempt plate solving'))
                     # Still try to solve to validate, but don't save
-                    result = solve_and_update_datafile(datafile, service=service, save=False)
+                    result = solve_and_update_datafile(datafile, service=service, save=False, retry_failed=retry_all)
                     if result['success']:
                         self.stdout.write(self.style.SUCCESS('  [DRY RUN] Would succeed'))
                         succeeded += 1
@@ -184,7 +188,7 @@ class Command(BaseCommand):
                         self.stdout.write(self.style.ERROR(f'  [DRY RUN] Would fail: {result["error"]}'))
                         failed += 1
                 else:
-                    result = solve_and_update_datafile(datafile, service=service, save=True)
+                    result = solve_and_update_datafile(datafile, service=service, save=True, retry_failed=retry_all)
                     if result['success']:
                         succeeded += 1
                         self.stdout.write(self.style.SUCCESS('  ✓ Successfully plate solved'))

@@ -36,7 +36,7 @@ from typing import Dict, List, Optional
 import numpy as np
 from django.conf import settings
 
-from obs_run.plate_solving import PlateSolver
+from obs_run.plate_solving import PlateSolver, SolverSetupError
 
 logger = logging.getLogger(__name__)
 
@@ -372,7 +372,7 @@ class AstapSolver(PlateSolver):
         if not source.exists():
             raise FileNotFoundError(f'Image file not found: {image_path}')
         if not self._executable():
-            raise FileNotFoundError(f'ASTAP executable not found: {self.executable_path}')
+            raise SolverSetupError(f'ASTAP executable not found: {self.executable_path}')
         deadline = time.monotonic() + self.budget
         suffix = source.suffix.lstrip('.').lower()
         naxis1, naxis2 = int(hints.get('naxis1') or 0), int(hints.get('naxis2') or 0)
@@ -448,8 +448,11 @@ class AstapSolver(PlateSolver):
                             errors.append(str(exc))
                             continue
                     errors.append(self._failure_reason(result, ini))
-                    if result.returncode in (16, 32, 33):
-                        # Unreadable image or missing database: fewer stars or another stretch cannot help
+                    if result.returncode in (32, 33):
+                        # Star database missing/unreadable: a problem of the installation, not of the file
+                        raise SolverSetupError('; '.join(dict.fromkeys(errors)))
+                    if result.returncode == 16:
+                        # Unreadable image: fewer stars or another stretch cannot help
                         raise AstapError('; '.join(dict.fromkeys(errors)))
         raise AstapError('; '.join(dict.fromkeys(errors)) or 'no solution found')
 

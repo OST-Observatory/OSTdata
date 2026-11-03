@@ -18,12 +18,13 @@ from rest_framework.test import APITestCase
 
 from obs_run.astap_solver import AstapError, AstapSolver, solution_from_header
 from obs_run.management.commands.plate_solve_files import compare_solutions
-from obs_run.models import DataFile, ObservationRun
+from obs_run.models import DataFile, ObservationRun, PlateSolveFailure
 from obs_run.plate_solving import (
     PlateSolver,
     PlateSolvingService,
+    SolverSetupError,
     plate_solve_candidates,
-    retry_due_filter,
+    reset_plate_solve_failures,
     solve_and_update_datafile,
 )
 from users.models import User
@@ -166,10 +167,10 @@ class AstapSolverTest(TestCase):
         self.assertIn('axis rotations differ', message)
         self.assertIn('expected 1.000"/px', message)
 
-    def test_missing_database_stops_at_once(self):
+    def test_missing_database_is_a_setup_error(self):
         path = self._fits(np.full((NAXIS2, NAXIS1), 1000, dtype=np.uint16))
         fake = FakeAstap([32])
-        with self.assertRaisesMessage(AstapError, 'no star database found'):
+        with self.assertRaisesMessage(SolverSetupError, 'no star database found'):
             self._solve(path, fake)
         self.assertEqual(len(fake.calls), 1)
 
@@ -199,8 +200,9 @@ class AstapSolverTest(TestCase):
 
 
 class FailingSolver(PlateSolver):
-    def __init__(self, name, message):
-        self.name, self.message = name, message
+    def __init__(self, name, message, error=RuntimeError):
+        self.name, self.message, self.error = name, message, error
+        self.calls = 0
 
     def get_name(self):
         return self.name
@@ -209,10 +211,12 @@ class FailingSolver(PlateSolver):
         return True
 
     def solve(self, image_path, min_radius, max_radius, hints=None):
-        raise RuntimeError(self.message)
+        self.calls += 1
+        raise self.error(self.message)
 
     def solve_nearby(self, image_path, ra_deg, dec_deg, field_radius, search_radius, hints=None):
-        raise RuntimeError(f'{self.message} (nearby)')
+        self.calls += 1
+        raise self.error(f'{self.message} (nearby)')
 
 
 class SolveAndUpdateTest(TestCase):
@@ -225,10 +229,13 @@ class SolveAndUpdateTest(TestCase):
             naxis1=NAXIS1, naxis2=NAXIS2, ra=83.82, dec=-5.39,
         )
 
-    def test_reasons_of_all_solvers_are_stored(self):
-        service = PlateSolvingService(solvers=[
-            FailingSolver('astap', 'no solution found'), FailingSolver('watney', 'Watney failed with exit code 1'),
-        ])
+    def _failed_tools(self):
+        return dict(self.datafile.plate_solve_failures.values_list('tool', 'error'))
+
+    def test_each_solver_gets_one_chance(self):
+        astap = FailingSolver('astap', 'no solution found')
+        watney = FailingSolver('watney', 'Watney failed with exit code 1')
+        service = PlateSolvingService(solvers=[astap, watney])
         result = solve_and_update_datafile(self.datafile, service=service)
         self.assertFalse(result['success'])
         self.datafile.refresh_from_db()
@@ -236,60 +243,85 @@ class SolveAndUpdateTest(TestCase):
             'astap nearby: no solution found (nearby); astap blind: no solution found; '
             'watney nearby: Watney failed with exit code 1 (nearby); watney blind: Watney failed with exit code 1'
         ))
-        self.assertEqual(self.datafile.plate_solve_attempts, 1)
-        solve_and_update_datafile(self.datafile, service=service)
-        self.assertEqual(self.datafile.plate_solve_attempts, 2)
+        self.assertEqual(self._failed_tools(), {
+            'astap': 'astap nearby: no solution found (nearby); astap blind: no solution found',
+            'watney': 'watney nearby: Watney failed with exit code 1 (nearby); '
+                      'watney blind: Watney failed with exit code 1',
+        })
+        self.assertEqual((astap.calls, watney.calls), (2, 2))
 
-    def test_next_solver_is_used_and_attempts_reset(self):
-        self.datafile.plate_solve_attempts = 3
+        # Second run: no solver is tried again
+        result = solve_and_update_datafile(self.datafile, service=service)
+        self.assertEqual(result['error'], 'Already failed with all available solvers (astap, watney)')
+        self.assertEqual((astap.calls, watney.calls), (2, 2))
+
+        # Explicit retry (manual trigger) tries them all
+        solve_and_update_datafile(self.datafile, service=service, retry_failed=True)
+        self.assertEqual((astap.calls, watney.calls), (4, 4))
+
+    def test_only_the_new_solver_is_tried(self):
+        astap = FailingSolver('astap', 'no solution found')
+        solve_and_update_datafile(self.datafile, service=PlateSolvingService(solvers=[astap]))
         solution = solution_from_header(_wcs_header(), NAXIS1, NAXIS2)
 
         class Solved(FailingSolver):
             def solve_nearby(self, *args, **kwargs):
+                self.calls += 1
                 return dict(solution)
 
-        service = PlateSolvingService(solvers=[FailingSolver('astap', 'no solution found'), Solved('watney', '')])
+        watney = Solved('watney', '')
+        service = PlateSolvingService(solvers=[astap, watney])
         with patch('obs_run.sky_view.prerender_sky_image'):
             result = solve_and_update_datafile(self.datafile, service=service)
         self.assertEqual((result['success'], result['tool']), (True, 'watney'))
+        self.assertEqual((astap.calls, watney.calls), (2, 1))  # astap only in the first run
         self.datafile.refresh_from_db()
-        self.assertEqual((self.datafile.plate_solve_attempts, self.datafile.plate_solve_tool), (0, 'watney'))
+        self.assertEqual(self.datafile.plate_solve_tool, 'watney')
         self.assertAlmostEqual(self.datafile.wcs_crval1, 83.82)
 
+    def test_setup_problems_are_no_failures_of_the_file(self):
+        broken = FailingSolver('astap', 'no star database found', error=SolverSetupError)
+        solve_and_update_datafile(self.datafile, service=PlateSolvingService(solvers=[broken]))
+        self.assertEqual(self._failed_tools(), {})
+        self.datafile.refresh_from_db()
+        self.assertIn('no star database found', self.datafile.plate_solve_error)
+        self.assertEqual(broken.calls, 1)  # blind search skipped after the setup error
 
-@override_settings(PLATE_SOLVING_RETRY_HOURS=6, PLATE_SOLVING_RETRY_MAX_DAYS=30)
-class RetryPauseTest(TestCase):
+
+class CandidatesTest(TestCase):
     def setUp(self):
         self.run = ObservationRun.objects.create(name='2026-11-03')
         self.now = timezone.now()
 
-    def _file(self, name, attempts=0, hours_ago=None):
-        return DataFile.objects.create(
+    def _file(self, name, failed=(), hours_ago=None):
+        datafile = DataFile.objects.create(
             observation_run=self.run, datafile=f'/data/{name}.fits', file_type='FITS', exposure_type='LI',
-            plate_solve_attempts=attempts,
             plate_solve_attempted_at=None if hours_ago is None else self.now - timedelta(hours=hours_ago),
         )
+        for tool in failed:
+            PlateSolveFailure.objects.create(datafile=datafile, tool=tool, failed_at=self.now)
+        return datafile
 
-    def test_pause_doubles_with_every_failure(self):
-        due = {
-            self._file('new').pk: True,
-            self._file('legacy_recent', attempts=0, hours_ago=1).pk: False,  # attempted before the counter
-            self._file('first_fail_old', attempts=1, hours_ago=7).pk: True,
-            self._file('third_fail_recent', attempts=3, hours_ago=20).pk: False,  # pause 24 h
-            self._file('third_fail_old', attempts=3, hours_ago=25).pk: True,
-            self._file('many_fails', attempts=20, hours_ago=24 * 29).pk: False,  # capped at 30 days
-            self._file('many_fails_old', attempts=20, hours_ago=24 * 31).pk: True,
-        }
-        found = set(DataFile.objects.filter(retry_due_filter(self.now)).values_list('pk', flat=True))
-        self.assertEqual(found, {pk for pk, is_due in due.items() if is_due})
+    def _pks(self, **kwargs):
+        return list(plate_solve_candidates(**kwargs).values_list('pk', flat=True))
 
-    def test_candidates_new_files_first(self):
-        old = self._file('old_fail', attempts=1, hours_ago=100)
+    def test_files_with_an_untried_solver(self):
+        astap_failed = self._file('astap_failed', failed=['astap'], hours_ago=2)
         new = self._file('new')
-        self.assertEqual(list(plate_solve_candidates().values_list('pk', flat=True)), [new.pk, old.pk])
-        recent = self._file('recent_fail', attempts=1, hours_ago=1)
-        self.assertNotIn(recent.pk, plate_solve_candidates().values_list('pk', flat=True))
-        self.assertIn(recent.pk, plate_solve_candidates(ignore_backoff=True).values_list('pk', flat=True))
+        both_failed = self._file('both_failed', failed=['astap', 'watney'], hours_ago=1)
+        old_watney = self._file('old_watney_failure', failed=['watney'], hours_ago=5)
+
+        # New files first, then the longest waiting
+        self.assertEqual(self._pks(tools=['astap', 'watney']), [new.pk, old_watney.pk, astap_failed.pk])
+        self.assertEqual(self._pks(tools=['astap']), [new.pk, old_watney.pk])
+        self.assertIn(both_failed.pk, self._pks(tools=['astap'], retry_failed=True))
+        self.assertEqual(self._pks(tools=[]), [])
+
+    def test_reset_per_solver(self):
+        datafile = self._file('both_failed', failed=['astap', 'watney'], hours_ago=1)
+        self.assertEqual(reset_plate_solve_failures('astap'), 1)
+        self.assertEqual(list(datafile.plate_solve_failures.values_list('tool', flat=True)), ['watney'])
+        self.assertEqual(self._pks(tools=['astap', 'watney']), [datafile.pk])
 
 
 class CompareSolutionsTest(TestCase):
@@ -326,6 +358,27 @@ class SolverStatusApiTest(APITestCase):
         self.assertFalse(any(s['available'] for s in solvers))
         self.assertIn('astap_cli not found', solvers[0]['details'])
         self.assertEqual(response.json()['solved_by_tool'], {})
+
+    def test_reset_failures_endpoint(self):
+        admin = User.objects.create_superuser(username='admin2', password='pw', email='b@example.org')
+        self.client.force_authenticate(admin)
+        run = ObservationRun.objects.create(name='2026-11-05')
+        datafile = DataFile.objects.create(observation_run=run, datafile='/data/x.fits', file_type='FITS',
+                                           exposure_type='LI')
+        for tool in ('astap', 'watney'):
+            PlateSolveFailure.objects.create(datafile=datafile, tool=tool, failed_at=timezone.now())
+        with patch.object(AstapSolver, 'describe', return_value={'name': 'astap', 'available': True}), \
+                override_settings(PLATE_SOLVING_TOOLS=['astap']):
+            stats = self.client.get('/api/admin/datafiles/plate-solving/stats/').json()
+        self.assertEqual(stats['failed_by_tool'], {'astap': 1, 'watney': 1})
+        self.assertEqual(stats['exhausted'], 1)
+
+        response = self.client.post('/api/admin/datafiles/plate-solving/reset-failures/', {'tool': 'astap'},
+                                    format='json')
+        self.assertEqual(response.json(), {'tool': 'astap', 'reset': 1})
+        self.assertEqual(list(PlateSolveFailure.objects.values_list('tool', flat=True)), ['watney'])
+        self.assertEqual(self.client.post('/api/admin/datafiles/plate-solving/reset-failures/', {},
+                                          format='json').status_code, 400)
 
 
 class BackgroundTriggerApiTest(APITestCase):

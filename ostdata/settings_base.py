@@ -340,9 +340,6 @@ PLATE_SOLVING_RE_EVAL_COORD_THRESHOLD_ARCMIN = env.float(
     'PLATE_SOLVING_RE_EVAL_COORD_THRESHOLD_ARCMIN', default=5.0
 )
 PLATE_SOLVING_RE_EVAL_BATCH_SIZE = env.int('PLATE_SOLVING_RE_EVAL_BATCH_SIZE', default=50)
-# Pause before failed files are tried again: starts at RETRY_HOURS, doubles with every failure, at most RETRY_MAX_DAYS
-PLATE_SOLVING_RETRY_HOURS = env.float('PLATE_SOLVING_RETRY_HOURS', default=6.0)
-PLATE_SOLVING_RETRY_MAX_DAYS = env.float('PLATE_SOLVING_RETRY_MAX_DAYS', default=30.0)
 
 # Watney-specific settings
 WATNEY_SOLVE_PATH = env.str('WATNEY_SOLVE_PATH', default='watney-solve')

@@ -1107,12 +1107,12 @@ def plate_solve_selected_files(file_ids):
     Plate solve files chosen in the admin (POST admin/datafiles/plate-solving/trigger/), in the
     background: with several solvers and retries one file can take minutes. Results are stored per
     file (plate_solved, plate_solve_error); the admin polls them via the trigger status endpoint.
-    The retry pause does not apply: the files were selected explicitly.
+    The files were selected explicitly: all solvers are tried, also those that failed for them before.
     """
     service = PlateSolvingService()
     results = []
     for datafile in DataFile.objects.filter(pk__in=file_ids).order_by('pk'):
-        result = solve_and_update_datafile(datafile, service=service, save=True)
+        result = solve_and_update_datafile(datafile, service=service, save=True, retry_failed=True)
         results.append({'file_id': datafile.pk, **result})
     logger.info('Plate solved %d selected files: %d succeeded', len(results), sum(r['success'] for r in results))
     return results
@@ -1124,7 +1124,8 @@ def plate_solve_pending_files(self):
     Background task to plate solve pending Light frames.
     
     Processes files of plate_solve_candidates(): unsolved Light frames without manual WCS, no spectra,
-    never attempted files first; failed files wait for their retry pause (retry_due_filter).
+    never attempted files first. Each solver gets one chance per file: only solvers that have not failed
+    for a file yet are tried (e.g. a newly installed one).
 
     Processes up to PLATE_SOLVING_BATCH_SIZE files per run (default: 10).
     """
@@ -1139,8 +1140,10 @@ def plate_solve_pending_files(self):
         
         batch_size = getattr(settings, 'PLATE_SOLVING_BATCH_SIZE', 10)
 
-        # Unsolved Light frames, new files first; failed files wait for their retry pause
-        files_to_process = list(plate_solve_candidates()[:batch_size])
+        service = PlateSolvingService()
+        # Unsolved Light frames with an available solver that has not failed for them yet
+        tools = [solver.get_name() for solver in service.solvers]
+        files_to_process = list(plate_solve_candidates(tools=tools)[:batch_size])
         
         if not files_to_process:
             result = {'processed': 0, 'succeeded': 0, 'failed': 0}
@@ -1149,7 +1152,6 @@ def plate_solve_pending_files(self):
         
         logger.info(f"Plate solving {len(files_to_process)} files")
         
-        service = PlateSolvingService()
         succeeded = 0
         failed = 0
         

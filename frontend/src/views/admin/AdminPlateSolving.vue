@@ -22,8 +22,8 @@
           <v-col cols="12" sm="6" md="3">
             <div class="text-caption text-medium-emphasis">Unsolved</div>
             <div class="text-h6 text-warning">{{ stats.unsolved || 0 }}</div>
-            <div v-if="stats.waiting_for_retry" class="text-caption text-medium-emphasis">
-              {{ stats.waiting_for_retry }} waiting for the retry pause after failed attempts
+            <div v-if="stats.exhausted" class="text-caption text-medium-emphasis">
+              {{ stats.exhausted }} failed with all available solvers
             </div>
           </v-col>
           <v-col cols="12" sm="6" md="3">
@@ -33,7 +33,9 @@
         </v-row>
         <template v-if="stats.solvers?.length">
           <v-divider class="my-3" />
-          <div class="text-caption text-medium-emphasis mb-2">Solvers (tried in this order)</div>
+          <div class="text-caption text-medium-emphasis mb-2">
+            Solvers (tried in this order; each solver gets one chance per file)
+          </div>
           <div
             v-for="(solver, idx) in stats.solvers"
             :key="solver.name"
@@ -53,7 +55,24 @@
               {{ solver.path }}<template v-if="solver.details"> · {{ solver.details }}</template>
             </span>
             <v-spacer />
-            <span class="text-body-2">{{ stats.solved_by_tool?.[solver.name] || 0 }} files solved</span>
+            <span class="text-body-2">
+              {{ stats.solved_by_tool?.[solver.name] || 0 }} solved ·
+              {{ stats.failed_by_tool?.[solver.name] || 0 }} unsolved files failed
+            </span>
+            <v-btn
+              size="small"
+              color="primary"
+              variant="outlined"
+              prepend-icon="mdi-restore"
+              :disabled="!stats.failed_by_tool?.[solver.name]"
+              :loading="resettingTool === solver.name"
+              @click="resetFailures(solver.name)"
+            >
+              Reset failures
+              <v-tooltip activator="parent" location="top">
+                Let {{ solver.name }} try these files again, e.g. after a solver update
+              </v-tooltip>
+            </v-btn>
           </div>
         </template>
       </v-card-text>
@@ -391,6 +410,7 @@ import EmptyState from '@/components/ui/EmptyState.vue'
 import LoadingState from '@/components/ui/LoadingState.vue'
 import DataFileQuickActions from '@/components/datafiles/DataFileQuickActions.vue'
 import { usePlateSolveJobs } from '@/composables/usePlateSolveJobs'
+import { confirmAction } from '@/composables/useConfirm'
 import { exposureTypeColor } from '@/constants/classification'
 
 const notify = useNotifyStore()
@@ -668,6 +688,29 @@ const triggerSolve = async () => {
 }
 
 const triggerSolveSingle = (item) => startPlateSolve([item.pk], item.file_name)
+
+const resettingTool = ref('')
+const resetFailures = async (tool) => {
+  const count = stats.value?.failed_by_tool?.[tool] || 0
+  const ok = await confirmAction({
+    title: `Reset the failures of ${tool}?`,
+    text: `${tool} will try the ${count} unsolved file(s) it found no solution for again in the next `
+      + 'automatic plate solving runs (e.g. after installing a new version).',
+    confirmText: 'Reset failures',
+    color: 'primary',
+  })
+  if (!ok) return
+  resettingTool.value = tool
+  try {
+    const res = await api.resetPlateSolveFailures(tool)
+    notify.success(`${res.reset} failure(s) of ${tool} reset`)
+    await fetchStats()
+  } catch {
+    // notify handled by the API layer
+  } finally {
+    resettingTool.value = ''
+  }
+}
 
 onMounted(() => {
   fetchStats()

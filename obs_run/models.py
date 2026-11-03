@@ -351,10 +351,6 @@ class DataFile(models.Model):
     plate_solve_attempted_at = models.DateTimeField(null=True, blank=True)
     plate_solve_error = models.TextField(null=True, blank=True)
     plate_solve_tool = models.CharField(max_length=50, null=True, blank=True)
-    plate_solve_attempts = models.PositiveIntegerField(
-        default=0,
-        help_text='Failed plate solving attempts since the last solution (retry backoff).'
-    )
     re_evaluated_after_plate_solve = models.BooleanField(
         default=False,
         help_text='True if re_evaluate_plate_solved_files has processed this file (avoids double evaluation).'
@@ -595,6 +591,27 @@ class SpectrographSuggestion(models.Model):
 
     def __str__(self):
         return f"SpectrographSuggestion(datafile={self.datafile_id}, run={self.run_majority}, token={self.path_token})"
+
+
+class PlateSolveFailure(models.Model):
+    """
+    A plate solver found no solution for a file (nearby and blind search). Each solver gets one chance
+    per file: the automatic plate solving only tries solvers without a failure here. Reset per solver
+    in the admin, e.g. after installing a new solver version (obs_run.plate_solving).
+    """
+    datafile = models.ForeignKey(DataFile, on_delete=models.CASCADE, related_name='plate_solve_failures')
+    tool = models.CharField(max_length=50)
+    error = models.TextField(blank=True, default='')
+    failed_at = models.DateTimeField()
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['datafile', 'tool'], name='plate_solve_failure_unique_tool'),
+        ]
+        indexes = [models.Index(fields=['tool'], name='psf_tool_idx')]
+
+    def __str__(self):
+        return f"PlateSolveFailure(datafile={self.datafile_id}, tool={self.tool})"
 
 
 class HeuristicReport(models.Model):

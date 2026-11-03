@@ -673,15 +673,15 @@ PLATE_SOLVING_MIN_RADIUS=0.1  # Minimum search radius in degrees
 PLATE_SOLVING_NEARBY_SEARCH_RADIUS=5.0  # Search radius (deg) for nearby mode when ra/dec known
 PLATE_SOLVING_TIMEOUT_SECONDS=600  # Time per file and search mode (ASTAP: all retries together)
 PLATE_SOLVING_BATCH_SIZE=10  # Files processed per Celery Beat run
-PLATE_SOLVING_RETRY_HOURS=6  # Pause before a failed file is tried again (doubles with every failure)
-PLATE_SOLVING_RETRY_MAX_DAYS=30  # Longest pause between attempts
 
 # Re-evaluation of plate-solved files (object association)
 PLATE_SOLVING_RE_EVAL_COORD_THRESHOLD_ARCMIN=5.0  # Arcmin: re-eval when WCS differs from header by more
 PLATE_SOLVING_RE_EVAL_BATCH_SIZE=50  # Files per re-evaluation run
 ```
 
-3. Ensure Celery Beat is running (see Celery section). The plate solving task runs every 30 minutes by default and processes up to `PLATE_SOLVING_BATCH_SIZE` files per run: files never attempted first, then failed files whose retry pause has passed (6 h after the first failure, then 12 h, 24 h, ... up to 30 days). The reasons of every solver are stored in `plate_solve_error` (e.g. `astap nearby: no solution found; watney blind: ...`).
+3. Ensure Celery Beat is running (see Celery section). The plate solving task runs every 30 minutes by default and processes up to `PLATE_SOLVING_BATCH_SIZE` files per run, files never attempted first. **Each solver gets one chance per file:** when a solver finds no solution (nearby and blind search), this is recorded (`PlateSolveFailure`) and the solver is not tried on that file again. Files stay in the queue only while an available solver has not failed for them yet, e.g. a newly installed solver. Problems of the installation (executable or star database missing) are not recorded as failures. The reasons of every solver are stored in `plate_solve_error` (e.g. `astap nearby: no solution found; watney blind: ...`).
+
+Admin → Plate Solving shows per solver how many unsolved files it failed for; **Reset failures** lets the solver try them again (e.g. after installing a new version of the solver). API: `POST /api/admin/datafiles/plate-solving/reset-failures/` with `{"tool": "astap"}` (or `"all"`). Triggering plate solving for selected files in the admin or the data file list runs in the background and tries all solvers again.
 
 **How ASTAP is used** (`obs_run/astap_solver.py`): archive files are never modified. ASTAP runs in a temporary directory (`-o`, no `-update`) and the solution is read from its `.wcs` file. Raw unsigned 16-bit frames are only linked there; float data, NaN or negative values (stacks, calibrated frames) get a 16-bit copy without the old WCS, stretched linearly and, if that fails, with an asinh stretch. "No solution" is retried with fewer image stars (`-s 100`, `-s 50`); raw one-shot-colour frames get `-check y`. A solution is only stored if both axes have the same scale and rotation, the image corners map to distinct sky positions and the pixel scale is within 20% of the value expected from the header.
 
@@ -703,7 +703,7 @@ The Redis override takes precedence over the `PLATE_SOLVING_ENABLED` setting. If
   python manage.py plate_solve_files --limit 100 --rate 2  # Max 2 files per minute
   python manage.py plate_solve_files --dry-run  # Preview without processing
   python manage.py plate_solve_files --force  # Re-solve already solved files
-  python manage.py plate_solve_files --retry-failed  # Include failed files in their retry pause (e.g. after installing ASTAP)
+  python manage.py plate_solve_files --retry-failed  # Also try solvers that already failed for a file
   python manage.py plate_solve_files --tool astap  # Only use one solver
   python manage.py plate_solve_files --tool astap --compare --limit 20  # Re-solve solved files without saving, report the deviation
   ```

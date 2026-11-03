@@ -31,10 +31,10 @@ from adminops.watchdog_status import watchdog_errors_reset, watchdog_status_get
 from objects.models import Identifier, Object
 from obs_run.api.serializers import DataFileSerializer
 from obs_run.api.views import DataFilesPagination
-from obs_run.models import DataFile, ObservationRun
+from obs_run.models import DataFile, ObservationRun, PlateSolveFailure
 from obs_run.plate_solving import (
     PlateSolvingService,
-    retry_due_filter,
+    reset_plate_solve_failures,
     solver_status,
 )
 from obs_run.tasks import (
@@ -1903,15 +1903,43 @@ def admin_plate_solve_stats(request):
             row['plate_solve_tool'] or 'unknown': row['count']
             for row in queryset.filter(plate_solved=True).values('plate_solve_tool').annotate(count=Count('pk'))
         }
-        # Waiting for the retry pause after failed attempts (plate_solve_candidates skips them)
-        stats['waiting_for_retry'] = queryset.filter(plate_solved=False, plate_solve_attempted_at__isnull=False) \
-            .exclude(retry_due_filter()).count()
+        # Unsolved files each solver found no solution for (it is not tried on them again)
+        unsolved = queryset.filter(plate_solved=False)
+        stats['failed_by_tool'] = {
+            row['tool']: row['count']
+            for row in PlateSolveFailure.objects.filter(datafile__in=unsolved.values('pk'))
+            .values('tool').annotate(count=Count('pk'))
+        }
         stats['solvers'] = solver_status()
+        available = [solver['name'] for solver in stats['solvers'] if solver['available']]
+        # Unsolved files no available solver will try any more
+        stats['exhausted'] = unsolved.annotate(
+            failed_solvers=Count('plate_solve_failures', filter=Q(plate_solve_failures__tool__in=available)),
+        ).filter(failed_solvers__gte=len(available)).count() if available else 0
 
         return Response(stats)
     except Exception as e:
         logger.exception(f'Error getting plate solve stats: {e}')
         return Response({'error': f'Unexpected error: {str(e)}'}, status=500)
+
+
+@extend_schema(
+    summary='Forget the recorded plate solving failures of a solver',
+    parameters=[],
+    responses=JSON_OBJECT_RESPONSE,
+    request=EmptyObjectSerializer)
+@api_view(['POST'])
+@permission_classes([IsAuthenticated, HasPerm('acl_datafiles_plate_solve')])
+def admin_reset_plate_solve_failures(request):
+    """
+    Body: {"tool": "astap"} (or "all"). The solver is tried again on the files it failed for, e.g.
+    after installing a new version; the automatic plate solving picks them up in its next runs.
+    """
+    tool = str(request.data.get('tool') or '').strip()
+    if not tool:
+        return Response({'detail': 'tool is required ("all" for every solver)'}, status=400)
+    deleted = reset_plate_solve_failures(None if tool == 'all' else tool)
+    return Response({'tool': tool, 'reset': deleted})
 
 
 @extend_schema(

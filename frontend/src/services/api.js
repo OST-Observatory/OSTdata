@@ -553,6 +553,10 @@ export const api = {
     return fetchWithAuth(`/admin/datafiles/plate-solving/trigger/status/?${params}`)
   },
   getPlateSolveStats: () => fetchWithAuth('/admin/datafiles/plate-solving/stats/'),
+  resetPlateSolveFailures: (tool) => fetchWithAuth('/admin/datafiles/plate-solving/reset-failures/', {
+    method: 'POST',
+    body: JSON.stringify({ tool }),
+  }),
   getPlateSolvingTaskEnabled: () => fetchWithAuth('/admin/datafiles/plate-solving/task-enabled/'),
   setPlateSolvingTaskEnabled: (enabled) => fetchWithAuth('/admin/datafiles/plate-solving/task-enabled/set/', {
     method: 'POST',
