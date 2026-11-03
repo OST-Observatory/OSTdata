@@ -509,6 +509,10 @@ class DataFile(models.Model):
             models.Index(fields=['egain'], name='df_egain_idx'),
             models.Index(fields=['binning_x', 'binning_y'], name='df_binning_idx'),
         ]
+        constraints = [
+            # One entry per file (two concurrent ingests of the same file created duplicates)
+            models.UniqueConstraint(fields=['datafile'], name='datafile_unique_path'),
+        ]
 
 
 class DownloadJob(models.Model):

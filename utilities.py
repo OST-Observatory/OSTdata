@@ -1333,7 +1333,17 @@ def add_new_data_file(path_to_file, observation_run, print_to_terminal=False):
         file_size=file_size,
         content_hash=content_hash,
     )
-    data_file.save()
+    from django.db import IntegrityError, transaction
+
+    try:
+        with transaction.atomic():
+            data_file.save()
+    except IntegrityError:
+        # Added concurrently since the check above (e.g. watchdog and the scan for missing files):
+        # the path is unique, the other process keeps its entry
+        logger.warning("Duplicate path in run %s: %s was added concurrently, skipping",
+                       getattr(observation_run, 'name', '?'), str(abs_path))
+        return False
 
     #   Populate header info (exposure_type, ra, dec, etc.) and the image quality before ML and evaluation
     try:

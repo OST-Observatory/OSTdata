@@ -426,6 +426,12 @@ class Handler(FileSystemEventHandler):
             #   Find and update data file
             try:
                 data_file = DataFile.objects.get(datafile=src_path)
+                # Moved over a tracked file: the destination now holds the moved content, its old entry
+                # is stale (and paths are unique)
+                for stale in DataFile.objects.filter(datafile=dest_path).exclude(pk=data_file.pk):
+                    logger.info("[ACTION] Removing DataFile #%s: %s was replaced by the moved file",
+                                stale.pk, dest_path)
+                    stale.delete()
                 logger.info("[ACTION] Updating DataFile #%s path to new location", data_file.pk)
                 data_file.datafile = dest_path
                 try:

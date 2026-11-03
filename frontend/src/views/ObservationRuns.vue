@@ -367,6 +367,7 @@
               class="mx-1 pagination-btn"
               aria-label="First page"
             >
+              <v-icon>mdi-page-first</v-icon>
               <v-tooltip activator="parent" location="top">First page</v-tooltip>
             </v-btn>
             <v-btn
@@ -377,6 +378,7 @@
               class="mx-1 pagination-btn"
               aria-label="Previous page"
             >
+              <v-icon>mdi-chevron-left</v-icon>
               <v-tooltip activator="parent" location="top">Previous page</v-tooltip>
             </v-btn>
             <v-btn
@@ -387,6 +389,7 @@
               class="mx-1 pagination-btn"
               aria-label="Next page"
             >
+              <v-icon>mdi-chevron-right</v-icon>
               <v-tooltip activator="parent" location="top">Next page</v-tooltip>
             </v-btn>
             <v-btn
@@ -397,6 +400,7 @@
               class="mx-1 pagination-btn"
               aria-label="Last page"
             >
+              <v-icon>mdi-page-last</v-icon>
               <v-tooltip activator="parent" location="top">Last page</v-tooltip>
             </v-btn>
             <v-btn

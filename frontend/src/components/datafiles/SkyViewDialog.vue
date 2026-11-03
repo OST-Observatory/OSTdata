@@ -10,6 +10,7 @@
         <span class="text-truncate">Sky view: {{ skyViewFile?.file_name }}</span>
         <v-spacer />
         <v-btn icon="mdi-close" variant="text" size="small" aria-label="Close" @click="skyViewOpen = false">
+          <v-icon>mdi-close</v-icon>
           <v-tooltip activator="parent" location="bottom">Close</v-tooltip>
         </v-btn>
       </v-card-title>
