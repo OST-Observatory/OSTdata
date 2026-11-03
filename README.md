@@ -650,14 +650,16 @@ PLATE_SOLVING_ENABLED=true
    not installed are skipped (Admin → Plate Solving shows which solvers are available).
 
    **ASTAP** (recommended): install the Linux command line version `astap_cli` and a star database
-   from https://www.hnsky.org/astap.htm (D50 for fields up to about 0.5°, D80 for larger fields; by
-   default the database is installed to `/opt/astap`). Check with `astap_cli -h`; the Celery worker
-   user needs read access to the database files.
+   from https://www.hnsky.org/astap.htm (e.g. D80 or D50; by default installed to `/opt/astap`).
+   `astap_cli` only looks for the database next to its own executable; the archive therefore passes
+   the database directory with `-d` (`ASTAP_DATABASE_DIR`, or found automatically in the directory
+   of `astap_cli` and `/opt/astap`). Check with `astap_cli -h`; the Celery worker user needs read
+   access to the database files.
 
 ```
 # ASTAP-specific settings
 ASTAP_PATH=astap_cli  # Path to the astap_cli executable (or name in PATH)
-ASTAP_DATABASE_DIR=  # Star database directory (-d); empty: ASTAP's default (/opt/astap)
+ASTAP_DATABASE_DIR=  # Star database directory (-d); empty: found automatically (directory of astap_cli, /opt/astap)
 ASTAP_DATABASE=  # Star database name (-D), e.g. d50; empty: ASTAP's choice
 ASTAP_TIMEOUT_SECONDS=120  # Timeout of a single ASTAP call
 ASTAP_WORK_DIR=  # Temporary links/copies and ASTAP output; empty: system temp directory

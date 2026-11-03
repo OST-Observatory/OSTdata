@@ -349,7 +349,8 @@ WATNEY_SUPPORTED_FORMATS = env.list('WATNEY_SUPPORTED_FORMATS', default=['fits',
 
 # ASTAP-specific settings (obs_run/astap_solver.py): command line version astap_cli
 ASTAP_PATH = env.str('ASTAP_PATH', default='astap_cli')
-# Star database directory (-d) and name (-D, e.g. d50); empty: ASTAP's own choice and location
+# Star database directory (-d) and name (-D, e.g. d80); empty: directory found automatically (next to
+# astap_cli or /opt/astap; astap_cli itself only looks next to its executable), ASTAP's database choice
 ASTAP_DATABASE_DIR = env.str('ASTAP_DATABASE_DIR', default='')
 ASTAP_DATABASE = env.str('ASTAP_DATABASE', default='')
 # Timeout of one ASTAP call; all calls of one search (retries) share PLATE_SOLVING_TIMEOUT_SECONDS

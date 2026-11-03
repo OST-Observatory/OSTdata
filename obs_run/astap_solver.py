@@ -306,18 +306,35 @@ class AstapSolver(PlateSolver):
         dirs = [Path(executable).resolve().parent] if executable else []
         return dirs + [Path('/opt/astap'), Path('/usr/share/astap'), Path('/usr/local/opt/astap')]
 
-    def installed_databases(self) -> List[str]:
-        """Star databases found next to ASTAP or in ASTAP_DATABASE_DIR (e.g. ['d50'])."""
+    @staticmethod
+    def _databases_in(directory) -> List[str]:
         found = set()
-        for directory in self._database_dirs():
-            try:
-                for entry in directory.iterdir():
-                    match = re.match(r'^([a-z]\d\d)_\d{4}\.\d+$', entry.name, re.IGNORECASE)
-                    if match:
-                        found.add(match.group(1).lower())
-            except OSError:
-                continue
+        try:
+            for entry in Path(directory).iterdir():
+                match = re.match(r'^([a-z]\d\d)_\d{4}\.\d+$', entry.name, re.IGNORECASE)
+                if match:
+                    found.add(match.group(1).lower())
+        except OSError:
+            pass
         return sorted(found)
+
+    def database_location(self) -> Optional[str]:
+        """
+        Directory passed to ASTAP with -d: ASTAP_DATABASE_DIR, else the first directory with a star
+        database. Without -d, astap_cli only looks next to its own executable, so a database in
+        /opt/astap is "not found" when astap_cli is called e.g. from /usr/local/bin.
+        """
+        if self.database_dir:
+            return self.database_dir
+        for directory in self._database_dirs():
+            if self._databases_in(directory):
+                return str(directory)
+        return None
+
+    def installed_databases(self) -> List[str]:
+        """Star databases in the directory ASTAP is told to use (e.g. ['d80'])."""
+        location = self.database_location()
+        return self._databases_in(location) if location else []
 
     def describe(self) -> Dict:
         executable = self._executable()
@@ -335,9 +352,10 @@ class AstapSolver(PlateSolver):
             logger.debug('ASTAP version check failed: %s', exc)
         databases = self.installed_databases()
         selected = self.database or 'automatic'
+        location = self.database_location()
         info['details'] = (
-            f"databases: {', '.join(databases) if databases else 'none found (ASTAP_DATABASE_DIR)'}; "
-            f'selected: {selected}'
+            f"databases: {', '.join(databases) if databases else 'none found (ASTAP_DATABASE_DIR)'}"
+            f"{f' in {location}' if databases else ''}; selected: {selected}"
         )
         return info
 
@@ -359,8 +377,9 @@ class AstapSolver(PlateSolver):
             cmd += ['-s', str(max_stars)]
         if check_pattern:
             cmd += ['-check', 'y']
-        if self.database_dir:
-            cmd += ['-d', self.database_dir]
+        database_dir = self.database_location()
+        if database_dir:
+            cmd += ['-d', database_dir]
         if self.database:
             cmd += ['-D', self.database]
         return cmd

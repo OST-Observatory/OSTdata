@@ -127,6 +127,19 @@ class AstapSolverTest(TestCase):
         self.assertAlmostEqual(result['fieldRadius'], math.hypot(NAXIS1, NAXIS2) / 2 / 3600, places=6)
         self.assertAlmostEqual(result['fits_crpix1'], (NAXIS1 + 1) / 2)
 
+    def test_database_directory_is_found_automatically(self):
+        # astap_cli only looks next to its executable: the found directory must be passed with -d
+        empty, databases = Path(tempfile.mkdtemp()), Path(tempfile.mkdtemp())
+        (databases / 'd80_0101.1476').write_bytes(b'')
+        path = self._fits(np.full((NAXIS2, NAXIS1), 1000, dtype=np.uint16))
+        with override_settings(ASTAP_DATABASE_DIR='', ASTAP_DATABASE=''), \
+                patch.object(AstapSolver, '_database_dirs', return_value=[empty, databases]):
+            fake = FakeAstap([_wcs_header()])
+            self._solve(path, fake)
+            self.assertEqual(fake.calls[0][fake.calls[0].index('-d') + 1], str(databases))
+            self.assertNotIn('-D', fake.calls[0])
+            self.assertEqual(AstapSolver().installed_databases(), ['d80'])
+
     def test_blind_search_without_coordinates(self):
         path = self._fits(np.full((NAXIS2, NAXIS1), 1000, dtype=np.uint16))
         fake = FakeAstap([_wcs_header()])
