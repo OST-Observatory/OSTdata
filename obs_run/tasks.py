@@ -14,9 +14,8 @@ from django.conf import settings
 from django.utils import timezone
 
 from obs_run.datafile_filters import apply_datafile_filters
-from obs_run.image_quality import BAD_FLAGS as BAD_QUALITY_FLAGS
 from obs_run.models import DataFile, DownloadJob, ObservationRun
-from obs_run.plate_solving import PlateSolvingService, solve_and_update_datafile
+from obs_run.plate_solving import PlateSolvingService, plate_solve_candidates, solve_and_update_datafile
 from obs_run.utils import should_allow_auto_update
 from utilities import (
     add_new_data_file,
@@ -1107,17 +1106,11 @@ def plate_solve_pending_files(self):
     """
     Background task to plate solve pending Light frames.
     
-    Processes files where:
-    - effective_exposure_type == 'LI' (Light frames)
-    - plate_solved == False OR plate_solve_attempted_at is None
-    - wcs_override == False (don't overwrite manual values)
-    - spectrograph == 'N' (exclude spectra)
-    - spectroscopy == False (exclude files marked as spectroscopy)
-    
+    Processes files of plate_solve_candidates(): unsolved Light frames without manual WCS, no spectra,
+    never attempted files first; failed files wait for their retry pause (retry_due_filter).
+
     Processes up to PLATE_SOLVING_BATCH_SIZE files per run (default: 10).
     """
-    from django.db.models import Q
-    
     try:
         from adminops.redis_helpers import plate_solving_task_enabled_get
         redis_enabled = plate_solving_task_enabled_get()
@@ -1128,22 +1121,9 @@ def plate_solve_pending_files(self):
             return {'skipped': True, 'reason': 'disabled'}
         
         batch_size = getattr(settings, 'PLATE_SOLVING_BATCH_SIZE', 10)
-        
-        # Query for Light frames that need plate solving
-        # Exclude spectra: spectrograph != 'N' OR spectroscopy=True
-        queryset = DataFile.objects.filter(
-            Q(plate_solved=False) | Q(plate_solve_attempted_at__isnull=True),
-            wcs_override=False,
-            spectrograph='N',  # Exclude spectra (only process files without spectrograph)
-            spectroscopy=False  # Exclude files marked as spectroscopy
-        ).exclude(quality_flag__in=BAD_QUALITY_FLAGS)  # over-exposed / empty / unreadable frames
-        
-        # Annotate with effective_exposure_type and filter for Light frames
-        queryset = annotate_effective_exposure_type(queryset)
-        queryset = queryset.filter(annotated_effective_exposure_type='LI')
-        
-        # Limit to batch size
-        files_to_process = list(queryset[:batch_size])
+
+        # Unsolved Light frames, new files first; failed files wait for their retry pause
+        files_to_process = list(plate_solve_candidates()[:batch_size])
         
         if not files_to_process:
             result = {'processed': 0, 'succeeded': 0, 'failed': 0}

@@ -326,7 +326,8 @@ if ENABLE_PERSONAL_DATA_RETENTION:
 
 # Plate Solving Configuration
 PLATE_SOLVING_ENABLED = env.bool('PLATE_SOLVING_ENABLED', default=False)
-PLATE_SOLVING_TOOLS = env.list('PLATE_SOLVING_TOOLS', default=['watney'])  # Ordered list
+# Ordered list: the next solver is tried when one finds no solution; unavailable solvers are skipped
+PLATE_SOLVING_TOOLS = env.list('PLATE_SOLVING_TOOLS', default=['astap', 'watney'])
 PLATE_SOLVING_FOV_MARGIN = env.float('PLATE_SOLVING_FOV_MARGIN', default=0.2)  # 20% margin
 PLATE_SOLVING_MAX_RADIUS = env.float('PLATE_SOLVING_MAX_RADIUS', default=30.0)  # degrees
 PLATE_SOLVING_MIN_RADIUS = env.float('PLATE_SOLVING_MIN_RADIUS', default=0.11)  # degrees
@@ -339,12 +340,26 @@ PLATE_SOLVING_RE_EVAL_COORD_THRESHOLD_ARCMIN = env.float(
     'PLATE_SOLVING_RE_EVAL_COORD_THRESHOLD_ARCMIN', default=5.0
 )
 PLATE_SOLVING_RE_EVAL_BATCH_SIZE = env.int('PLATE_SOLVING_RE_EVAL_BATCH_SIZE', default=50)
+# Pause before failed files are tried again: starts at RETRY_HOURS, doubles with every failure, at most RETRY_MAX_DAYS
+PLATE_SOLVING_RETRY_HOURS = env.float('PLATE_SOLVING_RETRY_HOURS', default=6.0)
+PLATE_SOLVING_RETRY_MAX_DAYS = env.float('PLATE_SOLVING_RETRY_MAX_DAYS', default=30.0)
 
 # Watney-specific settings
 WATNEY_SOLVE_PATH = env.str('WATNEY_SOLVE_PATH', default='watney-solve')
 # Supported file formats for Watney (comma-separated, lowercase, without dot)
 # Default: fits,fit,fts,tiff,tif (Watney does not support PNG)
 WATNEY_SUPPORTED_FORMATS = env.list('WATNEY_SUPPORTED_FORMATS', default=['fits', 'fit', 'fts', 'tiff', 'tif'])
+
+# ASTAP-specific settings (obs_run/astap_solver.py): command line version astap_cli
+ASTAP_PATH = env.str('ASTAP_PATH', default='astap_cli')
+# Star database directory (-d) and name (-D, e.g. d50); empty: ASTAP's own choice and location
+ASTAP_DATABASE_DIR = env.str('ASTAP_DATABASE_DIR', default='')
+ASTAP_DATABASE = env.str('ASTAP_DATABASE', default='')
+# Timeout of one ASTAP call; all calls of one search (retries) share PLATE_SOLVING_TIMEOUT_SECONDS
+ASTAP_TIMEOUT_SECONDS = env.int('ASTAP_TIMEOUT_SECONDS', default=120)
+# Directory for the temporary links/copies and ASTAP's output files (empty: system temp directory)
+ASTAP_WORK_DIR = env.str('ASTAP_WORK_DIR', default='')
+ASTAP_SUPPORTED_FORMATS = env.list('ASTAP_SUPPORTED_FORMATS', default=['fits', 'fit', 'fts', 'tiff', 'tif'])
 
 # Enable Celery Beat schedule for plate solving if enabled
 if PLATE_SOLVING_ENABLED:

@@ -31,7 +31,12 @@ from objects.models import Identifier, Object
 from obs_run.api.serializers import DataFileSerializer
 from obs_run.api.views import DataFilesPagination
 from obs_run.models import DataFile, ObservationRun
-from obs_run.plate_solving import PlateSolvingService, solve_and_update_datafile
+from obs_run.plate_solving import (
+    PlateSolvingService,
+    retry_due_filter,
+    solve_and_update_datafile,
+    solver_status,
+)
 from obs_run.tasks import (
     check_data_files,
     cleanup_expired_downloads,
@@ -1849,7 +1854,15 @@ def admin_plate_solve_stats(request):
             unsolved=Count('pk', filter=Q(plate_solved=False)),
             attempted=Count('pk', filter=Q(plate_solve_attempted_at__isnull=False)),
         )
-        
+        stats['solved_by_tool'] = {
+            row['plate_solve_tool'] or 'unknown': row['count']
+            for row in queryset.filter(plate_solved=True).values('plate_solve_tool').annotate(count=Count('pk'))
+        }
+        # Waiting for the retry pause after failed attempts (plate_solve_candidates skips them)
+        stats['waiting_for_retry'] = queryset.filter(plate_solved=False, plate_solve_attempted_at__isnull=False) \
+            .exclude(retry_due_filter()).count()
+        stats['solvers'] = solver_status()
+
         return Response(stats)
     except Exception as e:
         logger.exception(f'Error getting plate solve stats: {e}')

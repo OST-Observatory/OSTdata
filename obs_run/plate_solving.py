@@ -1,8 +1,8 @@
 """
 Plate Solving Framework
 
-Provides a flexible framework for plate solving with support for multiple tools.
-Currently supports Watney, with extensibility for additional solvers.
+Provides a flexible framework for plate solving with support for multiple tools: Watney and ASTAP
+(obs_run/astap_solver.py), tried in the order of PLATE_SOLVING_TOOLS.
 """
 
 from __future__ import annotations
@@ -13,6 +13,7 @@ import os
 import shutil
 import subprocess
 from abc import ABC, abstractmethod
+from datetime import timedelta
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -39,7 +40,7 @@ class PlateSolver(ABC):
     """Abstract base class for plate solving tools."""
 
     @abstractmethod
-    def solve(self, image_path: str, min_radius: float, max_radius: float) -> Dict:
+    def solve(self, image_path: str, min_radius: float, max_radius: float, hints: Optional[Dict] = None) -> Dict:
         """
         Attempt to solve an image.
 
@@ -47,6 +48,7 @@ class PlateSolver(ABC):
             image_path: Path to the image file
             min_radius: Minimum field radius in degrees
             max_radius: Maximum field radius in degrees
+            hints: Optional data from the archive: fov_x, fov_y (degrees), naxis1, naxis2
 
         Returns:
             Dictionary with solution data (must include 'success': True)
@@ -75,6 +77,11 @@ class PlateSolver(ABC):
         """
         return []  # Default: no formats specified (all formats allowed)
 
+    def describe(self) -> Dict:
+        """Status for the admin page: name, available, path, version, details."""
+        return {'name': self.get_name(), 'available': self.is_available(), 'path': None, 'version': None,
+                'details': ''}
+
     def solve_nearby(
         self,
         image_path: str,
@@ -82,6 +89,7 @@ class PlateSolver(ABC):
         dec_deg: float,
         field_radius: float,
         search_radius: float,
+        hints: Optional[Dict] = None,
     ) -> Optional[Dict]:
         """
         Attempt to solve an image using known approximate coordinates (nearby/localized search).
@@ -181,7 +189,21 @@ class WatneySolver(PlateSolver):
             logger.warning(f"Error checking watney-solve availability: {e}")
             return False
 
-    def solve(self, image_path: str, min_radius: float, max_radius: float) -> Dict:
+    def describe(self) -> Dict:
+        path = Path(self.executable_path)
+        executable = str(path) if path.is_file() else shutil.which(self.executable_path)
+        info = {'name': self.get_name(), 'available': self.is_available(),
+                'path': executable or self.executable_path, 'version': None, 'details': ''}
+        if executable:
+            try:
+                result = subprocess.run([executable, '--version'], capture_output=True, text=True, timeout=5)
+                lines = (result.stdout or result.stderr or '').strip().splitlines()
+                info['version'] = lines[0][:80] if result.returncode == 0 and lines else None
+            except Exception:
+                pass
+        return info
+
+    def solve(self, image_path: str, min_radius: float, max_radius: float, hints: Optional[Dict] = None) -> Dict:
         """
         Solve an image using Watney.
 
@@ -258,6 +280,7 @@ class WatneySolver(PlateSolver):
         dec_deg: float,
         field_radius: float,
         search_radius: float,
+        hints: Optional[Dict] = None,
     ) -> Optional[Dict]:
         """
         Solve using Watney nearby mode (known approximate coordinates).
@@ -321,42 +344,67 @@ class WatneySolver(PlateSolver):
             raise RuntimeError(f"Unexpected error running Watney nearby: {e}")
 
 
+def _solver_classes() -> Dict[str, type]:
+    from obs_run.astap_solver import AstapSolver
+
+    return {'astap': AstapSolver, 'watney': WatneySolver}
+
+
+def configured_solvers() -> List[PlateSolver]:
+    """Solver instances in the order of PLATE_SOLVING_TOOLS (available or not)."""
+    classes = _solver_classes()
+    solvers = []
+    for name in getattr(settings, 'PLATE_SOLVING_TOOLS', ['astap', 'watney']):
+        if name in classes:
+            solvers.append(classes[name]())
+        else:
+            logger.warning('Unknown plate solving tool: %s', name)
+    return solvers
+
+
+def solver_status() -> List[Dict]:
+    """Configured solvers with availability, path, version and details (admin page)."""
+    status = []
+    for solver in configured_solvers():
+        try:
+            status.append(solver.describe())
+        except Exception as exc:
+            status.append({'name': solver.get_name(), 'available': False, 'path': None, 'version': None,
+                           'details': f'status check failed: {exc}'})
+    return status
+
+
 class PlateSolvingService:
     """Service that coordinates multiple plate solvers with fallback support."""
 
-    def __init__(self, solvers: Optional[List[PlateSolver]] = None):
+    def __init__(self, solvers: Optional[List[PlateSolver]] = None, tools: Optional[List[str]] = None):
         """
         Initialize the plate solving service.
 
         Args:
             solvers: List of solver instances to try in order. If None, creates from settings.
+            tools: Only use these configured solvers (e.g. ['astap'] to compare one solver).
         """
         if solvers is None:
-            solvers = self._create_solvers_from_settings()
+            solvers = self._create_solvers_from_settings(tools)
         self.solvers = solvers
+        # (tool, message) of the failed attempts of the last solve() call
+        self.last_errors: List[tuple] = []
 
-    def _create_solvers_from_settings(self) -> List[PlateSolver]:
-        """Create solver instances from Django settings."""
+    def _create_solvers_from_settings(self, tools: Optional[List[str]] = None) -> List[PlateSolver]:
+        """Available solvers from PLATE_SOLVING_TOOLS (optionally restricted to `tools`)."""
         solver_list = []
-        tool_names = getattr(settings, 'PLATE_SOLVING_TOOLS', ['watney'])
-        watney_path = getattr(settings, 'WATNEY_SOLVE_PATH', 'watney-solve')
-
-        logger.info(f"Creating plate solvers from settings: tools={tool_names}, watney_path={watney_path}")
-
-        for tool_name in tool_names:
-            if tool_name == 'watney':
-                solver = WatneySolver()
-                if solver.is_available():
-                    solver_list.append(solver)
-                    logger.info(f"Watney solver available at: {solver.executable_path}")
-                else:
-                    logger.warning(f"Watney solver configured but not available (path: {solver.executable_path})")
+        for solver in configured_solvers():
+            if tools and solver.get_name() not in tools:
+                continue
+            if solver.is_available():
+                solver_list.append(solver)
+                logger.info('Plate solver %s available', solver.get_name())
             else:
-                logger.warning(f"Unknown plate solving tool: {tool_name}")
-
+                logger.warning('Plate solver %s configured but not available', solver.get_name())
         if not solver_list:
-            logger.error(f"No plate solving tools available. Configured tools: {tool_names}")
-
+            logger.error('No plate solving tools available. Configured tools: %s',
+                         getattr(settings, 'PLATE_SOLVING_TOOLS', None))
         return solver_list
 
     def solve(
@@ -368,6 +416,8 @@ class PlateSolvingService:
         dec_deg: Optional[float] = None,
         fov_x: float = -1,
         fov_y: float = -1,
+        naxis1: int = 0,
+        naxis2: int = 0,
     ) -> Optional[Dict]:
         """
         Attempt to solve an image using configured solvers in order.
@@ -384,11 +434,14 @@ class PlateSolvingService:
             fov_y: Field of view height in degrees (for nearby field-radius)
 
         Returns:
-            Solution dictionary if successful, None if all solvers failed
+            Solution dictionary if successful, None if all solvers failed (reasons in last_errors)
         """
+        self.last_errors = []
         if not self.solvers:
             logger.error("No plate solving tools available")
+            self.last_errors.append(('-', 'no plate solving tools available'))
             return None
+        hints = {'fov_x': fov_x, 'fov_y': fov_y, 'naxis1': naxis1, 'naxis2': naxis2}
 
         # Check file extension against supported formats
         image_path_obj = Path(image_path)
@@ -423,7 +476,7 @@ class PlateSolvingService:
                 try:
                     logger.info(f"Attempting nearby plate solve with {solver.get_name()} for {image_path}")
                     result = solver.solve_nearby(
-                        image_path, nearby_ra, nearby_dec, field_radius, search_radius
+                        image_path, nearby_ra, nearby_dec, field_radius, search_radius, hints=hints
                     )
                     if result and result.get('success'):
                         logger.info(f"Nearby plate solve successful with {solver.get_name()}")
@@ -431,16 +484,18 @@ class PlateSolvingService:
                         return result
                 except Exception as e:
                     logger.warning(f"Nearby plate solve failed with {solver.get_name()}, trying blind: {e}")
+                    self.last_errors.append((f'{solver.get_name()} nearby', str(e)))
 
             # Blind search (or fallback after nearby failure)
             try:
                 logger.info(f"Attempting blind plate solve with {solver.get_name()} for {image_path}")
-                result = solver.solve(image_path, min_radius, max_radius)
+                result = solver.solve(image_path, min_radius, max_radius, hints=hints)
                 logger.info(f"Plate solve successful with {solver.get_name()}")
                 result['tool'] = solver.get_name()
                 return result
             except Exception as e:
                 logger.warning(f"Plate solve failed with {solver.get_name()}: {e}")
+                self.last_errors.append((f'{solver.get_name()} blind', str(e)))
                 continue
 
         logger.error(f"All plate solvers failed for {image_path}")
@@ -483,6 +538,54 @@ class PlateSolvingService:
         return min_radius, max_radius
 
 
+def retry_due_filter(now=None):
+    """
+    Q for files due for a plate solving attempt: never attempted, or the pause after the last failure
+    has passed. The pause doubles with each failed attempt: PLATE_SOLVING_RETRY_HOURS (6 h), 12 h,
+    24 h, ... up to PLATE_SOLVING_RETRY_MAX_DAYS (30 days), so unsolvable files do not use the solver
+    time of every run.
+    """
+    from django.db.models import Q
+
+    now = now or timezone.now()
+    base = timedelta(hours=float(getattr(settings, 'PLATE_SOLVING_RETRY_HOURS', 6)))
+    cap = timedelta(days=float(getattr(settings, 'PLATE_SOLVING_RETRY_MAX_DAYS', 30)))
+    due = Q(plate_solve_attempted_at__isnull=True)
+    attempts = 1
+    while base * 2 ** (attempts - 1) < cap:
+        # Files attempted before the counter existed have 0 attempts: first pause
+        count = Q(plate_solve_attempts__lte=1) if attempts == 1 else Q(plate_solve_attempts=attempts)
+        due |= count & Q(plate_solve_attempted_at__lte=now - base * 2 ** (attempts - 1))
+        attempts += 1
+    return due | Q(plate_solve_attempts__gte=attempts, plate_solve_attempted_at__lte=now - cap)
+
+
+def plate_solve_candidates(force=False, ignore_backoff=False):
+    """
+    Light frames to plate solve, never attempted first, then the longest waiting: unsolved files
+    (all files with force) without manual WCS, spectra or bad quality flags. The retry pause after
+    failures applies unless ignore_backoff (e.g. after installing another solver).
+    """
+    from django.db.models import F, Q
+
+    from obs_run.image_quality import BAD_FLAGS
+    from obs_run.models import DataFile
+    from utilities import annotate_effective_exposure_type
+
+    queryset = DataFile.objects.filter(
+        wcs_override=False,
+        spectrograph='N',  # Exclude spectra (only process files without spectrograph)
+        spectroscopy=False,  # Exclude files marked as spectroscopy
+    ).exclude(quality_flag__in=BAD_FLAGS)  # over-exposed / empty / unreadable frames
+    if not force:
+        queryset = queryset.filter(Q(plate_solved=False) | Q(plate_solve_attempted_at__isnull=True))
+        if not ignore_backoff:
+            queryset = queryset.filter(retry_due_filter())
+    queryset = annotate_effective_exposure_type(queryset)
+    queryset = queryset.filter(annotated_effective_exposure_type='LI')
+    return queryset.order_by(F('plate_solve_attempted_at').asc(nulls_first=True), 'pk')
+
+
 def _maybe_enqueue_aux_objects_after_wcs(datafile) -> None:
     """Schedule aux-object SIMBAD lookup when a new plate solution was saved."""
     if not getattr(settings, 'AUX_OBJECTS_AUTO_ON_WCS', True):
@@ -503,6 +606,20 @@ def _maybe_enqueue_aux_objects_after_wcs(datafile) -> None:
             run.pk,
             exc,
         )
+
+
+def _failure_message(errors) -> str:
+    """'astap nearby: no solution found; watney blind: ...' within the 500 characters stored."""
+    parts = [f'{tool}: {" ".join(str(message).split())[:160]}' for tool, message in errors]
+    return '; '.join(parts)[:500] or 'Plate solving returned no solution'
+
+
+def _store_failure(datafile, error_msg, save):
+    datafile.plate_solve_attempted_at = timezone.now()
+    datafile.plate_solve_error = error_msg
+    datafile.plate_solve_attempts = (datafile.plate_solve_attempts or 0) + 1
+    if save:
+        datafile.save(update_fields=['plate_solve_attempted_at', 'plate_solve_error', 'plate_solve_attempts'])
 
 
 def solve_and_update_datafile(datafile, service=None, save=True):
@@ -533,10 +650,7 @@ def solve_and_update_datafile(datafile, service=None, save=True):
         image_path = Path(datafile.datafile)
         if not image_path.exists():
             error_msg = f"File not found: {image_path}"
-            if save:
-                datafile.plate_solve_attempted_at = timezone.now()
-                datafile.plate_solve_error = error_msg
-                datafile.save(update_fields=['plate_solve_attempted_at', 'plate_solve_error'])
+            _store_failure(datafile, error_msg, save)
             return {'success': False, 'error': error_msg, 'tool': None}
         
         # Check if any solver supports this file format
@@ -551,10 +665,7 @@ def solve_and_update_datafile(datafile, service=None, save=True):
         if not supported_by_any:
             error_msg = f"File format '{file_ext}' not supported by any available plate solver"
             logger.warning(f"Skipping plate solve for {image_path}: {error_msg}")
-            if save:
-                datafile.plate_solve_attempted_at = timezone.now()
-                datafile.plate_solve_error = error_msg
-                datafile.save(update_fields=['plate_solve_attempted_at', 'plate_solve_error'])
+            _store_failure(datafile, error_msg, save)
             return {'success': False, 'error': error_msg, 'tool': None}
         
         # Calculate radius from FOV
@@ -572,6 +683,8 @@ def solve_and_update_datafile(datafile, service=None, save=True):
             dec_deg=datafile.dec,
             fov_x=datafile.fov_x if datafile.fov_x > 0 else -1,
             fov_y=datafile.fov_y if datafile.fov_y > 0 else -1,
+            naxis1=int(datafile.naxis1 or 0),
+            naxis2=int(datafile.naxis2 or 0),
         )
         
         if solution and solution.get('success'):
@@ -579,6 +692,7 @@ def solve_and_update_datafile(datafile, service=None, save=True):
             datafile.plate_solved = True
             datafile.plate_solve_attempted_at = timezone.now()
             datafile.plate_solve_error = None
+            datafile.plate_solve_attempts = 0
             datafile.plate_solve_tool = solution.get('tool', 'unknown')
             
             # Extract WCS fields from solution
@@ -621,18 +735,14 @@ def solve_and_update_datafile(datafile, service=None, save=True):
                 'tool': datafile.plate_solve_tool
             }
         else:
-            error_msg = "Plate solving returned success=false"
-            if save:
-                datafile.plate_solve_attempted_at = timezone.now()
-                datafile.plate_solve_error = error_msg
-                datafile.save(update_fields=['plate_solve_attempted_at', 'plate_solve_error'])
+            # The reasons of every solver and search mode (getattr: services built in tests)
+            errors = getattr(service, 'last_errors', None)
+            error_msg = _failure_message(errors if isinstance(errors, list) else [])
+            _store_failure(datafile, error_msg, save)
             return {'success': False, 'error': error_msg, 'tool': None}
             
     except Exception as e:
         logger.exception(f"Error plate solving file {datafile.pk}: {e}")
         error_msg = str(e)[:500]  # Limit error length
-        if save:
-            datafile.plate_solve_attempted_at = timezone.now()
-            datafile.plate_solve_error = error_msg
-            datafile.save(update_fields=['plate_solve_attempted_at', 'plate_solve_error'])
+        _store_failure(datafile, error_msg, save)
         return {'success': False, 'error': error_msg, 'tool': None}

@@ -351,6 +351,10 @@ class DataFile(models.Model):
     plate_solve_attempted_at = models.DateTimeField(null=True, blank=True)
     plate_solve_error = models.TextField(null=True, blank=True)
     plate_solve_tool = models.CharField(max_length=50, null=True, blank=True)
+    plate_solve_attempts = models.PositiveIntegerField(
+        default=0,
+        help_text='Failed plate solving attempts since the last solution (retry backoff).'
+    )
     re_evaluated_after_plate_solve = models.BooleanField(
         default=False,
         help_text='True if re_evaluate_plate_solved_files has processed this file (avoids double evaluation).'

@@ -1,23 +1,49 @@
 """
 Management command to plate solve existing DataFiles retroactively.
 
-Supports rate limiting to avoid overloading the server.
+Supports rate limiting to avoid overloading the server. --compare re-solves already solved files
+without saving and reports the deviation from the stored solution (e.g. ASTAP vs. Watney).
 """
 
 import logging
 import time
+import warnings
 from pathlib import Path
 
+import numpy as np
 from django.conf import settings
 from django.core.management.base import BaseCommand
-from django.db.models import Q
 
-from obs_run.image_quality import BAD_FLAGS
 from obs_run.models import DataFile
-from obs_run.plate_solving import PlateSolvingService, solve_and_update_datafile
-from utilities import annotate_effective_exposure_type
+from obs_run.plate_solving import PlateSolvingService, plate_solve_candidates, solve_and_update_datafile
 
 logger = logging.getLogger(__name__)
+
+
+def _wcs_of(datafile):
+    from astropy.wcs import WCS
+
+    from obs_run.sky_view import datafile_wcs_header
+
+    header = datafile_wcs_header(datafile)
+    if header is None:
+        return None
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        return WCS(header)
+
+
+def compare_solutions(old_wcs, new_wcs, naxis1, naxis2):
+    """(center offset, largest corner offset) in arcsec and the pixel scale ratio new/old."""
+    from astropy.coordinates import SkyCoord
+    from astropy.wcs.utils import proj_plane_pixel_scales
+
+    pixels = [[(naxis1 + 1) / 2, (naxis2 + 1) / 2], [1, 1], [naxis1, 1], [1, naxis2], [naxis1, naxis2]]
+    old = SkyCoord(*old_wcs.all_pix2world(pixels, 1).T, unit='deg')
+    new = SkyCoord(*new_wcs.all_pix2world(pixels, 1).T, unit='deg')
+    offsets = old.separation(new).arcsec
+    ratio = float(np.mean(proj_plane_pixel_scales(new_wcs)) / np.mean(proj_plane_pixel_scales(old_wcs)))
+    return float(offsets[0]), float(np.max(offsets[1:])), ratio
 
 
 class Command(BaseCommand):
@@ -46,6 +72,21 @@ class Command(BaseCommand):
             action='store_true',
             help='Re-solve already solved files (if wcs_override=False)',
         )
+        parser.add_argument(
+            '--retry-failed',
+            action='store_true',
+            help='Include failed files still in their retry pause (e.g. after installing another solver)',
+        )
+        parser.add_argument(
+            '--tool',
+            action='append',
+            help='Only use this solver (repeatable, e.g. --tool astap); default: PLATE_SOLVING_TOOLS',
+        )
+        parser.add_argument(
+            '--compare',
+            action='store_true',
+            help='Re-solve already solved files without saving and report the deviation from the stored solution',
+        )
 
     def handle(self, *args, **options):
         limit = options['limit']
@@ -60,27 +101,17 @@ class Command(BaseCommand):
         # Calculate delay between files (seconds)
         delay_seconds = 60.0 / rate
 
-        if not getattr(settings, 'PLATE_SOLVING_ENABLED', False):
+        compare = options['compare']
+        if compare:
+            # Read-only: allowed also while the plate solving task is switched off
+            dry_run = True
+            queryset = DataFile.objects.filter(plate_solved=True, wcs_crval1__isnull=False).order_by('-pk')
+        elif not getattr(settings, 'PLATE_SOLVING_ENABLED', False):
             self.stdout.write(self.style.WARNING('Plate solving is disabled in settings'))
             return
+        else:
+            queryset = plate_solve_candidates(force=force, ignore_backoff=options['retry_failed'])
 
-        # Query for files to process
-        # Exclude spectra: spectrograph != 'N' OR spectroscopy=True
-        queryset = DataFile.objects.filter(
-            wcs_override=False,
-            spectrograph='N',  # Exclude spectra (only process files without spectrograph)
-            spectroscopy=False  # Exclude files marked as spectroscopy
-        ).exclude(quality_flag__in=BAD_FLAGS)  # over-exposed / empty / unreadable frames
-        
-        if not force:
-            queryset = queryset.filter(
-                Q(plate_solved=False) | Q(plate_solve_attempted_at__isnull=True)
-            )
-        
-        # Annotate with effective_exposure_type and filter for Light frames
-        queryset = annotate_effective_exposure_type(queryset)
-        queryset = queryset.filter(annotated_effective_exposure_type='LI')
-        
         if limit:
             queryset = queryset[:limit]
         
@@ -95,7 +126,7 @@ class Command(BaseCommand):
         if dry_run:
             self.stdout.write(self.style.WARNING('DRY RUN MODE - No changes will be saved'))
         
-        service = PlateSolvingService()
+        service = PlateSolvingService(tools=options['tool'])
         if not service.solvers:
             self.stdout.write(self.style.ERROR('No plate solving tools available'))
             return
@@ -125,7 +156,24 @@ class Command(BaseCommand):
                 )
                 self.stdout.write(f'  Using radius: {min_radius:.3f} - {max_radius:.3f} degrees')
                 
-                if dry_run:
+                if compare:
+                    old_wcs = _wcs_of(datafile)
+                    result = solve_and_update_datafile(datafile, service=service, save=False)
+                    new_wcs = _wcs_of(datafile) if result['success'] else None
+                    if old_wcs is None or new_wcs is None:
+                        failed += 1
+                        self.stdout.write(self.style.ERROR(f'  ✗ {result["error"] or "no WCS to compare"}'))
+                        continue
+                    center, corner, ratio = compare_solutions(
+                        old_wcs, new_wcs, int(datafile.naxis1), int(datafile.naxis2),
+                    )
+                    succeeded += 1
+                    line = (f'  {result["tool"]}: center {center:.1f}", corners up to {corner:.1f}", '
+                            f'scale ratio {ratio:.4f}')
+                    # Corners far apart while the center matches: mirrored or rotated solution
+                    style = self.style.SUCCESS if corner < 10 and abs(ratio - 1) < 0.01 else self.style.WARNING
+                    self.stdout.write(style(line))
+                elif dry_run:
                     self.stdout.write(self.style.WARNING('  [DRY RUN] Would attempt plate solving'))
                     # Still try to solve to validate, but don't save
                     result = solve_and_update_datafile(datafile, service=service, save=False)

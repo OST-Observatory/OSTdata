@@ -636,7 +636,7 @@ You can trigger a manual refresh via:
 
 ### Optional plate solving for Light frames (Celery Beat)
 
-OSTdata can automatically plate solve Light frames (excluding spectra) using external tools like Watney. Plate solving extracts World Coordinate System (WCS) information from astronomical images, including RA/Dec coordinates, field radius, orientation, pixel scale, and FITS WCS parameters.
+OSTdata can automatically plate solve Light frames (excluding spectra) using the external solvers ASTAP and Watney. Plate solving extracts World Coordinate System (WCS) information from astronomical images, including RA/Dec coordinates, field radius, orientation, pixel scale, and FITS WCS parameters.
 
 **Configuration:**
 
@@ -646,27 +646,44 @@ OSTdata can automatically plate solve Light frames (excluding spectra) using ext
 PLATE_SOLVING_ENABLED=true
 ```
 
-2. Configure plate solving tool (Watney example):
+2. Install a solver and configure it. ASTAP is tried first, Watney is the fallback; solvers that are
+   not installed are skipped (Admin → Plate Solving shows which solvers are available).
+
+   **ASTAP** (recommended): install the Linux command line version `astap_cli` and a star database
+   from https://www.hnsky.org/astap.htm (D50 for fields up to about 0.5°, D80 for larger fields; by
+   default the database is installed to `/opt/astap`). Check with `astap_cli -h`; the Celery worker
+   user needs read access to the database files.
 
 ```
+# ASTAP-specific settings
+ASTAP_PATH=astap_cli  # Path to the astap_cli executable (or name in PATH)
+ASTAP_DATABASE_DIR=  # Star database directory (-d); empty: ASTAP's default (/opt/astap)
+ASTAP_DATABASE=  # Star database name (-D), e.g. d50; empty: ASTAP's choice
+ASTAP_TIMEOUT_SECONDS=120  # Timeout of a single ASTAP call
+ASTAP_WORK_DIR=  # Temporary links/copies and ASTAP output; empty: system temp directory
+
 # Watney-specific settings
 WATNEY_SOLVE_PATH=watney-solve  # Path to watney-solve executable
 
 # Plate solving parameters
-PLATE_SOLVING_TOOLS=watney  # Ordered list of tools to try (fallback if one fails)
+PLATE_SOLVING_TOOLS=astap,watney  # Ordered list of tools to try (fallback if one fails)
 PLATE_SOLVING_FOV_MARGIN=0.2  # 20% margin for FOV radius calculation
 PLATE_SOLVING_MAX_RADIUS=30.0  # Maximum search radius in degrees
 PLATE_SOLVING_MIN_RADIUS=0.1  # Minimum search radius in degrees
 PLATE_SOLVING_NEARBY_SEARCH_RADIUS=5.0  # Search radius (deg) for nearby mode when ra/dec known
-PLATE_SOLVING_TIMEOUT_SECONDS=600  # Timeout per file (10 minutes)
+PLATE_SOLVING_TIMEOUT_SECONDS=600  # Time per file and search mode (ASTAP: all retries together)
 PLATE_SOLVING_BATCH_SIZE=10  # Files processed per Celery Beat run
+PLATE_SOLVING_RETRY_HOURS=6  # Pause before a failed file is tried again (doubles with every failure)
+PLATE_SOLVING_RETRY_MAX_DAYS=30  # Longest pause between attempts
 
 # Re-evaluation of plate-solved files (object association)
 PLATE_SOLVING_RE_EVAL_COORD_THRESHOLD_ARCMIN=5.0  # Arcmin: re-eval when WCS differs from header by more
 PLATE_SOLVING_RE_EVAL_BATCH_SIZE=50  # Files per re-evaluation run
 ```
 
-3. Ensure Celery Beat is running (see Celery section). The plate solving task runs every 30 minutes by default and processes up to `PLATE_SOLVING_BATCH_SIZE` files per run.
+3. Ensure Celery Beat is running (see Celery section). The plate solving task runs every 30 minutes by default and processes up to `PLATE_SOLVING_BATCH_SIZE` files per run: files never attempted first, then failed files whose retry pause has passed (6 h after the first failure, then 12 h, 24 h, ... up to 30 days). The reasons of every solver are stored in `plate_solve_error` (e.g. `astap nearby: no solution found; watney blind: ...`).
+
+**How ASTAP is used** (`obs_run/astap_solver.py`): archive files are never modified. ASTAP runs in a temporary directory (`-o`, no `-update`) and the solution is read from its `.wcs` file. Raw unsigned 16-bit frames are only linked there; float data, NaN or negative values (stacks, calibrated frames) get a 16-bit copy without the old WCS, stretched linearly and, if that fails, with an asinh stretch. "No solution" is retried with fewer image stars (`-s 100`, `-s 50`); raw one-shot-colour frames get `-check y`. A solution is only stored if both axes have the same scale and rotation, the image corners map to distinct sky positions and the pixel scale is within 20% of the value expected from the header.
 
 **Admin Control:**
 
@@ -686,13 +703,18 @@ The Redis override takes precedence over the `PLATE_SOLVING_ENABLED` setting. If
   python manage.py plate_solve_files --limit 100 --rate 2  # Max 2 files per minute
   python manage.py plate_solve_files --dry-run  # Preview without processing
   python manage.py plate_solve_files --force  # Re-solve already solved files
+  python manage.py plate_solve_files --retry-failed  # Include failed files in their retry pause (e.g. after installing ASTAP)
+  python manage.py plate_solve_files --tool astap  # Only use one solver
+  python manage.py plate_solve_files --tool astap --compare --limit 20  # Re-solve solved files without saving, report the deviation
   ```
+
+  `--compare` prints for each file the offset of the image center and of the corners between the stored solution and the new one plus the pixel scale ratio. A matching center with corners far apart means a mirrored or rotated solution; use it after installing a new solver.
 
 - **Admin UI**: Navigate to Admin → Plate Solving to view unsolved files, trigger solving for specific files, and view statistics.
 
 **Nearby vs. Blind Search:**
 
-When a DataFile has valid RA/Dec coordinates in its header, the solver first tries a faster nearby (localized) search. If that fails, it falls back to blind search. Nearby search uses `--field-radius` (derived from FOV) and `--search-radius` (configurable via `PLATE_SOLVING_NEARBY_SEARCH_RADIUS`).
+When a DataFile has valid RA/Dec coordinates in its header, each solver first tries a faster nearby (localized) search. If that fails, it falls back to blind search. The search radius around the header position is `PLATE_SOLVING_NEARBY_SEARCH_RADIUS` (ASTAP `-r`, Watney `--search-radius`); Watney's `--field-radius` and ASTAP's `-fov` (image height) are derived from the FOV of the header.
 
 **Filtering:**
 

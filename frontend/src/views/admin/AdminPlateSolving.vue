@@ -22,12 +22,40 @@
           <v-col cols="12" sm="6" md="3">
             <div class="text-caption text-medium-emphasis">Unsolved</div>
             <div class="text-h6 text-warning">{{ stats.unsolved || 0 }}</div>
+            <div v-if="stats.waiting_for_retry" class="text-caption text-medium-emphasis">
+              {{ stats.waiting_for_retry }} waiting for the retry pause after failed attempts
+            </div>
           </v-col>
           <v-col cols="12" sm="6" md="3">
             <div class="text-caption text-medium-emphasis">Attempted</div>
             <div class="text-h6">{{ stats.attempted || 0 }}</div>
           </v-col>
         </v-row>
+        <template v-if="stats.solvers?.length">
+          <v-divider class="my-3" />
+          <div class="text-caption text-medium-emphasis mb-2">Solvers (tried in this order)</div>
+          <div
+            v-for="(solver, idx) in stats.solvers"
+            :key="solver.name"
+            class="d-flex align-center flex-wrap solver-row"
+          >
+            <v-chip
+              size="small"
+              :color="solver.available ? 'success' : 'error'"
+              :prepend-icon="solver.available ? 'mdi-check-circle' : 'mdi-close-circle'"
+            >
+              {{ idx + 1 }}. {{ solver.name }}
+            </v-chip>
+            <span class="text-body-2">
+              {{ solver.available ? (solver.version ? `version ${solver.version}` : 'available') : 'not available' }}
+            </span>
+            <span class="text-caption text-medium-emphasis solver-details">
+              {{ solver.path }}<template v-if="solver.details"> · {{ solver.details }}</template>
+            </span>
+            <v-spacer />
+            <span class="text-body-2">{{ stats.solved_by_tool?.[solver.name] || 0 }} files solved</span>
+          </div>
+        </template>
       </v-card-text>
     </v-card>
 
@@ -702,5 +730,14 @@ onMounted(() => {
 
 .preview-placeholder {
   min-height: 200px;
+}
+
+.solver-row {
+  gap: 8px;
+  padding: 4px 0;
+}
+
+.solver-details {
+  overflow-wrap: anywhere;
 }
 </style>
