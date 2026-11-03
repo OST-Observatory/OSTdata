@@ -548,6 +548,10 @@ export const api = {
     method: 'POST',
     body: JSON.stringify({ file_ids: fileIds }),
   }),
+  getPlateSolveTriggerStatus: (fileIds, since) => {
+    const params = new URLSearchParams({ ids: fileIds.join(','), since })
+    return fetchWithAuth(`/admin/datafiles/plate-solving/trigger/status/?${params}`)
+  },
   getPlateSolveStats: () => fetchWithAuth('/admin/datafiles/plate-solving/stats/'),
   getPlateSolvingTaskEnabled: () => fetchWithAuth('/admin/datafiles/plate-solving/task-enabled/'),
   setPlateSolvingTaskEnabled: (enabled) => fetchWithAuth('/admin/datafiles/plate-solving/task-enabled/set/', {

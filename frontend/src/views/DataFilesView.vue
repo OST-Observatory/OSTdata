@@ -462,6 +462,7 @@ import { useAuthStore } from '@/store/auth'
 import { useNotifyStore } from '@/store/notify'
 import { buildDownloadPrepMessage } from '@/config/downloadJobs'
 import { pollDownloadJobUntilReady } from '@/utils/downloadJobPoll'
+import { usePlateSolveJobs } from '@/composables/usePlateSolveJobs'
 import EmptyState from '@/components/ui/EmptyState.vue'
 import LoadingState from '@/components/ui/LoadingState.vue'
 import ClassificationEditDialog from '@/components/datafiles/ClassificationEditDialog.vue'
@@ -599,7 +600,8 @@ const headers = computed(() => [
 
 const busy = ref({ plateSolve: false, reEvaluate: false, clearOverrides: false, linkObject: false, unlinkObject: false, download: false, suggestions: false })
 const suggestionBusy = ref(null)
-const triggeringSingle = ref(null)
+// fetchFiles is a function declaration (hoisted): usable before its definition
+const { solvingIds, startPlateSolve } = usePlateSolveJobs({ onDone: () => fetchFiles() })
 const reEvalSingle = ref(null)
 const clearOverrideSingle = ref(null)
 const linkObjectSingle = ref(null)
@@ -674,7 +676,7 @@ function isLight(df) {
 
 function isActionLoading(item) {
   const pk = item?.pk
-  return triggeringSingle.value === pk || reEvalSingle.value === pk || linkObjectSingle.value === pk || unlinkObjectSingle.value === pk || clearOverrideSingle.value === pk
+  return solvingIds.value.has(pk) || reEvalSingle.value === pk || linkObjectSingle.value === pk || unlinkObjectSingle.value === pk || clearOverrideSingle.value === pk
 }
 
 const selectedIds = computed(() => selected.value.map(v => (v && typeof v === 'object') ? v.pk : v).filter(Boolean))
@@ -868,19 +870,8 @@ function openWcs(item) {
   wcsData.value = item
 }
 
-async function triggerPlateSolveSingle(item) {
-  triggeringSingle.value = item.pk
-  try {
-    const res = await api.triggerPlateSolve([item.pk])
-    const r = res?.results?.[0]
-    if (r?.success) notify.success('Plate solving triggered')
-    else notify.warning(r?.error || 'Plate solving failed')
-    await fetchFiles()
-  } catch (e) {
-    notify.error('Failed to trigger plate solving')
-  } finally {
-    triggeringSingle.value = null
-  }
+function triggerPlateSolveSingle(item) {
+  startPlateSolve([item.pk], item.file_name)
 }
 
 async function reEvaluateSingle(item) {
@@ -911,15 +902,10 @@ async function clearOverrideSingleItem(item) {
 
 async function bulkPlateSolve() {
   if (selectedIds.value.length === 0) return
+  // The button is free again once the task is queued; the rows show the progress
   busy.value.plateSolve = true
   try {
-    const res = await api.triggerPlateSolve(selectedIds.value)
-    const ok = res?.results?.filter(r => r.success).length ?? 0
-    notify.success(`Plate solving: ${ok} succeeded`)
-    selected.value = []
-    await fetchFiles()
-  } catch (e) {
-    notify.error('Failed to trigger plate solving')
+    if (await startPlateSolve([...selectedIds.value])) selected.value = []
   } finally {
     busy.value.plateSolve = false
   }

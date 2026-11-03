@@ -1101,6 +1101,23 @@ def refresh_dashboard_stats(self):
         raise self.retry(exc=e)
 
 
+@shared_task
+def plate_solve_selected_files(file_ids):
+    """
+    Plate solve files chosen in the admin (POST admin/datafiles/plate-solving/trigger/), in the
+    background: with several solvers and retries one file can take minutes. Results are stored per
+    file (plate_solved, plate_solve_error); the admin polls them via the trigger status endpoint.
+    The retry pause does not apply: the files were selected explicitly.
+    """
+    service = PlateSolvingService()
+    results = []
+    for datafile in DataFile.objects.filter(pk__in=file_ids).order_by('pk'):
+        result = solve_and_update_datafile(datafile, service=service, save=True)
+        results.append({'file_id': datafile.pk, **result})
+    logger.info('Plate solved %d selected files: %d succeeded', len(results), sum(r['success'] for r in results))
+    return results
+
+
 @shared_task(bind=True, max_retries=2, default_retry_delay=60)
 def plate_solve_pending_files(self):
     """

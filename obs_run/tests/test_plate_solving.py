@@ -326,3 +326,57 @@ class SolverStatusApiTest(APITestCase):
         self.assertFalse(any(s['available'] for s in solvers))
         self.assertIn('astap_cli not found', solvers[0]['details'])
         self.assertEqual(response.json()['solved_by_tool'], {})
+
+
+class BackgroundTriggerApiTest(APITestCase):
+    def setUp(self):
+        admin = User.objects.create_superuser(username='admin', password='pw', email='a@example.org')
+        self.client.force_authenticate(admin)
+        path = Path(tempfile.mkdtemp()) / 'frame.fits'
+        fits.PrimaryHDU(np.zeros((NAXIS2, NAXIS1), dtype=np.uint16)).writeto(path)
+        run = ObservationRun.objects.create(name='2026-11-04')
+        self.datafile = DataFile.objects.create(
+            observation_run=run, datafile=str(path), file_type='FITS', exposure_type='LI',
+            naxis1=NAXIS1, naxis2=NAXIS2,
+        )
+
+    def _status(self, job):
+        return self.client.get('/api/admin/datafiles/plate-solving/trigger/status/', {
+            'ids': ','.join(map(str, job['file_ids'])), 'since': job['queued_at'],
+        }).json()
+
+    def test_trigger_queues_a_task_and_status_reports_the_result(self):
+        from obs_run.tasks import plate_solve_selected_files
+
+        solvers = [FailingSolver('astap', 'no solution found')]
+        # A real id: a MagicMock in the JSON response makes DRF's encoder loop and fill the memory
+        queued = SimpleNamespace(id='task-1')
+        with patch.object(PlateSolvingService, '_create_solvers_from_settings', return_value=solvers), \
+                patch.object(plate_solve_selected_files, 'delay', return_value=queued) as delay:
+            response = self.client.post('/api/admin/datafiles/plate-solving/trigger/',
+                                        {'file_ids': [self.datafile.pk]}, format='json')
+            self.assertEqual(response.status_code, 202)
+            job = response.json()
+            self.assertEqual(job['task_id'], 'task-1')
+            delay.assert_called_once_with([self.datafile.pk])
+            # Queued, not solved yet: the request returns at once
+            self.assertEqual(self._status(job)['done'], False)
+
+            plate_solve_selected_files([self.datafile.pk])  # what the Celery worker does
+
+        status = self._status(job)
+        self.assertTrue(status['done'])
+        self.assertEqual(status['files'], [{
+            'file_id': self.datafile.pk, 'done': True, 'success': False, 'tool': None,
+            'error': 'astap blind: no solution found',  # no header coordinates: blind search only
+        }])
+
+    def test_no_solver_available(self):
+        with patch.object(PlateSolvingService, '_create_solvers_from_settings', return_value=[]):
+            response = self.client.post('/api/admin/datafiles/plate-solving/trigger/',
+                                        {'file_ids': [self.datafile.pk]}, format='json')
+        self.assertEqual(response.status_code, 503)
+
+    def test_status_requires_ids_and_time(self):
+        response = self.client.get('/api/admin/datafiles/plate-solving/trigger/status/', {'ids': '1'})
+        self.assertEqual(response.status_code, 400)

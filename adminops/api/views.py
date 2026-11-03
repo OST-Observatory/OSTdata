@@ -7,6 +7,7 @@ from urllib.parse import urlparse
 from django.conf import settings
 from django.db import transaction
 from django.db.models import Count, F, Q
+from django.utils import timezone
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import serializers
 from rest_framework.decorators import api_view, permission_classes
@@ -34,7 +35,6 @@ from obs_run.models import DataFile, ObservationRun
 from obs_run.plate_solving import (
     PlateSolvingService,
     retry_due_filter,
-    solve_and_update_datafile,
     solver_status,
 )
 from obs_run.tasks import (
@@ -1777,7 +1777,7 @@ def admin_get_observation_runs_for_plate_solving(request):
 
 
 @extend_schema(
-    summary='Trigger plate solving for specific files',
+    summary='Trigger plate solving for specific files (background task)',
     parameters=[],
     responses=JSON_OBJECT_ACCEPTED,
     request=EmptyObjectSerializer)
@@ -1785,9 +1785,9 @@ def admin_get_observation_runs_for_plate_solving(request):
 @permission_classes([IsAuthenticated, HasPerm('acl_datafiles_plate_solve')])
 def admin_trigger_plate_solve(request):
     """
-    Manually trigger plate solving for specific DataFiles.
-    Only accessible to admin/staff users.
-    
+    Queue plate solving of specific DataFiles as a Celery task (one file can take minutes with several
+    solvers and retries). Poll the result with admin_plate_solve_trigger_status (file_ids, queued_at).
+
     Body:
     {
         "file_ids": [1, 2, 3]
@@ -1796,7 +1796,11 @@ def admin_trigger_plate_solve(request):
     file_ids = request.data.get('file_ids', [])
     if not file_ids or not isinstance(file_ids, list):
         return Response({"detail": "file_ids must be a non-empty list"}, status=400)
-    
+    try:
+        file_ids = sorted({int(pk) for pk in file_ids})
+    except (TypeError, ValueError):
+        return Response({"detail": "file_ids must be integers"}, status=400)
+
     try:
         files = DataFile.objects.filter(
             pk__in=file_ids,
@@ -1806,25 +1810,66 @@ def admin_trigger_plate_solve(request):
         )
         if files.count() != len(file_ids):
             return Response({"detail": "Some files not found, have wcs_override=True, or are spectra (spectrograph != 'N' OR spectroscopy=True)"}, status=400)
-        
+
         service = PlateSolvingService()
         if not service.solvers:
             return Response({"detail": "No plate solving tools available"}, status=503)
-        
-        results = []
-        for datafile in files:
-            result = solve_and_update_datafile(datafile, service=service, save=True)
-            results.append({
-                'file_id': datafile.pk,
-                'success': result['success'],
-                'tool': result.get('tool'),
-                'error': result.get('error')
-            })
-        
-        return Response({'results': results})
+
+        from obs_run.tasks import plate_solve_selected_files
+
+        # Before enqueueing: with eager Celery (tests) the task runs inside delay()
+        queued_at = timezone.now()
+        res = plate_solve_selected_files.delay(file_ids)
+        return Response({
+            'enqueued': True,
+            'task_id': getattr(res, 'id', None),
+            'file_ids': file_ids,
+            'queued_at': queued_at.isoformat(),
+        }, status=202)
     except Exception as e:
         logger.exception(f'Unexpected error in admin_trigger_plate_solve: {e}')
         return Response({'error': f'Unexpected error: {str(e)}'}, status=500)
+
+
+@extend_schema(
+    summary='State of files queued for plate solving',
+    parameters=[
+        OpenApiParameter('ids', str, description='Comma-separated DataFile ids'),
+        OpenApiParameter('since', str, description='queued_at of the trigger response (ISO 8601)'),
+    ],
+    responses=JSON_OBJECT_RESPONSE)
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, HasPerm('acl_datafiles_plate_solve')])
+def admin_plate_solve_trigger_status(request):
+    """
+    Per file: done once a plate solving attempt finished after `since` (the trigger time), with the
+    result of that attempt. 'done' is true when all files are done.
+    """
+    from django.utils.dateparse import parse_datetime
+
+    try:
+        ids = sorted({int(pk) for pk in request.query_params.get('ids', '').split(',') if pk.strip()})
+    except ValueError:
+        return Response({'detail': 'ids must be comma-separated integers'}, status=400)
+    since = parse_datetime(request.query_params.get('since', '') or '')
+    if not ids or since is None:
+        return Response({'detail': 'ids and since are required'}, status=400)
+    if timezone.is_naive(since):
+        since = timezone.make_aware(since)
+
+    files = []
+    for datafile in DataFile.objects.filter(pk__in=ids).only(
+        'pk', 'plate_solved', 'plate_solve_attempted_at', 'plate_solve_error', 'plate_solve_tool',
+    ):
+        done = bool(datafile.plate_solve_attempted_at and datafile.plate_solve_attempted_at >= since)
+        files.append({
+            'file_id': datafile.pk,
+            'done': done,
+            'success': done and datafile.plate_solved and not datafile.plate_solve_error,
+            'tool': datafile.plate_solve_tool if done and datafile.plate_solved else None,
+            'error': datafile.plate_solve_error if done else None,
+        })
+    return Response({'files': files, 'done': all(f['done'] for f in files)})
 
 
 @extend_schema(

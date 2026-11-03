@@ -26,6 +26,7 @@ from .views import (
     admin_list_all_datafiles,
     admin_list_override_flags,
     admin_plate_solve_stats,
+    admin_plate_solve_trigger_status,
     admin_preview_cache,
     admin_re_evaluate_datafiles,
     admin_re_evaluate_run,
@@ -118,6 +119,8 @@ urlpatterns = [
     # Plate solving endpoints
     path('datafiles/plate-solving/unsolved/', admin_get_unsolved_plate_files, name='unsolved_plate_files'),
     path('datafiles/plate-solving/trigger/', admin_trigger_plate_solve, name='trigger_plate_solve'),
+    path('datafiles/plate-solving/trigger/status/', admin_plate_solve_trigger_status,
+         name='plate_solve_trigger_status'),
     path('datafiles/plate-solving/stats/', admin_plate_solve_stats, name='plate_solve_stats'),
     path('datafiles/plate-solving/task-enabled/', admin_get_plate_solving_task_enabled, name='plate_solving_task_enabled'),
     path('datafiles/plate-solving/task-enabled/set/', admin_set_plate_solving_task_enabled, name='set_plate_solving_task_enabled'),

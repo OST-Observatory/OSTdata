@@ -249,7 +249,7 @@
                   density="comfortable"
                   variant="text"
                   @click="triggerSolveSingle(item)"
-                  :loading="triggeringSingle === item.pk"
+                  :loading="solvingIds.has(item.pk)"
                   :aria-label="`Trigger plate solve for ${item.file_name}`"
                 />
               </template>
@@ -390,12 +390,18 @@ import { useNotifyStore } from '@/store/notify'
 import EmptyState from '@/components/ui/EmptyState.vue'
 import LoadingState from '@/components/ui/LoadingState.vue'
 import DataFileQuickActions from '@/components/datafiles/DataFileQuickActions.vue'
+import { usePlateSolveJobs } from '@/composables/usePlateSolveJobs'
 import { exposureTypeColor } from '@/constants/classification'
 
 const notify = useNotifyStore()
 const loading = ref(false)
 const triggering = ref(false)
-const triggeringSingle = ref(null)
+const { solvingIds, startPlateSolve } = usePlateSolveJobs({
+  onDone: async () => {
+    await fetchUnsolvedFiles()
+    await fetchStats()
+  },
+})
 const items = ref([])
 const selected = ref([])
 const totalItems = ref(0)
@@ -652,61 +658,16 @@ const openHeader = async (item) => {
 
 const triggerSolve = async () => {
   if (selected.value.length === 0) return
-  
+  // The button is free again once the task is queued; the rows show the progress
   triggering.value = true
   try {
-    const fileIds = selected.value.map(item => item.pk)
-    const response = await api.triggerPlateSolve(fileIds)
-    
-    if (response.results) {
-      const succeeded = response.results.filter(r => r.success).length
-      const failed = response.results.filter(r => !r.success).length
-      
-      if (succeeded > 0) {
-        notify.success(`Plate solving triggered: ${succeeded} succeeded, ${failed} failed`)
-      } else {
-        notify.warning(`Plate solving failed for all ${fileIds.length} files`)
-      }
-      
-      // Refresh data
-      await fetchUnsolvedFiles()
-      await fetchStats()
-      selected.value = []
-    } else {
-      notify.error('Unexpected response format')
-    }
-  } catch (error) {
-    notify.error('Failed to trigger plate solving', error)
+    if (await startPlateSolve(selected.value.map(item => item.pk))) selected.value = []
   } finally {
     triggering.value = false
   }
 }
 
-const triggerSolveSingle = async (item) => {
-  triggeringSingle.value = item.pk
-  try {
-    const response = await api.triggerPlateSolve([item.pk])
-    
-    if (response.results && response.results.length > 0) {
-      const result = response.results[0]
-      if (result.success) {
-        notify.success(`Plate solving succeeded for ${item.file_name}`)
-      } else {
-        notify.warning(`Plate solving failed: ${result.error || 'Unknown error'}`)
-      }
-      
-      // Refresh data
-      await fetchUnsolvedFiles()
-      await fetchStats()
-    } else {
-      notify.error('Unexpected response format')
-    }
-  } catch (error) {
-    notify.error('Failed to trigger plate solving', error)
-  } finally {
-    triggeringSingle.value = null
-  }
-}
+const triggerSolveSingle = (item) => startPlateSolve([item.pk], item.file_name)
 
 onMounted(() => {
   fetchStats()
