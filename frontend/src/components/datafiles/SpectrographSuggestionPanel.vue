@@ -19,7 +19,8 @@
       <template v-else-if="evaluation?.data">
         <p class="text-body-2 text-medium-emphasis mb-3">
           Evaluated on {{ evaluation.data.reviewed_files }} files with a manually reviewed spectrograph, using their
-          state before the review. A suggestion counts as correct (TP) if it equals the manual value and as wrong (FP)
+          state before the review<template v-if="evaluation.data.unevaluable_reviews"> ({{ evaluation.data.unevaluable_reviews }}
+          reviewed files are not counted because their state before the review cannot be recovered from the history)</template>. A suggestion counts as correct (TP) if it equals the manual value and as wrong (FP)
           otherwise, also when the review only confirmed the old value ("Keep" in the table adds such confirmations).
           Path tokens are evaluated leave-one-run-out: the statistics of the file's own run are left out, so reviewed
           files do not confirm themselves. The in-sample row shows the optimistic value for comparison.

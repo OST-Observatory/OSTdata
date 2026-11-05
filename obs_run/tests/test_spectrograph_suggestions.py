@@ -262,3 +262,21 @@ class AutoApplyTest(TestCase):
         # wrong suggestion N -> D (the second one is the confirmed 'manual' file)
         self.assertEqual(evaluation['both']['transitions'].get('N -> D'), {'fp': 2})
         self.assertEqual(evaluation['both']['tp'], 0)
+
+
+class PreReviewStateTest(TestCase):
+    def test_keep_after_automatic_change_is_evaluated(self):
+        """Created with N, classifier sets D, reviewer keeps D: the reviewer saw D (confirmation)."""
+        run = ObservationRun.objects.create(name='imaging-night')
+        for _ in range(10):
+            _file(run, 'N', directory='lights')
+        kept = _file(run, 'N', directory='lights')
+        kept.spectrograph = 'D'
+        kept.save(update_fields=['spectrograph'])  # automatic (no user, no reason)
+        _review(kept, 'D')  # "Keep"
+
+        report = analyse()['report']
+
+        self.assertEqual(report['unevaluable_reviews'], 0)
+        # The run majority suggested N; keeping D makes it a wrong suggestion
+        self.assertEqual(report['evaluation']['run_majority']['transitions'], {'D -> N': {'fp': 1}})

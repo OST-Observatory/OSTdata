@@ -17,7 +17,8 @@ class Command(BaseCommand):
         result = recompute_suggestions(auto_apply=False if options['no_auto_apply'] else None)
         report = result['report']
         self.stdout.write(f"Open suggestions: {report['open_suggestions']}")
-        self.stdout.write(f"Reviewed files used for the evaluation: {report['reviewed_files']}")
+        self.stdout.write(f"Reviewed files used for the evaluation: {report['reviewed_files']} "
+                          f"(not evaluable: {report.get('unevaluable_reviews', 0)})")
         for name in EVALUATED:
             ev = report['evaluation'][name]
             self.stdout.write(

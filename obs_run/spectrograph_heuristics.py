@@ -138,13 +138,17 @@ def run_majority(counts, min_files, min_share):
 
 
 def _auto_value(records):
-    """Spectrograph before the first manual change; records = [(spectrograph, user_id, reason), ...]."""
+    """
+    Spectrograph the reviewer saw: the value before the first manual history record that changes the
+    spectrograph or sets the override flag (a "Keep" confirmation only sets the flag).
+    records = [(spectrograph, user_id, reason, override), ...] in chronological order.
+    """
     # Automatically applied suggestions are not the classifier's value: a later correction of such a value
     # must count against the heuristic
     records = [r for r in records if r[2] != REASON_TASK_SPECTROGRAPH_SUGGESTION] or records[:1]
     for previous, current in zip(records, records[1:]):
         manual = current[1] is not None or (current[2] or '').startswith(MANUAL_REASON_PREFIXES)
-        if manual and current[0] != previous[0]:
+        if manual and (current[0] != previous[0] or (current[3] and not previous[3])):
             return previous[0] or 'N'
     if len({r[0] for r in records}) == 1:
         # Never changed: the override only confirmed the automatic value
@@ -161,11 +165,11 @@ def auto_spectrograph_values(pks):
         rows = (
             history.objects.filter(id__in=pks[start:start + 1000])
             .order_by('id', 'history_date', 'history_id')
-            .values_list('id', 'spectrograph', 'history_user_id', 'history_change_reason')
+            .values_list('id', 'spectrograph', 'history_user_id', 'history_change_reason', 'spectrograph_override')
         )
         by_pk = defaultdict(list)
-        for pk, spectrograph, user_id, reason in rows:
-            by_pk[pk].append((spectrograph, user_id, reason))
+        for pk, spectrograph, user_id, reason, override in rows:
+            by_pk[pk].append((spectrograph, user_id, reason, override))
         for pk, records in by_pk.items():
             result[pk] = _auto_value(records)
     return result
@@ -229,6 +233,7 @@ def analyse(params=None):
     suggestions = {}
     open_counts = Counter()
     reviewed = 0
+    unevaluable = 0
     outcomes = {name: Counter() for name in EVALUATED}
     transitions = {name: defaultdict(Counter) for name in EVALUATED}
     for pk, run, spectrograph, override, tokens in files:
@@ -242,6 +247,7 @@ def analyse(params=None):
                 open_counts['any'] += 1
             continue
         if auto.get(pk, 'unknown') == 'unknown':
+            unevaluable += 1
             continue
         reviewed += 1
         value = before[pk]
@@ -272,6 +278,8 @@ def analyse(params=None):
         'report': {
             'evaluation': evaluation,
             'reviewed_files': reviewed,
+            # Reviewed files whose pre-review state cannot be recovered from the history
+            'unevaluable_reviews': unevaluable,
             'open_suggestions': dict(open_counts),
             'indicative_tokens': {
                 token: info for token, info in indicative.items() if info['label'] != 'N'
