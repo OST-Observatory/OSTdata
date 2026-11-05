@@ -1433,6 +1433,7 @@ def recompute_spectrograph_suggestions(self):
     summary = {
         'suggestions': len(result['suggestions']),
         'reviewed_files': result['report']['reviewed_files'],
+        'auto_applied': result['report'].get('auto_applied', {}).get('count', 0),
     }
     logger.info(f'Spectrograph suggestions recomputed: {summary}')
     return summary

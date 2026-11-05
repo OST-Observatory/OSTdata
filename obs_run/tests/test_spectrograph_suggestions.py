@@ -5,11 +5,11 @@ from unittest import mock
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.management import call_command
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from rest_framework.test import APITestCase
 
 from obs_run.models import DataFile, HeuristicReport, ObservationRun, SpectrographSuggestion
-from obs_run.spectrograph_heuristics import analyse, recompute_suggestions
+from obs_run.spectrograph_heuristics import analyse, apply_agreed_suggestions, recompute_suggestions
 from obs_run.tests.test_visibility_acl import _grant
 from ostdata.history_reason import REASON_ADMIN_SPECTROGRAPH, save_with_reason
 
@@ -168,7 +168,7 @@ class AdminClassificationApiTest(APITestCase):
         _grant(self.user, 'acl_datafiles_spectrograph')
         response = self.client.get('/api/admin/spectrograph-suggestions/evaluation/')
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()['open_now'], {'run_majority': 2, 'path_token': 0})
+        self.assertEqual(response.json()['open_now'], {'run_majority': 2, 'path_token': 0, 'both': 0})
         with mock.patch('adminops.api.views._celery_delay', return_value=mock.Mock(id='task-1')) as delay:
             response = self.client.post('/api/admin/spectrograph-suggestions/recompute/', **self._headers())
         self.assertEqual(response.status_code, 202)
@@ -203,3 +203,62 @@ class DataFileWritePermissionTest(APITestCase):
         self.client.force_login(User.objects.create_superuser(username='admin', password='pw'))
         response = self.client.patch(self.url, {'instrument': 'QHY268M'}, format='json', **self._headers())
         self.assertEqual(response.status_code, 200, response.content)
+
+
+class LeaveOneRunOutTest(TestCase):
+    def test_reviewed_run_does_not_confirm_its_own_token(self):
+        reviewed_run = ObservationRun.objects.create(name='night-a')
+        for _ in range(10):
+            _review(_file(reviewed_run, 'N', directory='solo'), 'B')
+        other_run = ObservationRun.objects.create(name='night-b')
+        for _ in range(10):
+            _file(other_run, 'B', directory='solo')
+
+        evaluation = analyse(SMALL_PARAMS)['report']['evaluation']
+
+        # In-sample the reviewed run supports the token itself; leave-one-run-out only one run is left
+        self.assertEqual(evaluation['path_token_in_sample']['tp'], 10)
+        self.assertEqual((evaluation['path_token']['tp'], evaluation['path_token']['fn']), (0, 10))
+
+
+@override_settings(SPECTROGRAPH_IMAGING_ONLY_INSTRUMENTS=[r'qhy\s*600m'])
+class AutoApplyTest(TestCase):
+    def setUp(self):
+        runs = [ObservationRun.objects.create(name=f'dados-{i}') for i in range(3)]
+        for run in runs:
+            for _ in range(20):  # token purity 60 / 63 > 95 %
+                _file(run, 'D', directory='dados')
+        self.outlier = _file(runs[0], 'N', directory='dados')  # run majority and path token: DADOS
+        self.imaging = _file(runs[1], 'N', directory='dados', instrument='QHY 600M')  # rules forbid DADOS
+        self.manual = _file(runs[2], 'N', directory='dados')
+        _review(self.manual, 'N')
+
+    def _spectrograph(self, datafile):
+        return DataFile.objects.get(pk=datafile.pk).spectrograph
+
+    def test_dry_run(self):
+        recompute_suggestions(SMALL_PARAMS, auto_apply=False)
+        changes = apply_agreed_suggestions(dry_run=True)
+        self.assertEqual([(pk, old, new) for pk, old, new, _ in changes], [(self.outlier.pk, 'N', 'D')])
+        self.assertEqual(self._spectrograph(self.outlier), 'N')
+
+    def test_agreeing_suggestion_applied_without_override(self):
+        result = recompute_suggestions(SMALL_PARAMS, auto_apply=True)
+
+        self.assertEqual(result['report']['auto_applied']['count'], 1)
+        outlier = DataFile.objects.get(pk=self.outlier.pk)
+        self.assertEqual((outlier.spectrograph, outlier.spectrograph_override), ('D', False))
+        self.assertEqual(outlier.history.latest().history_change_reason, 'task:spectrograph_suggestion')
+        self.assertEqual(self._spectrograph(self.imaging), 'N')
+        self.assertEqual(self._spectrograph(self.manual), 'N')
+
+    def test_correcting_an_applied_value_counts_against_the_heuristic(self):
+        recompute_suggestions(SMALL_PARAMS, auto_apply=True)
+        _review(DataFile.objects.get(pk=self.outlier.pk), 'B')
+
+        evaluation = analyse(SMALL_PARAMS)['report']['evaluation']
+
+        # State before the review is the classifier value N, not the applied D: the correction to B counts as a
+        # wrong suggestion N -> D (the second one is the confirmed 'manual' file)
+        self.assertEqual(evaluation['both']['transitions'].get('N -> D'), {'fp': 2})
+        self.assertEqual(evaluation['both']['tp'], 0)

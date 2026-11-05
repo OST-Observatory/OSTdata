@@ -459,6 +459,9 @@ EXPOSURE_TYPE_EFFECTIVE_RULE = env.str('EXPOSURE_TYPE_EFFECTIVE_RULE', default='
 EXPOSURE_TYPE_LIGHT_DEFAULT_FORMATS = env.list(
     'EXPOSURE_TYPE_LIGHT_DEFAULT_FORMATS', default=['JPG', 'CR2', 'SER', 'AVI', 'MOV'],
 )
+# Apply spectrograph suggestions on which run majority and path token agree after each recomputation
+# (obs_run/spectrograph_heuristics.py); without override flag, so they stay reviewable
+SPECTROGRAPH_AUTO_APPLY = env.bool('SPECTROGRAPH_AUTO_APPLY', default=True)
 # Image quality check at ingest (obs_run/image_quality.py): over-exposed if at least this fraction of pixels
 # is saturated or the median reaches this share of full scale
 IMAGE_QUALITY_ENABLED = env.bool('IMAGE_QUALITY_ENABLED', default=True)

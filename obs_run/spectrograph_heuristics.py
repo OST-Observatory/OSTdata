@@ -8,18 +8,27 @@ Only files with an effective type LI/FL/WA are considered (bias/darks never carr
 Suggestions are stored in ``SpectrographSuggestion`` for files without a manual spectrograph; the
 evaluation on manually reviewed files (``spectrograph_override``) in ``HeuristicReport``. The value the
 classifier produced before a review is not stored separately, so it is recovered from the history.
+
+Path tokens are evaluated leave-one-run-out: for a reviewed file, the token statistics of its own run are left
+out, so the reviewed files do not confirm themselves. Suggestions on which both heuristics agree can be
+applied automatically (``SPECTROGRAPH_AUTO_APPLY``); such changes carry their own history reason, are not
+marked as manual and are skipped when recovering the state before a review.
 """
 import re
 import sys
 from collections import Counter, defaultdict
 from pathlib import Path
 
+from django.conf import settings
 from django.db import transaction
+from django.db.models import F
 from django.utils import timezone
 
 from obs_run.exposure_type import effective_exposure_type_expression
 from obs_run.image_quality import BAD_FLAGS as BAD_QUALITY_FLAGS
 from obs_run.models import DataFile, HeuristicReport, SpectrographSuggestion
+from obs_run.spectrograph import constrained_spectrograph
+from ostdata.history_reason import REASON_TASK_SPECTROGRAPH_SUGGESTION, save_with_reason
 
 TOKEN_PATTERN = re.compile(r'[a-z]{3,}')
 
@@ -41,6 +50,8 @@ DEFAULT_PARAMS = {
 }
 
 HEURISTICS = ('run_majority', 'path_token', 'both')
+# Also reported: path tokens evaluated on all runs incl. the file's own (optimistic, for comparison)
+EVALUATED = HEURISTICS + ('path_token_in_sample',)
 
 
 def path_tokens(path):
@@ -59,15 +70,54 @@ def indicative_tokens(token_labels, token_runs, min_support, min_runs, min_purit
     max_runs = max_run_share * len(all_runs)
     indicative = {}
     for token, labels in token_labels.items():
-        support = sum(labels.values())
-        label, count = labels.most_common(1)[0]
         runs = len(token_runs[token])
-        if support >= min_support and min_runs <= runs <= max_runs and count / support >= min_purity:
-            indicative[token] = {
-                'label': label, 'purity': round(count / support, 4), 'support': support,
-                'runs': len(token_runs[token]),
-            }
+        found = _indicative_label(labels, runs, max_runs, min_support, min_runs, min_purity)
+        if found:
+            label, count, support = found
+            indicative[token] = {'label': label, 'purity': round(count / support, 4), 'support': support, 'runs': runs}
     return dict(sorted(indicative.items(), key=lambda kv: -kv[1]['support']))
+
+
+def _indicative_label(labels, runs, max_runs, min_support, min_runs, min_purity):
+    """(label, count, support) if a token with these label counts in ``runs`` runs is indicative, else None."""
+    support = sum(labels.values())
+    if not support:
+        return None
+    label, count = labels.most_common(1)[0]
+    if support >= min_support and min_runs <= runs <= max_runs and count / support >= min_purity:
+        return label, count, support
+    return None
+
+
+class LeaveOneRunOut:
+    """Token labels computed without the statistics of one run (no self-confirmation in the evaluation)."""
+
+    def __init__(self, token_labels, token_run_labels, token_runs, params):
+        self.token_labels = token_labels
+        self.token_run_labels = token_run_labels
+        self.token_runs = token_runs
+        self.params = params
+        all_runs = set().union(*token_runs.values()) if token_runs else set()
+        self.max_runs = params['token_max_run_share'] * len(all_runs)
+        self.cache = {}
+
+    def _label(self, token, run):
+        key = (token, run)
+        if key not in self.cache:
+            own = self.token_run_labels[token].get(run)
+            labels = self.token_labels[token] - own if own else self.token_labels[token]
+            runs = len(self.token_runs[token]) - (1 if own else 0)
+            found = _indicative_label(labels, runs, self.max_runs, self.params['token_min_support'],
+                                      self.params['token_min_runs'], self.params['token_min_purity'])
+            self.cache[key] = found[0] if found else None
+        return self.cache[key]
+
+    def token_label(self, tokens, run):
+        """Like ``token_label`` but without the file's own run."""
+        labels = {label for label in (self._label(t, run) for t in tokens) if label}
+        if len(labels) > 1:
+            return 'conflict'
+        return labels.pop() if labels else None
 
 
 def token_label(tokens, indicative):
@@ -89,6 +139,9 @@ def run_majority(counts, min_files, min_share):
 
 def _auto_value(records):
     """Spectrograph before the first manual change; records = [(spectrograph, user_id, reason), ...]."""
+    # Automatically applied suggestions are not the classifier's value: a later correction of such a value
+    # must count against the heuristic
+    records = [r for r in records if r[2] != REASON_TASK_SPECTROGRAPH_SUGGESTION] or records[:1]
     for previous, current in zip(records, records[1:]):
         manual = current[1] is not None or (current[2] or '').startswith(MANUAL_REASON_PREFIXES)
         if manual and current[0] != previous[0]:
@@ -118,11 +171,10 @@ def auto_spectrograph_values(pks):
     return result
 
 
-def _suggestions(spectrograph, tokens, run_counts, indicative, params):
+def _suggestions(spectrograph, label, run_counts, params):
     """(run majority suggestion, path token suggestion) differing from ``spectrograph``, else None."""
     majority = run_majority(run_counts, params['run_min_files'], params['run_majority_share'])
     by_run = majority if majority and majority != spectrograph else None
-    label = token_label(tokens, indicative)
     by_token = label if label not in (None, 'conflict') and label != spectrograph else None
     return by_run, by_token
 
@@ -146,6 +198,7 @@ def analyse(params=None):
     )
     files = []
     token_labels = defaultdict(Counter)
+    token_run_labels = defaultdict(lambda: defaultdict(Counter))
     token_runs = defaultdict(set)
     current_counts = defaultdict(Counter)
     for pk, run, spectrograph, override, path in queryset.iterator(chunk_size=2000):
@@ -155,6 +208,7 @@ def analyse(params=None):
         current_counts[run][spectrograph] += 1
         for token in tokens:
             token_labels[token][spectrograph] += 1
+            token_run_labels[token][run][spectrograph] += 1
             token_runs[token].add(run)
 
     indicative = indicative_tokens(
@@ -171,14 +225,15 @@ def analyse(params=None):
         before[pk] = spectrograph if value == 'unknown' else value
         before_counts[run][before[pk]] += 1
 
+    leave_one_run_out = LeaveOneRunOut(token_labels, token_run_labels, token_runs, params)
     suggestions = {}
     open_counts = Counter()
     reviewed = 0
-    outcomes = {name: Counter() for name in HEURISTICS}
-    transitions = {name: defaultdict(Counter) for name in HEURISTICS}
+    outcomes = {name: Counter() for name in EVALUATED}
+    transitions = {name: defaultdict(Counter) for name in EVALUATED}
     for pk, run, spectrograph, override, tokens in files:
         if not override:
-            by_run, by_token = _suggestions(spectrograph, tokens, current_counts[run], indicative, params)
+            by_run, by_token = _suggestions(spectrograph, token_label(tokens, indicative), current_counts[run], params)
             if by_run or by_token:
                 suggestions[pk] = (by_run, by_token)
                 open_counts['run_majority'] += by_run is not None
@@ -190,9 +245,10 @@ def analyse(params=None):
             continue
         reviewed += 1
         value = before[pk]
-        by_run, by_token = _suggestions(value, tokens, before_counts[run], indicative, params)
+        by_run, by_token = _suggestions(value, leave_one_run_out.token_label(tokens, run), before_counts[run], params)
+        _, in_sample = _suggestions(value, token_label(tokens, indicative), before_counts[run], params)
         both = by_run if by_run is not None and by_run == by_token else None
-        for name, suggestion in zip(HEURISTICS, (by_run, by_token, both)):
+        for name, suggestion in zip(EVALUATED, (by_run, by_token, both, in_sample)):
             if suggestion is None:
                 outcome = 'fn' if spectrograph != value else 'tn'
             else:
@@ -201,7 +257,7 @@ def analyse(params=None):
             outcomes[name][outcome] += 1
 
     evaluation = {}
-    for name in HEURISTICS:
+    for name in EVALUATED:
         counts = outcomes[name]
         tp, fp, fn = counts['tp'], counts['fp'], counts['fn']
         evaluation[name] = {
@@ -225,8 +281,48 @@ def analyse(params=None):
     }
 
 
-def recompute_suggestions(params=None):
-    """Run ``analyse`` and replace the stored suggestions and report atomically."""
+def apply_agreed_suggestions(dry_run=False):
+    """
+    Set the spectrograph of files without a manual spectrograph where run majority and path token agree.
+    The spectrograph rules (obs_run/spectrograph.py) take precedence. Saved without override flag and with
+    history reason REASON_TASK_SPECTROGRAPH_SUGGESTION. Returns (pk, old, new, path) per change.
+    """
+    from utilities import update_object_photometry_spectroscopy, update_observation_run_photometry_spectroscopy
+
+    agreed = (
+        SpectrographSuggestion.objects
+        .filter(datafile__spectrograph_override=False, run_majority__isnull=False, run_majority=F('path_token'))
+        .exclude(run_majority=F('datafile__spectrograph'))
+        .select_related('datafile', 'datafile__observation_run')
+    )
+    changes = []
+    runs, objects = {}, {}
+    for suggestion in agreed:
+        datafile = suggestion.datafile
+        value, _ = constrained_spectrograph(datafile.effective_exposure_type, datafile.instrument, suggestion.run_majority)
+        if value != suggestion.run_majority:
+            continue
+        changes.append((datafile.pk, datafile.spectrograph or 'N', value, datafile.datafile))
+        if dry_run:
+            continue
+        datafile.spectrograph = value
+        save_with_reason(datafile, REASON_TASK_SPECTROGRAPH_SUGGESTION, update_fields=['spectrograph'])
+        if datafile.observation_run_id:
+            runs[datafile.observation_run_id] = datafile.observation_run
+        for obj in datafile.object_set.all():
+            objects[obj.pk] = obj
+    for run in runs.values():
+        update_observation_run_photometry_spectroscopy(run)
+    for obj in objects.values():
+        update_object_photometry_spectroscopy(obj)
+    return changes
+
+
+def recompute_suggestions(params=None, auto_apply=None):
+    """
+    Run ``analyse`` and replace the stored suggestions and report atomically; then apply agreeing
+    suggestions if ``auto_apply`` (default: setting SPECTROGRAPH_AUTO_APPLY).
+    """
     result = analyse(params)
     now = timezone.now()
     with transaction.atomic():
@@ -242,4 +338,11 @@ def recompute_suggestions(params=None):
             name=REPORT_NAME,
             defaults={'computed_at': now, 'params': result['params'], 'data': result['report']},
         )
+
+    if auto_apply is None:
+        auto_apply = getattr(settings, 'SPECTROGRAPH_AUTO_APPLY', False)
+    if auto_apply:
+        applied = apply_agreed_suggestions()
+        result['report']['auto_applied'] = {'count': len(applied), 'at': now.isoformat()}
+        HeuristicReport.objects.filter(name=REPORT_NAME).update(data=result['report'])
     return result

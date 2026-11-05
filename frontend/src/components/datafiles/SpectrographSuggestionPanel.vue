@@ -21,8 +21,16 @@
           Evaluated on {{ evaluation.data.reviewed_files }} files with a manually reviewed spectrograph, using their
           state before the review. A suggestion counts as correct (TP) if it equals the manual value and as wrong (FP)
           otherwise, also when the review only confirmed the old value ("Keep" in the table adds such confirmations).
-          Path token purity is computed on current values and therefore slightly optimistic.
+          Path tokens are evaluated leave-one-run-out: the statistics of the file's own run are left out, so reviewed
+          files do not confirm themselves. The in-sample row shows the optimistic value for comparison.
         </p>
+        <v-alert v-if="evaluation.auto_apply" type="info" variant="tonal" density="compact" class="mb-3">
+          Suggestions on which both heuristics agree are applied automatically after each recomputation (without
+          override flag, so they stay reviewable).
+          <template v-if="evaluation.data.auto_applied">
+            Last run: {{ evaluation.data.auto_applied.count }} file(s) on {{ formatDate(evaluation.data.auto_applied.at) }}.
+          </template>
+        </v-alert>
         <v-table density="compact" class="mb-3">
           <thead>
             <tr>
@@ -94,7 +102,12 @@ const recomputing = ref(false)
 const error = ref(null)
 const expanded = ref(null)
 
-const LABELS = { run_majority: 'Run majority', path_token: 'Path token', both: 'Both agree' }
+const LABELS = {
+  run_majority: 'Run majority',
+  path_token: 'Path token',
+  both: 'Both agree',
+  path_token_in_sample: 'Path token (in-sample, for comparison)',
+}
 
 const rows = computed(() => {
   const ev = evaluation.value?.data?.evaluation || {}

@@ -1619,12 +1619,15 @@ def admin_spectrograph_suggestions_evaluation(request):
                                      .exclude(run_majority=F('datafile__spectrograph')).count(),
         'path_token': open_queryset.exclude(path_token__isnull=True)
                                    .exclude(path_token=F('datafile__spectrograph')).count(),
+        'both': open_queryset.filter(run_majority__isnull=False, run_majority=F('path_token'))
+                             .exclude(run_majority=F('datafile__spectrograph')).count(),
     }
     return Response({
         'computed_at': report.computed_at,
         'params': report.params,
         'data': report.data,
         'open_now': open_now,
+        'auto_apply': bool(getattr(settings, 'SPECTROGRAPH_AUTO_APPLY', False)),
     })
 
 
