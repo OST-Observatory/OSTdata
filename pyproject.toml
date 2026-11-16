@@ -7,7 +7,7 @@ requires-python = ">=3.12"
 extraPaths = ["."]
 venvPath = ".."
 venv = "ostdata_env"
-pythonVersion = "3.12"
+pythonVersion = "3.13"
 typeCheckingMode = "basic"
 # DRF/Django do not ship complete stubs; stubs packages are optional/noisy for this repo.
 reportMissingTypeStubs = "none"
