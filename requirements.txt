@@ -47,15 +47,17 @@ pillow==13.0.0
 # extension building (distutils compilers), not runtime behaviour.
 setuptools==84.2.1
 # tornado: GHSA-chx6-46f5-w4vp, GHSA-c2m8-h5v5-343r, GHSA-3hv7-mjh2-fv65 (fixed in 6.5.9);
-# CVE-2026-115927 / 116577 / 116578 (fixed in 6.6). Via bokeh (>=6.2); the archive runs no tornado server.
-tornado==6.6
+# CVE-2026-115927 / 116577 / 116578 (fixed in 6.6); CVE-2026-126347 (fixed in 6.6.1).
+# Via bokeh (>=6.2); the archive runs no tornado server.
+tornado==6.6.1
 # pyasn1: CVE-2026-119194 / 119195 / 119196 / 119197 (fixed in 0.6.5). Via python-ldap / pyasn1-modules.
 pyasn1==0.6.5
 keras==3.15.1
 sqlparse==0.6.0
-# soupsieve: CVE-2026-85999 / CVE-2026-86000 (ReDoS in CSS selector parser, fixed in 2.9).
+# soupsieve: CVE-2026-85999 / CVE-2026-86000 (ReDoS in CSS selector parser, fixed in 2.9);
+# CVE-2026-126190 / 126191 / 126192 / 126193 (all fixed in 4.0.0; needs Python >= 3.11.5).
 # Transitive via astroquery -> beautifulsoup4 (>=1.6.1, no upper bound).
-soupsieve==2.9.2
+soupsieve==4.1.1
 # urllib3: PYSEC-2026-4175 / 4176 / 4177 (fixed in 2.8.0). Transitive via requests.
 urllib3==2.8.0
 # certifi: PYSEC-2026-4320 (fixed in 2026.10.19). Transitive via requests and skyfield.
