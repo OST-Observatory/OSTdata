@@ -11,7 +11,7 @@ from django.test import TestCase
 
 from obs_run.management.commands.export_cnn_training_data import Command as ExportCommand
 from obs_run.models import DataFile, ObservationRun
-from obs_run.training_export import cap_per_class, collect_records, label, split_by_run
+from obs_run.training_export import cap_per_class, cap_per_run, collect_records, label, split_by_run
 from ostdata.history_reason import REASON_ADMIN_SPECTROGRAPH, save_with_reason
 
 ARCHIVE = Path('/archive/data')
@@ -148,3 +148,34 @@ class ExportCommandTest(TestCase):
         export = self._export('--format', 'v1')
         self.assertEqual(set(export), {'train', 'val', 'test'})
         self.assertEqual(sum(len(paths) for split in export.values() for paths in split.values()), 18)
+
+
+class ExportRefinementTest(TestCase):
+    def test_missing_header_with_correct_classifier_is_not_hard(self):
+        run = ObservationRun.objects.create(name='sun')
+        DataFile.objects.create(
+            observation_run=run, datafile=str(ARCHIVE / 'sun' / 'a.fit'), file_type='FITS', exposure_type='UK',
+            exposure_type_ml='LI', exposure_type_ml_confidence=0.9, exposure_type_user='LI',
+        )
+        DataFile.objects.create(
+            observation_run=run, datafile=str(ARCHIVE / 'sun' / 'b.fit'), file_type='FITS', exposure_type='UK',
+            exposure_type_ml='DA', exposure_type_ml_confidence=0.9, exposure_type_user='LI',
+        )
+        records = {Path(r['path']).name: r['hard'] for r in collect_records(['FITS'], ARCHIVE)}
+        self.assertEqual(records, {'a.fit': False, 'b.fit': True})
+
+    def test_cap_per_run_keeps_hard_files_first(self):
+        records = [_record(i, 'deep_sky', run=1, hard=i < 3) for i in range(1000)] + [_record(2000, 'deep_sky', run=2)]
+        kept = cap_per_run(records, 10, random.Random(1))
+        run1 = [r for r in kept if r['run'] == 1]
+        self.assertEqual(len(run1), 10)
+        self.assertEqual(sum(r['hard'] for r in run1), 3)
+        self.assertEqual(len(kept), 11)
+
+    def test_rare_class_in_runs_with_large_classes_reaches_every_split(self):
+        records = []
+        for run in range(10):
+            records += [_record(run * 1000 + i, 'deep_sky', run=run) for i in range(100)]
+            records += [_record(run * 1000 + 500 + i, 'bias', run=run) for i in range(5)]
+        split_by_run(records, (0.7, 0.15, 0.15), random.Random(1))
+        self.assertEqual({r['split'] for r in records if r['class'] == 'bias'}, {'train', 'val', 'test'})

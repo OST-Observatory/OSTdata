@@ -42,6 +42,12 @@ class Command(BaseCommand):
             help='Maximum number of files per class; v2 keeps all hard files (default: v1 4000, v2 8000)',
         )
         parser.add_argument(
+            '--max-per-run',
+            type=int,
+            default=500,
+            help='v2: maximum number of files per run and class, hard files first (default: 500)',
+        )
+        parser.add_argument(
             '--min-year',
             type=int,
             default=None,
@@ -276,6 +282,7 @@ class Command(BaseCommand):
 
         export = build_export(
             formats, data_directory, options['split'], max_per_class, rng, min_year=options['min_year'],
+            max_per_run=options['max_per_run'],
         )
 
         self.stdout.write(f"Labelled files: {export['labelled_files']}, exported: {len(export['files'])}")
@@ -287,6 +294,9 @@ class Command(BaseCommand):
             )
             for class_name in sorted(counts):
                 self.stdout.write(f'      {class_name:<32} {counts[class_name]:>7}')
+
+        for split, classes in export['missing_classes'].items():
+            self.stdout.write(self.style.WARNING(f'  {split} has no files of: {", ".join(classes)}'))
 
         output_file = Path(options['output'])
         output_file.parent.mkdir(parents=True, exist_ok=True)

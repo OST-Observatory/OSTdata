@@ -5,7 +5,8 @@ One record per file with class label, label source, metadata and split. Compared
 - Labels: manual labels (incl. files where header or classifier were wrong, marked ``hard``) and
   header/classifier agreement; no year restriction by default.
 - Splits are assigned per observation run, so frames of one run never end up in two splits.
-- Per-class caps keep all hard files and spread the remaining quota over runs.
+- Per-class caps keep all hard files and spread the remaining quota over runs; a cap per run and class
+  keeps single large runs (e.g. thousands of frames of one capture series) from dominating a split.
 """
 from collections import Counter, defaultdict
 from itertools import zip_longest
@@ -21,8 +22,9 @@ FORMAT = 'ost-classification-export/v2'
 SPLITS = ('train', 'val', 'test')
 UNKNOWN = DataFile.UNKNOWN
 
-# Manual exposure labels where header and classifier already agreed with the label are not "hard"
-NOT_HARD_CAUSES = ('confirmation', 'ml_not_run')
+# Manual labels are "hard" only if the header or the classifier was wrong; a missing header with a correct
+# classifier ('header_uk_ml_correct') is not hard for the classifier
+NOT_HARD_CAUSES = ('confirmation', 'ml_not_run', 'header_uk_ml_correct')
 
 FIELDS = (
     'pk', 'datafile', 'observation_run_id', 'observation_run__spectroscopy', 'file_type', 'instrument_normalized',
@@ -101,6 +103,21 @@ def _group(record):
     return record['run'] if record['run'] is not None else f"file-{record['pk']}"
 
 
+def cap_per_run(records, max_per_run, rng):
+    """Keep at most ``max_per_run`` files per run and class, hard files first."""
+    groups = defaultdict(list)
+    for record in records:
+        groups[(_group(record), record['class'])].append(record)
+    kept = []
+    for items in groups.values():
+        if len(items) > max_per_run:
+            rng.shuffle(items)
+            items.sort(key=lambda r: not r['hard'])  # stable: hard files first, otherwise random
+            items = items[:max_per_run]
+        kept.extend(items)
+    return kept
+
+
 def cap_per_class(records, max_per_class, rng):
     """Keep at most ``max_per_class`` files per class: all hard files, the rest round-robin over runs."""
     by_class = defaultdict(list)
@@ -147,9 +164,10 @@ def split_by_run(records, ratios, rng):
         counts = run_counts[run]
 
         def need(split):
-            # Unmet share of the split's target, relative to the target (rare classes reach every split)
+            # Unmet share of the split's target, relative to the target; each class weighted by the run's share
+            # of that class, so a rare class (e.g. bias) is not outvoted by a large class in the same run
             return sum(
-                n * (1 - assigned[split][c] / (ratios[split] * totals[c]))
+                n / totals[c] * (1 - assigned[split][c] / (ratios[split] * totals[c]))
                 for c, n in counts.items()
             )
 
@@ -162,10 +180,11 @@ def split_by_run(records, ratios, rng):
     return records
 
 
-def build_export(formats, data_directory, ratios, max_per_class, rng, min_year=None):
+def build_export(formats, data_directory, ratios, max_per_class, rng, min_year=None, max_per_run=500):
     """Complete v2 export document."""
     records = collect_records(formats, data_directory, min_year=min_year)
     labelled = len(records)
+    records = cap_per_run(records, max_per_run, rng)
     records = cap_per_class(records, max_per_class, rng)
     records = split_by_run(records, ratios, rng)
     records.sort(key=lambda r: (SPLITS.index(r['split']), r['class'], r['path']))
@@ -175,15 +194,19 @@ def build_export(formats, data_directory, ratios, max_per_class, rng, min_year=N
     for record in records:
         counts[record['split']][record['class']] += 1
         hard[record['split']][record['class']] += record['hard']
+    all_classes = {record['class'] for record in records}
+    missing = {split: sorted(all_classes - set(counts[split])) for split in SPLITS}
     return {
         'format': FORMAT,
         'params': {
-            'formats': formats, 'min_year': min_year, 'max_per_class': max_per_class,
+            'formats': formats, 'min_year': min_year, 'max_per_class': max_per_class, 'max_per_run': max_per_run,
             'split': dict(zip(SPLITS, ratios)), 'data_directory': str(data_directory),
         },
         'labelled_files': labelled,
         'counts': {split: dict(c) for split, c in counts.items()},
         'hard_counts': {split: {k: v for k, v in c.items() if v} for split, c in hard.items()},
         'runs': {split: len({_group(r) for r in records if r['split'] == split}) for split in SPLITS},
+        # Classes without files in a split (too few runs to spread them); check before training
+        'missing_classes': {split: classes for split, classes in missing.items() if classes},
         'files': records,
     }
