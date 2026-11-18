@@ -5,7 +5,8 @@ Spectrograph suggestions from two heuristics, and their evaluation on manually r
 - Path tokens: words in directory/file names that (almost) always come with one spectrograph.
 
 Only files with an effective type LI/FL/WA are considered (bias/darks never carry a spectrograph).
-Suggestions are stored in ``SpectrographSuggestion`` for files without a manual spectrograph; the
+Suggestions are stored in ``SpectrographSuggestion`` for files without a manual spectrograph and without a
+SPECTRO keyword of OST_OCS (``spectrograph_header``); the
 evaluation on manually reviewed files (``spectrograph_override``) in ``HeuristicReport``. The value the
 classifier produced before a review is not stored separately, so it is recovered from the history.
 
@@ -236,8 +237,14 @@ def analyse(params=None):
     unevaluable = 0
     outcomes = {name: Counter() for name in EVALUATED}
     transitions = {name: defaultdict(Counter) for name in EVALUATED}
+    # Spectrograph from the SPECTRO keyword of OST_OCS files: no suggestions
+    from_header = set(
+        DataFile.objects.filter(spectrograph_header__isnull=False).values_list('pk', flat=True)
+    )
     for pk, run, spectrograph, override, tokens in files:
         if not override:
+            if pk in from_header:
+                continue
             by_run, by_token = _suggestions(spectrograph, token_label(tokens, indicative), current_counts[run], params)
             if by_run or by_token:
                 suggestions[pk] = (by_run, by_token)
@@ -299,7 +306,10 @@ def apply_agreed_suggestions(dry_run=False):
 
     agreed = (
         SpectrographSuggestion.objects
-        .filter(datafile__spectrograph_override=False, run_majority__isnull=False, run_majority=F('path_token'))
+        .filter(
+            datafile__spectrograph_override=False, datafile__spectrograph_header__isnull=True,
+            run_majority__isnull=False, run_majority=F('path_token'),
+        )
         .exclude(run_majority=F('datafile__spectrograph'))
         .select_related('datafile', 'datafile__observation_run')
     )

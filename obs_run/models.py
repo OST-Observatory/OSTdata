@@ -141,6 +141,7 @@ SPECTROGRAPH_CHOICES = (
     ('D', 'DADOS'),
     ('B', 'BACHES'),
     ('E', 'EINSTEIN_TOWER'),
+    ('U', 'UVEX'),
     ('N', 'NONE'),
 )
 
@@ -180,7 +181,7 @@ class DataFile(models.Model):
         (DARK, 'Dark'),
         (FLAT, 'Flat'),
         (LIGHT, 'Light'),
-        (WAVE, 'Wave'),
+        (WAVE, 'Arc Frame'),
         (UNKNOWN, 'Unknown'),
     )
     exposure_type = models.CharField(
@@ -235,6 +236,12 @@ class DataFile(models.Model):
         choices=spectrograph_possibilities,
         default='N',
     )
+    #   Spectrograph from the SPECTRO keyword, only for files written by OST_OCS (SWCREATE 'OST_OCS ...'),
+    #   whose headers are reliable; None for other files. Takes precedence over classifier and heuristics
+    #   (obs_run/spectrograph.py), a manually set spectrograph still wins
+    spectrograph_header = models.CharField(
+        max_length=1, choices=spectrograph_possibilities, null=True, blank=True,
+    )
 
     #   Telescope and instrument (instrument: raw header value; instrument_normalized: canonical camera
     #   name, kept in sync in save())
@@ -255,6 +262,8 @@ class DataFile(models.Model):
     pedestal = models.IntegerField(default=-1)       
     offset = models.IntegerField(default=-1)       
     readout_mode = models.CharField(max_length=50, default='') 
+    #   Filter (FILTER keyword) as written in the header; '' if missing or a placeholder ('**LEER**', '-')
+    image_filter = models.CharField(max_length=50, default='', blank=True, db_index=True)
     binning_x = models.IntegerField(default=1)     
     binning_y = models.IntegerField(default=1)     
 

@@ -196,7 +196,7 @@ const adminTiles = [
   },
   {
     title: 'Spectrograph Files',
-    description: 'All DADOS, BACHES and Einsteinturm files; invalid exposure type/spectrograph combinations.',
+    description: 'All DADOS, BACHES, UVEX and Einsteinturm files; invalid exposure type/spectrograph combinations.',
     icon: 'mdi-chart-timeline-variant',
     avatarColor: 'indigo',
     to: '/datafiles?preset=spectrograph_files',

@@ -5,6 +5,7 @@ import numpy as np
 from astropy.coordinates.angles import Angle
 from astropy.time import Time
 
+from obs_run.spectrograph import automatic_spectrograph, header_spectrograph
 from obs_run.utils import INSTRUMENT_CATALOG, normalize_instrument, should_allow_auto_update
 
 logger = logging.getLogger(__name__)
@@ -216,7 +217,22 @@ def extract_fits_header_info(header):
                    header.get('RDMODE', None)
     data['readout_mode'] = str(readout_mode).strip() if readout_mode else ''
 
+    data['image_filter'] = header_filter(header)
+
+    # Spectrograph (SPECTRO), only from OST_OCS files; None otherwise
+    data['spectrograph_header'] = header_spectrograph(header)
+
     return data
+
+
+#   FILTER values that name no filter (e.g. MaxIm DL without filter wheel)
+PLACEHOLDER_FILTER_NAMES = ('', '-', '**leer**', 'leer', 'none', 'uk', 'unknown')
+
+
+def header_filter(header):
+    """Filter name from the FILTER keyword as written; '' if missing or a placeholder."""
+    value = str(header.get('FILTER', '') or '').strip()
+    return '' if value.lower() in PLACEHOLDER_FILTER_NAMES else value[:50]
 
 
 ############################################################################
@@ -496,6 +512,7 @@ def analyze_fits(datafile, save=True):
     datafile.readout_mode = header_data.get('readout_mode', '')
     datafile.binning_x = header_data.get('binning_x', 1)
     datafile.binning_y = header_data.get('binning_y', 1)
+    datafile.image_filter = header_data.get('image_filter', '')
 
     #   Calculate field of view if pixel_size and focal_length are available
     # Initialize FOV to -1 if not already set
@@ -598,6 +615,10 @@ def analyze_fits(datafile, save=True):
         'Light Frame': 'LI',
         'Light': 'LI',
         'LIGHT': 'LI',
+        #   OST_OCS (header specification): lamp spectra for the wavelength calibration
+        'Arc Frame': 'WA',
+        #   OST_OCS: darks for flats; stored as darks (the classifier cannot tell them apart)
+        'Dark Flat': 'DA',
     }
 
     #   Sanitize image type (check override flag)
@@ -609,6 +630,12 @@ def analyze_fits(datafile, save=True):
                 break
         else:
             datafile.exposure_type = 'UK'
+
+    #   Spectrograph from the SPECTRO keyword of OST_OCS files (precedence over classifier and
+    #   heuristics, not over a manually set spectrograph)
+    datafile.spectrograph_header = header_data.get('spectrograph_header')
+    if datafile.spectrograph_header:
+        datafile.spectrograph = automatic_spectrograph(datafile)
 
     #   Set object name (header_target_name always mirrors the header; main_target only
     #   unless it was set manually)

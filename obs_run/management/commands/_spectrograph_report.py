@@ -7,7 +7,7 @@ recovered from the DataFile history.
 """
 from collections import Counter, defaultdict
 
-from obs_run.exposure_type import UNKNOWN, classifier_class_name
+from obs_run.exposure_type import UNKNOWN, classifier_class_name, valid_combination
 from obs_run.spectrograph import constrained_spectrograph
 from obs_run.spectrograph_heuristics import (
     SPECTROGRAPH_RELEVANT,
@@ -64,7 +64,7 @@ class SpectrographAnalysis:
         self.totals[spectrograph] += 1
         self.totals['override'] += override
         self.by_type[exposure_type][spectrograph] += 1
-        if exposure_type != UNKNOWN and classifier_class_name(exposure_type, spectrograph) is None:
+        if exposure_type != UNKNOWN and not valid_combination(exposure_type, spectrograph):
             self.invalid[f'{exposure_type}/{spectrograph}']['manual' if override else 'automatic'] += 1
         if not override:
             value, reason = constrained_spectrograph(exposure_type, row['instrument'], spectrograph)
@@ -183,9 +183,9 @@ class SpectrographAnalysis:
 def print_spectrograph_report(cmd, report, top):
     """Print the spectrograph section with the table helpers of the exposure_type_report command."""
     options = cmd._options
-    spectrographs = ['N', 'D', 'B', 'E']
+    spectrographs = ['N', 'D', 'B', 'E', 'U']
 
-    cmd._section('Spectrograph: overview (D = DADOS, B = BACHES, E = Einsteinturm, N = none)')
+    cmd._section('Spectrograph: overview (D = DADOS, B = BACHES, E = Einsteinturm, U = UVEX, N = none)')
     cmd._counter_table({k: v for k, v in report['totals'].items() if k != 'override'})
     cmd.stdout.write(f"  Manually corrected (spectrograph_override): {report['totals'].get('override', 0)}")
     cmd._section('Spectrograph by exposure type (manual label, else effective type)')

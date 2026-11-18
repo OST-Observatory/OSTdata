@@ -49,6 +49,24 @@ INSTRUMENT_ALIASES = {
     'ASI678MM': 'ZWO ASI678MM',
     'ZWO ASI678MM': 'ZWO ASI678MM',
     'Skyris 445C': 'Skyris 445C',
+    # Canonical INSTRUME names of OST_OCS (header specification) and model names of the vendor SDKs;
+    # names differing only in spaces, '-' or '_' are matched by normalize_alias as well
+    'QHY600M-PRO': 'QHY 600M',
+    'QHY600M-PRO-L': 'QHY 600M',
+    'QHY600L': 'QHY 600M',
+    'QHY268M-PRO': 'QHY 268M',
+    'QHY5III485C': 'QHY 5III485C',
+    'QHY5III462C': 'QHY 5III462C',
+    'veTEC533C': 'omegon veTEC 533C',
+    'Omegon veTEC533C': 'omegon veTEC 533C',
+    'omegon veTEC 533C': 'omegon veTEC 533C',
+    'ASI533MC Pro': 'ZWO ASI533MC Pro',
+    'ASI533MCPro': 'ZWO ASI533MC Pro',
+    'ASI2600MC Pro': 'ZWO ASI2600MC Pro',
+    'ASI2600MCPro': 'ZWO ASI2600MC Pro',
+    'ASI294MM Pro': 'ZWO ASI294MM Pro',
+    'ASI294MMPro': 'ZWO ASI294MM Pro',
+    'ASI174MM Mini': 'ZWO ASI174MM Mini',
 }
 
 TELESCOPE_ALIASES = {
@@ -86,13 +104,34 @@ INSTRUMENT_ALIASES = { (k.strip().lower() if isinstance(k, str) else k): v for k
 TELESCOPE_ALIASES  = { (k.strip().lower() if isinstance(k, str) else k): v for k, v in TELESCOPE_ALIASES.items() }
 
 
-def normalize_alias(name: str, aliases: dict) -> str:
+def compact_name(name) -> str:
+    """Lower-case name without spaces, '-' and '_' (e.g. 'QHY 600M', 'qhy-600m' -> 'qhy600m')."""
+    return ''.join(ch for ch in str(name).lower() if ch not in ' -_')
+
+
+def _compact_aliases(aliases: dict) -> dict:
+    """Compact alias keys and canonical names -> canonical name; keys that become ambiguous are dropped."""
+    compact = {}
+    ambiguous = set()
+    for key, value in list(aliases.items()) + [(v, v) for v in aliases.values()]:
+        ckey = compact_name(key)
+        if compact.get(ckey, value) != value:
+            ambiguous.add(ckey)
+        compact[ckey] = value
+    return {k: v for k, v in compact.items() if k not in ambiguous}
+
+
+INSTRUMENT_ALIASES_COMPACT = _compact_aliases(INSTRUMENT_ALIASES)
+
+
+def normalize_alias(name: str, aliases: dict, compact_aliases: dict | None = None) -> str:
     """
     Normalize a name using an alias map.
     
     Args:
         name: The name to normalize
         aliases: Dictionary mapping lowercase keys to normalized values
+        compact_aliases: Optional fallback mapping compact keys (compact_name) to normalized values
         
     Returns:
         Normalized name if found in aliases, otherwise original name
@@ -100,7 +139,11 @@ def normalize_alias(name: str, aliases: dict) -> str:
     if not name:
         return name
     key = str(name).strip().lower()
-    return aliases.get(key, name)
+    if key in aliases:
+        return aliases[key]
+    if compact_aliases:
+        return compact_aliases.get(compact_name(key), name)
+    return name
 
 
 def normalize_instrument(name: str) -> str:
@@ -113,7 +156,7 @@ def normalize_instrument(name: str) -> str:
     Returns:
         Normalized instrument name
     """
-    return normalize_alias(name, INSTRUMENT_ALIASES)
+    return normalize_alias(name, INSTRUMENT_ALIASES, INSTRUMENT_ALIASES_COMPACT)
 
 
 def normalize_telescope(name: str) -> str:

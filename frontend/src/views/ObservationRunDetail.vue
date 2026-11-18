@@ -1123,6 +1123,7 @@ const getSpectrographLabel = (spectrograph) => {
     'D': 'DADOS',
     'B': 'BACHES',
     'E': 'EINSTEIN_TOWER',
+    'U': 'UVEX',
     'N': 'NONE',
   }
   return labels[spectrograph] || spectrograph
@@ -1133,7 +1134,7 @@ const dfFilterPixelsMax = ref(null)
 const dfSortBy = ref([{ key: 'obs_date', order: 'desc' }])
 const exposureTypeOptions = [
   { title: 'Light (LI)', value: 'LI' },
-  { title: 'Wave (WA)', value: 'WA' },
+  { title: 'Arc Frame (WA)', value: 'WA' },
   { title: 'Flat (FL)', value: 'FL' },
   { title: 'Dark (DA)', value: 'DA' },
   { title: 'Bias (BI)', value: 'BI' },

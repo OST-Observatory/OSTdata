@@ -34,6 +34,7 @@ REASON_TASK_ANALYZE_HEADER = 'task:analyze_header'
 REASON_TASK_SPECTROGRAPH_RULES = 'task:spectrograph_rules'
 REASON_TASK_SPECTROGRAPH_SUGGESTION = 'task:spectrograph_suggestion'
 REASON_TASK_BACKFILL_CAMERA_INFO = 'task:backfill_camera_info'
+REASON_TASK_BACKFILL_FILTERS = 'task:backfill_filters'
 
 
 def set_instance_change_reason(instance, reason: str | None) -> None:

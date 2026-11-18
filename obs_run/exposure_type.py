@@ -107,6 +107,16 @@ CLASSIFIER_CLASSES = {
 }
 
 
+# Valid (exposure type, spectrograph) pairs: the classifier classes plus spectrographs the classifier does not
+# know yet (UVEX: so far only from the SPECTRO keyword of OST_OCS files, not exported as training data)
+VALID_COMBINATIONS = frozenset(CLASSIFIER_CLASSES) | {('LI', 'U'), ('FL', 'U'), ('WA', 'U')}
+
+
+def valid_combination(exposure_type, spectrograph):
+    """Whether an exposure type/spectrograph pair is valid (bias and darks carry no spectrograph)."""
+    return (exposure_type, spectrograph or 'N') in VALID_COMBINATIONS
+
+
 def classifier_class_name(exposure_type, spectrograph):
     """Classifier class for an exposure type/spectrograph pair, None if the combination is not valid."""
     return CLASSIFIER_CLASSES.get((exposure_type, spectrograph or 'N'))

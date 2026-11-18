@@ -429,6 +429,7 @@ class DataFileSerializer(ModelSerializer):
             'instrument_normalized',
             'telescope',
             'binning',
+            'image_filter',
             'exposure_type',
             'exposure_type_display',
             # Effective exposure type (priority-based)
@@ -464,6 +465,7 @@ class DataFileSerializer(ModelSerializer):
             'dec_dms',
             'status_parameters',
             'spectrograph',
+            'spectrograph_header',
             'spectroscopy',
             # Override flags (read-only for normal users, editable for admins)
             'exposure_type_override',
@@ -509,6 +511,8 @@ class DataFileSerializer(ModelSerializer):
             'content_hash',
             'file_size',
             'instrument_normalized',
+            'image_filter',
+            'spectrograph_header',
             'ml_top_class',
             'spectrograph_ml',
             'quality_flag',

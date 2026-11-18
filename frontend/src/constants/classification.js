@@ -5,7 +5,7 @@ export const EXPOSURE_TYPE_ITEMS = [
   { label: 'Dark', value: 'DA' },
   { label: 'Flat', value: 'FL' },
   { label: 'Light', value: 'LI' },
-  { label: 'Wave', value: 'WA' },
+  { label: 'Arc Frame', value: 'WA' },
   { label: 'Unknown', value: 'UK' },
 ]
 
@@ -13,6 +13,7 @@ export const SPECTROGRAPH_ITEMS = [
   { label: 'DADOS', value: 'D' },
   { label: 'BACHES', value: 'B' },
   { label: 'Einsteinturm', value: 'E' },
+  { label: 'UVEX', value: 'U' },
   { label: 'None', value: 'N' },
 ]
 
@@ -33,7 +34,7 @@ export function qualityFlagLabel(code) {
 
 // Categorical theme colors (plugins/vuetify.ts): readable in both themes
 const EXPOSURE_TYPE_COLORS = { BI: 'cat-blue', DA: 'cat-slate', FL: 'cat-green', LI: 'cat-orange', WA: 'cat-purple', UK: 'cat-gray' }
-const SPECTROGRAPH_COLORS = { D: 'cat-blue', B: 'cat-green', E: 'cat-purple', N: 'cat-gray' }
+const SPECTROGRAPH_COLORS = { D: 'cat-blue', B: 'cat-green', E: 'cat-purple', U: 'cat-olive', N: 'cat-gray' }
 
 export function exposureTypeColor(code) {
   return EXPOSURE_TYPE_COLORS[String(code || '').toUpperCase()] || 'cat-gray'

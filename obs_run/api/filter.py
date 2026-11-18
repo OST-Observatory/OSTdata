@@ -5,7 +5,7 @@ from django.db.models import Count, ExpressionWrapper, F, FloatField, Q
 from django_filters import rest_framework as filters
 from rest_framework.request import Request
 
-from obs_run.exposure_type import CLASSIFIER_CLASSES, effective_exposure_type_expression
+from obs_run.exposure_type import VALID_COMBINATIONS, effective_exposure_type_expression
 from obs_run.image_quality import QUALITY_FLAG_CHOICES
 from obs_run.models import DataFile, ObservationRun
 from obs_run.search import build_run_aux_objects_search_q, find_aux_object_search_match
@@ -219,7 +219,7 @@ class DataFileClassificationFilterSet(filters.FilterSet):
             return queryset
         queryset = queryset.alias(classification_effective_type=effective_exposure_type_expression())
         valid = Q(classification_effective_type=DataFile.UNKNOWN)
-        for exposure_type, spectrograph in CLASSIFIER_CLASSES:
+        for exposure_type, spectrograph in VALID_COMBINATIONS:
             valid |= Q(classification_effective_type=exposure_type, spectrograph=spectrograph)
         return queryset.exclude(valid) if value else queryset.filter(valid)
 
@@ -294,6 +294,11 @@ class DataFileFilter(DataFileClassificationFilterSet):
     telescope = filters.CharFilter(
         field_name='telescope',
         lookup_expr='icontains',
+    )
+
+    image_filter = filters.CharFilter(
+        field_name='image_filter',
+        lookup_expr='iexact',
     )
 
     exposure_type_ml = filters.MultipleChoiceFilter(

@@ -559,7 +559,7 @@ const PRESETS = [
   { key: 'disagreement', label: 'Header ≠ classifier', icon: 'mdi-compare-horizontal', perm: 'exposure',
     filters: { exposure_disagreement: true } },
   { key: 'spectrograph_files', label: 'Spectrograph files', icon: 'mdi-telescope', perm: 'spectrograph',
-    filters: { spectrograph: ['D', 'B', 'E'] } },
+    filters: { spectrograph: ['D', 'B', 'E', 'U'] } },
   { key: 'spectrograph_suggestions', label: 'Spectrograph suggestions', icon: 'mdi-lightbulb-on-outline', perm: 'spectrograph',
     filters: { has_spectrograph_suggestion: 'any' } },
   { key: 'invalid', label: 'Invalid combinations', icon: 'mdi-alert-outline', perm: 'classification',
