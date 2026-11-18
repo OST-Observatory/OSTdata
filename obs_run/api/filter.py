@@ -6,6 +6,7 @@ from django_filters import rest_framework as filters
 from rest_framework.request import Request
 
 from obs_run.exposure_type import VALID_COMBINATIONS, effective_exposure_type_expression
+from obs_run.filter_names import normalize_filter
 from obs_run.image_quality import QUALITY_FLAG_CHOICES
 from obs_run.models import DataFile, ObservationRun
 from obs_run.search import build_run_aux_objects_search_q, find_aux_object_search_match
@@ -296,10 +297,8 @@ class DataFileFilter(DataFileClassificationFilterSet):
         lookup_expr='icontains',
     )
 
-    image_filter = filters.CharFilter(
-        field_name='image_filter',
-        lookup_expr='iexact',
-    )
+    #   Filter: any spelling finds all files of the physical filter (e.g. 'H-Alpha' also finds 'Halpha')
+    image_filter = filters.CharFilter(method='filter_image_filter')
 
     exposure_type_ml = filters.MultipleChoiceFilter(
         field_name='exposure_type_ml',
@@ -383,6 +382,16 @@ class DataFileFilter(DataFileClassificationFilterSet):
     def filter_pixel_count_max(self, queryset, name, value):
         qs = self._with_pixel_count(queryset)
         return qs.filter(pixel_count__lte=value)
+
+    def filter_image_filter(self, queryset, name, value):
+        value = (value or '').strip()
+        if not value:
+            return queryset
+        match = Q(image_filter__iexact=value)
+        normalized = normalize_filter(value)
+        if normalized:  # wheel positions ('Slot 8') have no canonical name: raw value only
+            match |= Q(filter_normalized=normalized)
+        return queryset.filter(match)
 
     def filter_main_target_tokens(self, queryset, name, value):
         if not value:

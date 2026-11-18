@@ -14,6 +14,7 @@ from tags.models import Tag
 from .analyze_files import set_file_info
 from .analyze_fits_header import canonical_instrument
 from .exposure_type import effective_exposure_type as _effective_exposure_type
+from .filter_names import normalize_filter
 from .image_quality import NOT_CHECKED as QUALITY_NOT_CHECKED
 from .image_quality import QUALITY_FLAG_CHOICES
 
@@ -264,6 +265,8 @@ class DataFile(models.Model):
     readout_mode = models.CharField(max_length=50, default='') 
     #   Filter (FILTER keyword) as written in the header; '' if missing or a placeholder ('**LEER**', '-')
     image_filter = models.CharField(max_length=50, default='', blank=True, db_index=True)
+    #   Canonical filter name (obs_run/filter_names.py), kept in sync in save()
+    filter_normalized = models.CharField(max_length=50, default='', blank=True, db_index=True)
     binning_x = models.IntegerField(default=1)     
     binning_y = models.IntegerField(default=1)     
 
@@ -400,6 +403,12 @@ class DataFile(models.Model):
             update_fields = kwargs.get('update_fields')
             if update_fields is not None and 'instrument_normalized' not in update_fields:
                 kwargs['update_fields'] = [*update_fields, 'instrument_normalized']
+        filter_normalized = normalize_filter(self.image_filter)
+        if filter_normalized != self.filter_normalized:
+            self.filter_normalized = filter_normalized
+            update_fields = kwargs.get('update_fields')
+            if update_fields is not None and 'filter_normalized' not in update_fields:
+                kwargs['update_fields'] = [*update_fields, 'filter_normalized']
         super().save(*args, **kwargs)
 
     #   Get information

@@ -5,6 +5,7 @@ import numpy as np
 from astropy.coordinates.angles import Angle
 from astropy.time import Time
 
+from obs_run.filter_names import normalize_filter
 from obs_run.spectrograph import automatic_spectrograph, header_spectrograph
 from obs_run.utils import INSTRUMENT_CATALOG, normalize_instrument, should_allow_auto_update
 
@@ -226,13 +227,15 @@ def extract_fits_header_info(header):
 
 
 #   FILTER values that name no filter (e.g. MaxIm DL without filter wheel)
-PLACEHOLDER_FILTER_NAMES = ('', '-', '**leer**', 'leer', 'none', 'uk', 'unknown')
+#   (compared without spaces and '*', so '**LEER**' and '** LEER **' match 'leer')
+PLACEHOLDER_FILTER_NAMES = ('', '-', 'leer', 'none', 'uk', 'unknown')
 
 
 def header_filter(header):
     """Filter name from the FILTER keyword as written; '' if missing or a placeholder."""
     value = str(header.get('FILTER', '') or '').strip()
-    return '' if value.lower() in PLACEHOLDER_FILTER_NAMES else value[:50]
+    compact = value.lower().replace(' ', '').strip('*')
+    return '' if compact in PLACEHOLDER_FILTER_NAMES else value[:50]
 
 
 ############################################################################
@@ -513,6 +516,8 @@ def analyze_fits(datafile, save=True):
     datafile.binning_x = header_data.get('binning_x', 1)
     datafile.binning_y = header_data.get('binning_y', 1)
     datafile.image_filter = header_data.get('image_filter', '')
+    #   Derived field (save() keeps it in sync); set here so dry runs report it too
+    datafile.filter_normalized = normalize_filter(datafile.image_filter)
 
     #   Calculate field of view if pixel_size and focal_length are available
     # Initialize FOV to -1 if not already set

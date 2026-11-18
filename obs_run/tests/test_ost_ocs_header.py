@@ -10,6 +10,7 @@ from django.test import TestCase
 
 from obs_run.analyze_fits_header import analyze_fits, detect_instruments, extract_fits_header_info
 from obs_run.exposure_type import classifier_class_name, valid_combination
+from obs_run.filter_names import FILTER_ALIASES, _key, normalize_filter
 from obs_run.ml_classification import apply_ml_result
 from obs_run.models import DataFile, ObservationRun
 from obs_run.spectrograph import automatic_spectrograph, header_spectrograph
@@ -46,7 +47,7 @@ class HeaderKeywordTest(TestCase):
                 self.assertEqual(extract_fits_header_info(_header(**cards))['spectrograph_header'], expected)
 
     def test_filter(self):
-        cases = [('SLOAN-r', 'SLOAN-r'), (' Ha ', 'Ha'), ('V', 'V'), ('**LEER**', ''), ('-', ''), ('', ''), (None, '')]
+        cases = [('SLOAN-r', 'SLOAN-r'), (' Ha ', 'Ha'), ('V', 'V'), ('**LEER**', ''), ('** LEER **', ''), ('-', ''), ('H-Alpha', 'H-Alpha'), ('', ''), (None, '')]
         for value, expected in cases:
             with self.subTest(value=value):
                 header = _header() if value is None else _header(FILTER=value)
@@ -183,3 +184,70 @@ class BackfillFiltersCommandTest(TestCase):
         self.assertIn('0 files read', self._call())
         self.assertIn("'R' -> 'V'", self._call('--all'))
         self.assertEqual(DataFile.objects.get(pk=datafile.pk).image_filter, 'V')
+
+
+class FilterNormalizationTest(TestCase):
+    def test_archive_spellings(self):
+        cases = [
+            ('V', 'V'), ('B', 'B'), ('R', 'R'), ('I', 'I'), ('U', 'U'), ('Clear', 'Clear'),
+            ('H alpha', 'Ha'), ('Halpha', 'Ha'), ('H-Alpha', 'Ha'), ('H_alpha', 'Ha'),
+            ('OIII', 'OIII'), ('O III', 'OIII'), ('SII', 'SII'), ('S II', 'SII'), ('H-Beta', 'Hb'),
+            ('Red', 'Red'), ('Green', 'Green'), ('Blue', 'Blue'), ('Luminance', 'Luminance'),
+            ("g'", 'SLOAN-g'), ('g’', 'SLOAN-g'), ('SLOAN-r', 'SLOAN-r'),
+            ('UV/IR', 'UV/IR-Cut'), ('BlockUV/IR', 'UV/IR-Cut'), ('UV Block', 'UV-Block'), ('LPR', 'LPR'),
+            ('Slot 8', ''), ('Filter#1', ''), ('', ''), ('Some New Filter', 'Some New Filter'),
+        ]
+        for raw, expected in cases:
+            with self.subTest(raw=raw):
+                self.assertEqual(normalize_filter(raw), expected)
+
+    def test_rgb_clear_and_uv_filters_stay_separate(self):
+        self.assertNotEqual(normalize_filter('Red'), normalize_filter('R'))
+        self.assertNotEqual(normalize_filter('Blue'), normalize_filter('B'))
+        self.assertNotEqual(normalize_filter('Clear'), normalize_filter('UV/IR'))
+        self.assertNotEqual(normalize_filter('UV Block'), normalize_filter('UV/IR'))
+
+    def test_aliases_do_not_collide(self):
+        # Case-insensitive keys: two aliases with the same key must map to the same name
+        names = {}
+        for alias, name in FILTER_ALIASES.items():
+            key = _key(alias)
+            self.assertEqual(names.setdefault(key, name), name, alias)
+
+    def test_kept_in_sync_on_save(self):
+        run = ObservationRun.objects.create(name='2024-05-02')
+        datafile = DataFile.objects.create(observation_run=run, datafile='/tmp/x.fits', image_filter='H-Alpha')
+        self.assertEqual(DataFile.objects.get(pk=datafile.pk).filter_normalized, 'Ha')
+        datafile.image_filter = 'O III'
+        datafile.save(update_fields=['image_filter'])
+        self.assertEqual(DataFile.objects.get(pk=datafile.pk).filter_normalized, 'OIII')
+
+    def test_normalize_filters_command(self):
+        run = ObservationRun.objects.create(name='2024-05-03')
+        datafile = DataFile.objects.create(observation_run=run, datafile='/tmp/y.fits', image_filter='Halpha')
+        DataFile.objects.filter(pk=datafile.pk).update(filter_normalized='')  # e.g. before the migration
+        out = StringIO()
+        call_command('normalize_filters', '--dry-run', stdout=out)
+        self.assertIn("'Halpha': '' -> 'Ha'", out.getvalue())
+        self.assertEqual(DataFile.objects.get(pk=datafile.pk).filter_normalized, '')
+        call_command('normalize_filters', stdout=StringIO())
+        self.assertEqual(DataFile.objects.get(pk=datafile.pk).filter_normalized, 'Ha')
+
+    def test_api_filter_finds_all_spellings(self):
+        from obs_run.api.filter import DataFileFilter
+
+        run = ObservationRun.objects.create(name='2024-05-04')
+        files = {
+            raw: DataFile.objects.create(observation_run=run, datafile=f'/tmp/{i}.fits', image_filter=raw)
+            for i, raw in enumerate(['H-Alpha', 'Halpha', 'R', 'Red', 'Slot 8', ''])
+        }
+
+        def found(value):
+            # The filter set's qs needs an API request (visibility); the method alone is tested here
+            queryset = DataFileFilter().filter_image_filter(DataFile.objects.all(), 'image_filter', value)
+            return {df.image_filter for df in queryset}
+
+        self.assertEqual(found('h alpha'), {'H-Alpha', 'Halpha'})
+        self.assertEqual(found('R'), {'R'})
+        self.assertEqual(found('Slot 8'), {'Slot 8'})
+        self.assertEqual(len(files), 6)
