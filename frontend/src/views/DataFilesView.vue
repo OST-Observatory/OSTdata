@@ -237,6 +237,11 @@
           <v-chip size="small" :color="getExposureTypeColor(item.effective_exposure_type)" variant="outlined">
             {{ item.effective_exposure_type_display || item.effective_exposure_type || '—' }}
           </v-chip>
+          <v-tooltip v-if="item.exposure_type_rule && !item.exposure_type_user" text="Set by the name rule (arc lamp name in file name or OBJECT)" location="top">
+            <template #activator="{ props }">
+              <v-icon v-bind="props" size="x-small" class="ml-1" icon="mdi-tag-text-outline" />
+            </template>
+          </v-tooltip>
         </template>
 
         <template #item.plate_solved="{ item }">

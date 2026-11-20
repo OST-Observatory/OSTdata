@@ -229,7 +229,7 @@ class Command(BaseCommand):
             'pk', 'datafile', 'observation_run_id', 'file_type', 'instrument', 'obs_date', 'exposure_type',
             'exposure_type_ml', 'exposure_type_ml_confidence', 'exposure_type_ml_abstained',
             'exposure_type_user', 'exposure_type_override', 'spectrograph', 'spectrograph_override',
-            'annotated_effective_exposure_type',
+            'exposure_type_rule', 'annotated_effective_exposure_type',
         )
         for row in queryset.values(*fields).iterator(chunk_size=2000):
             file_type = row['file_type'] or 'unknown'
@@ -258,7 +258,8 @@ class Command(BaseCommand):
                 header_to_user[f"{row['exposure_type'] or UNKNOWN} -> {user}"] += 1
                 user_by_file_type[file_type][user] += 1
                 for r in RULES:
-                    result = effective_exposure_type(header, row['exposure_type_ml'], None, r)
+                    result = effective_exposure_type(header, row['exposure_type_ml'], None, r,
+                                                     name_rule=row['exposure_type_rule'])
                     outcome = 'correct' if result == user else 'review' if result == UNKNOWN else 'wrong'
                     simulation[r][outcome] += 1
                     simulation_by_file_type[r][file_type][outcome] += 1
@@ -295,7 +296,8 @@ class Command(BaseCommand):
                 for token in tokens:
                     token_labels[token][token_truth] += 1
                     token_runs[token].add(row['observation_run_id'])
-            if effective_exposure_type(header, row['exposure_type_ml'], None, rule) == UNKNOWN:
+            if effective_exposure_type(header, row['exposure_type_ml'], None, rule,
+                                       name_rule=row['exposure_type_rule']) == UNKNOWN:
                 problem_files.append((tokens, user or None, file_type))
             spectrograph.add(
                 row, user or row['annotated_effective_exposure_type'], ml_ran, ml_abstained, ml_type, tokens,

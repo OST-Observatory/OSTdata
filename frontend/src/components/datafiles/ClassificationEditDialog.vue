@@ -8,6 +8,10 @@
           <div class="d-flex flex-wrap align-center" style="gap: 6px">
             <span class="text-medium-emphasis">Header</span>
             <v-chip size="x-small" :color="exposureTypeColor(single.exposure_type)" variant="flat">{{ exposureTypeLabel(single.exposure_type) }}</v-chip>
+            <template v-if="single.exposure_type_rule">
+              <span class="text-medium-emphasis ml-2">Name rule</span>
+              <v-chip size="x-small" :color="exposureTypeColor(single.exposure_type_rule)" variant="flat">{{ exposureTypeLabel(single.exposure_type_rule) }}</v-chip>
+            </template>
             <span class="text-medium-emphasis ml-2">Classifier</span>
             <v-chip size="x-small" :color="exposureTypeColor(single.exposure_type_ml)" variant="flat">{{ exposureTypeLabel(single.exposure_type_ml) }}</v-chip>
             <span class="text-medium-emphasis ml-2">Effective</span>
@@ -22,7 +26,7 @@
             item-title="label"
             item-value="value"
             label="Exposure Type (Manual)"
-            hint="A manual type takes precedence over header and classifier. 'None' falls back to them."
+            hint="A manual type takes precedence over name rule, header and classifier. 'None' falls back to them."
             persistent-hint
             variant="outlined"
             class="mb-1"

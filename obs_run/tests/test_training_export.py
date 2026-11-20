@@ -34,6 +34,11 @@ class LabelTest(TestCase):
             (_row(header='WA', ml='WA', spectrograph='N'), None),  # invalid combination
             (_row(spectrograph='D', override=True), ('spectrum_dados', 'manual')),
             (_row(user='UK'), None),
+            # name rule: only together with the classifier
+            (dict(_row(header='LI', ml='WA', spectrograph='D'), exposure_type_rule='WA'),
+             ('wavelength_calibration_dados', 'agreement')),
+            (dict(_row(header='LI', ml='DA', spectrograph='D'), exposure_type_rule='WA'), None),
+            (dict(_row(header='LI', ml='LI'), exposure_type_rule='WA'), None),
         ]
         for row, expected in cases:
             with self.subTest(row=row):

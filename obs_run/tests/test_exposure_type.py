@@ -8,7 +8,9 @@ from obs_run.exposure_type import (
     RULE_AGREE,
     RULE_HEADER_FIRST,
     RULES,
+    arc_lamp_token,
     effective_exposure_type,
+    name_rule_exposure_type,
 )
 from obs_run.models import DataFile, ObservationRun
 from utilities import annotate_effective_exposure_type, get_effective_exposure_type_filter
@@ -16,7 +18,8 @@ from utilities import annotate_effective_exposure_type, get_effective_exposure_t
 HEADERS = ['UK', 'LI', 'DA']
 MLS = [None, '', 'UK', 'LI', 'DA']
 USERS = [None, '', 'LI', 'UK']
-CODES = ['UK', 'LI', 'DA']
+NAMES = ['{}.fit', 'DADOS_Ar-Ne-{}_1s.fit']
+CODES = ['UK', 'LI', 'DA', 'WA']
 
 
 class EffectiveExposureTypeRuleTest(TestCase):
@@ -61,22 +64,70 @@ class EffectiveExposureTypeRuleTest(TestCase):
             DataFile(exposure_type='LI').effective_exposure_type
 
 
+class NameRuleTest(TestCase):
+    def test_arc_lamp_names(self):
+        for name in ('DADOS_Ar-Ne-0001_1s.fit', 'thar_2s.FIT', 'ThAr001.fit', 'hg_ar.fits', 'ne_ar_5s.fit',
+                     'Neon.fit', 'argon-01.fit', 'wavecal_0003.fit', 'arc_001.fit', 'DADOS_ArNe.fit'):
+            with self.subTest(name=name):
+                self.assertTrue(arc_lamp_token(f'/data/run/{name}', ''))
+        for name in ('arcturus_300.FIT', 'moon_near_terminator.fit', 'barnes_star.fit', 'search.fit', 'm42.fit',
+                     'neonova.fit', 'darkflat.fit'):
+            with self.subTest(name=name):
+                self.assertIsNone(arc_lamp_token(f'/data/run/{name}', 'M 42'))
+
+    def test_object_and_directory(self):
+        self.assertEqual(arc_lamp_token('/data/run/0001.fit', 'ThAr lamp'), 'thar')
+        self.assertIsNone(arc_lamp_token('/data/thar/0001.fit', ''))  # directories are not used
+
+    def test_header_types_and_setting(self):
+        self.assertEqual(name_rule_exposure_type('LI', 'thar.fit', '', enabled=True), 'WA')
+        self.assertEqual(name_rule_exposure_type('UK', 'thar.fit', '', enabled=True), 'WA')
+        self.assertEqual(name_rule_exposure_type('DA', 'thar.fit', '', enabled=True), '')
+        self.assertEqual(name_rule_exposure_type('FL', 'thar.fit', '', enabled=True), '')
+        with self.settings(EXPOSURE_TYPE_NAME_RULE=False):
+            self.assertEqual(name_rule_exposure_type('LI', 'thar.fit', ''), '')
+
+    def test_precedence(self):
+        for rule in RULES:
+            with self.subTest(rule=rule):
+                self.assertEqual(effective_exposure_type('LI', 'DA', None, rule, name_rule='WA'), 'WA')
+                self.assertEqual(effective_exposure_type('LI', 'DA', 'LI', rule, name_rule='WA'), 'LI')
+
+    def test_save_keeps_rule_in_sync(self):
+        run = ObservationRun.objects.create(name='2024-12-12')
+        with self.settings(EXPOSURE_TYPE_NAME_RULE=True):
+            datafile = DataFile.objects.create(observation_run=run, datafile='/d/DADOS_Ar-Ne-0001_1s.fit',
+                                               file_type='FITS', exposure_type='LI', exposure_type_ml='DA')
+            self.assertEqual((datafile.exposure_type_rule, datafile.effective_exposure_type), ('WA', 'WA'))
+            datafile.exposure_type = 'DA'
+            datafile.save(update_fields=['exposure_type'])
+            datafile.refresh_from_db()
+            self.assertEqual(datafile.exposure_type_rule, '')
+        with self.settings(EXPOSURE_TYPE_NAME_RULE=False):
+            datafile = DataFile.objects.create(observation_run=run, datafile='/d/thar.fit', file_type='FITS',
+                                               exposure_type='LI')
+            self.assertEqual(datafile.exposure_type_rule, '')
+
+
+@override_settings(EXPOSURE_TYPE_NAME_RULE=True)
 class EffectiveExposureTypeSqlEquivalenceTest(TestCase):
-    """Every header/ML/user combination: SQL annotation and Q filter == Python function."""
+    """Every header/ML/user/name combination: SQL annotation and Q filter == Python function."""
 
     @classmethod
     def setUpTestData(cls):
         cls.expected_args = {}
-        for i, (header, ml, user) in enumerate(product(HEADERS, MLS, USERS)):
+        for i, (header, ml, user, name) in enumerate(product(HEADERS, MLS, USERS, NAMES)):
             run = ObservationRun.objects.create(name=f'run-{i}')
             datafile = DataFile.objects.create(
-                observation_run=run, datafile=f'/tmp/{i}.fit', file_type='FITS',
+                observation_run=run, datafile=f'/tmp/{name.format(i)}', file_type='FITS',
                 exposure_type=header, exposure_type_ml=ml, exposure_type_user=user,
             )
-            cls.expected_args[datafile.pk] = (header, ml, user)
+            cls.expected_args[datafile.pk] = (header, ml, user, datafile.exposure_type_rule)
+        assert any(args[3] for args in cls.expected_args.values())
 
     def _expected(self, pk, rule):
-        return effective_exposure_type(*self.expected_args[pk], rule=rule)
+        header, ml, user, name_rule = self.expected_args[pk]
+        return effective_exposure_type(header, ml, user, rule=rule, name_rule=name_rule)
 
     def test_annotation(self):
         for rule in RULES:

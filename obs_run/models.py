@@ -14,6 +14,7 @@ from tags.models import Tag
 from .analyze_files import set_file_info
 from .analyze_fits_header import canonical_instrument
 from .exposure_type import effective_exposure_type as _effective_exposure_type
+from .exposure_type import name_rule_exposure_type
 from .filter_names import normalize_filter
 from .image_quality import NOT_CHECKED as QUALITY_NOT_CHECKED
 from .image_quality import QUALITY_FLAG_CHOICES
@@ -190,6 +191,10 @@ class DataFile(models.Model):
         choices=EXPOSURE_TYPE_POSSIBILITIES,
         default=UNKNOWN,
     )
+
+    #   Name rule (obs_run/exposure_type.py): 'WA' for arc lamp names in file name or OBJECT when the header
+    #   says light/unknown; kept in sync in save(); ranks above header and ML, below the user label
+    exposure_type_rule = models.CharField(max_length=2, choices=EXPOSURE_TYPE_POSSIBILITIES, default='', blank=True)
 
     #   ML-based exposure type classification
     exposure_type_ml = models.CharField(
@@ -403,6 +408,12 @@ class DataFile(models.Model):
             update_fields = kwargs.get('update_fields')
             if update_fields is not None and 'instrument_normalized' not in update_fields:
                 kwargs['update_fields'] = [*update_fields, 'instrument_normalized']
+        name_rule = name_rule_exposure_type(self.exposure_type, self.datafile, self.header_target_name)
+        if name_rule != self.exposure_type_rule:
+            self.exposure_type_rule = name_rule
+            update_fields = kwargs.get('update_fields')
+            if update_fields is not None and 'exposure_type_rule' not in update_fields:
+                kwargs['update_fields'] = [*update_fields, 'exposure_type_rule']
         filter_normalized = normalize_filter(self.image_filter)
         if filter_normalized != self.filter_normalized:
             self.filter_normalized = filter_normalized
@@ -482,7 +493,8 @@ class DataFile(models.Model):
         Effective exposure type combining header, ML and user label.
         Rules: see obs_run/exposure_type.py (setting EXPOSURE_TYPE_EFFECTIVE_RULE).
         """
-        return _effective_exposure_type(self.exposure_type, self.exposure_type_ml, self.exposure_type_user)
+        return _effective_exposure_type(self.exposure_type, self.exposure_type_ml, self.exposure_type_user,
+                                        name_rule=self.exposure_type_rule)
 
     def get_effective_exposure_type_display(self):
         """

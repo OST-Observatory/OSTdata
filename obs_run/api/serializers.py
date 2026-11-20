@@ -433,6 +433,8 @@ class DataFileSerializer(ModelSerializer):
             'filter_normalized',
             'exposure_type',
             'exposure_type_display',
+            # Name rule (arc lamp names -> WA), ranks above header and classifier
+            'exposure_type_rule',
             # Effective exposure type (priority-based)
             'effective_exposure_type',
             'effective_exposure_type_display',
@@ -562,6 +564,7 @@ class DataFileSerializer(ModelSerializer):
             'exposure_type_ml',
             'exposure_type_ml_confidence',
             'exposure_type_ml_abstained',
+            'exposure_type_rule',
         )
     
     def __init__(self, *args, **kwargs):

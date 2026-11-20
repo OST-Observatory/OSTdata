@@ -29,7 +29,7 @@ NOT_HARD_CAUSES = ('confirmation', 'ml_not_run', 'header_uk_ml_correct')
 FIELDS = (
     'pk', 'datafile', 'observation_run_id', 'observation_run__spectroscopy', 'file_type', 'instrument_normalized',
     'obs_date', 'exptime', 'plate_solved', 'exposure_type', 'exposure_type_ml', 'exposure_type_ml_confidence',
-    'exposure_type_ml_abstained', 'exposure_type_user', 'spectrograph', 'spectrograph_override',
+    'exposure_type_ml_abstained', 'exposure_type_user', 'exposure_type_rule', 'spectrograph', 'spectrograph_override',
 )
 
 
@@ -38,8 +38,14 @@ def label(row):
     user = (row['exposure_type_user'] or '').strip()
     header = row['exposure_type'] or UNKNOWN
     ml = (row['exposure_type_ml'] or '').strip()
+    name_rule = (row.get('exposure_type_rule') or '').strip()
     if user:
         exposure_type, source = user, 'manual'
+    elif name_rule:
+        # name rule (arc lamp name): only together with the classifier, like header/ML agreement
+        if ml != name_rule:
+            return None
+        exposure_type, source = name_rule, 'agreement'
     elif ml and ml != UNKNOWN and ml == header:
         exposure_type, source = header, 'agreement'
     else:
