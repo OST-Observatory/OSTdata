@@ -66,14 +66,21 @@ class EffectiveExposureTypeRuleTest(TestCase):
 
 class NameRuleTest(TestCase):
     def test_arc_lamp_names(self):
-        for name in ('DADOS_Ar-Ne-0001_1s.fit', 'thar_2s.FIT', 'ThAr001.fit', 'hg_ar.fits', 'ne_ar_5s.fit',
+        for name in ('DADOS_Ar-Ne-0001_1s.fit', 'thar_2s.FIT', 'ThAr001.fit', 'ne_ar_5s.fit',
                      'Neon.fit', 'argon-01.fit', 'wavecal_0003.fit', 'arc_001.fit', 'DADOS_ArNe.fit'):
             with self.subTest(name=name):
                 self.assertTrue(arc_lamp_token(f'/data/run/{name}', ''))
         for name in ('arcturus_300.FIT', 'moon_near_terminator.fit', 'barnes_star.fit', 'search.fit', 'm42.fit',
-                     'neonova.fit', 'darkflat.fit'):
+                     'neonova.fit', 'darkflat.fit', 'mizar-0004_15s_hgar.fit'):
             with self.subTest(name=name):
                 self.assertIsNone(arc_lamp_token(f'/data/run/{name}', 'M 42'))
+
+    def test_other_calibration_frames_are_excluded(self):
+        for path in ('/data/N1/Darks/Darks_th-ar-0003_th-ar.fit', '/data/N1/Darks/th-ar-0003.fit',
+                     '/data/mizar/flats/flat-0009_15s_thar.fit', '/data/run/darkflat_thar.fit', '/data/run/bias_arne.fit'):
+            with self.subTest(path=path):
+                self.assertIsNone(arc_lamp_token(path, ''))
+        self.assertIsNone(arc_lamp_token('/data/run/thar_001.fit', 'Dark'))
 
     def test_object_and_directory(self):
         self.assertEqual(arc_lamp_token('/data/run/0001.fit', 'ThAr lamp'), 'thar')

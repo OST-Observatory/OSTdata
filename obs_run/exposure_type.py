@@ -33,10 +33,16 @@ RULES = (RULE_HEADER_FIRST, RULE_AGREE)
 # Name rule: arc lamp names in the file name or OBJECT mark wavelength calibration frames whose header says
 # light or nothing (e.g. 'DADOS_Ar-Ne-0001_1s.fit' with IMAGETYP 'Light Frame'). Whole tokens only, so
 # 'arcturus' or 'near' do not match; 'ne_ar' needs a separator ('near').
+# Evaluation 2026-11-20 (apply_exposure_type_name_rule --dry-run): 'hgar' is not used, it also tagged all flats
+# and spectra of a night (2026-03-18, '..._15s_hgar.fit'); darks taken for arc frames ('Darks_th-ar-0003.fit')
+# are excluded by CALIBRATION_PATTERN.
 WAVE = 'WA'
 ARC_LAMP_PATTERN = re.compile(
-    r'(?<![a-z])(th[-_ ]?ar|ar[-_ ]?ne|ne[-_ ]ar|hg[-_ ]?ar|neon|argon|wavecal|arc)(?![a-z])', re.IGNORECASE,
+    r'(?<![a-z])(th[-_ ]?ar|ar[-_ ]?ne|ne[-_ ]ar|neon|argon|wavecal|arc)(?![a-z])', re.IGNORECASE,
 )
+# Other calibration frames named after the arc lamp they belong to (darks, darkflats, flats, bias); checked in
+# file name, parent directory and OBJECT
+CALIBRATION_PATTERN = re.compile(r'(?<![a-z])(dark|bias|flat)', re.IGNORECASE)
 NAME_RULE_HEADER_TYPES = ('LI', UNKNOWN, '')
 
 
@@ -53,8 +59,14 @@ def name_rule_exposure_type(header, path, object_name, enabled=None):
 
 
 def arc_lamp_token(path, object_name):
-    """Arc lamp token in the file name or OBJECT, normalised ('Ar-Ne' -> 'arne'), None if there is none."""
-    for name in (PurePath(str(path or '')).name, str(object_name or '')):
+    """
+    Arc lamp token in the file name or OBJECT, normalised ('Ar-Ne' -> 'arne'); None if there is none or if
+    file name, parent directory or OBJECT name another calibration type (e.g. 'Darks/Darks_th-ar-0003.fit').
+    """
+    path = PurePath(str(path or ''))
+    if any(CALIBRATION_PATTERN.search(name) for name in (path.name, path.parent.name, str(object_name or ''))):
+        return None
+    for name in (path.name, str(object_name or '')):
         match = ARC_LAMP_PATTERN.search(name)
         if match:
             return re.sub(r'[-_ ]', '', match.group(1).lower())

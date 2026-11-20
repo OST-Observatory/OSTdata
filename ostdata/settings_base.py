@@ -458,7 +458,7 @@ ML_EXPOSURE_TYPE_ENABLED = env.bool('ML_EXPOSURE_TYPE_ENABLED', default=False)
 # How header, ML and user label combine into the effective exposure type (see obs_run/exposure_type.py):
 # 'header_first' (header wins, ML fills header gaps, disagreement -> UK) or 'agree' (legacy: ML must equal header)
 EXPOSURE_TYPE_EFFECTIVE_RULE = env.str('EXPOSURE_TYPE_EFFECTIVE_RULE', default='header_first')
-# Name rule (obs_run/exposure_type.py): arc lamp names (Ar-Ne, ThAr, HgAr, neon, argon, wavecal, arc) in file name
+# Name rule (obs_run/exposure_type.py): arc lamp names (Ar-Ne, ThAr, neon, argon, wavecal, arc) in file name
 # or OBJECT make light/unknown frames WA, ranked above header and ML. Evaluate first with
 # `apply_exposure_type_name_rule --dry-run`, then enable and run the command without --dry-run
 EXPOSURE_TYPE_NAME_RULE = env.bool('EXPOSURE_TYPE_NAME_RULE', default=False)
