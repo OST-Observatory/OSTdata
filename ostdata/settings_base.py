@@ -444,9 +444,12 @@ LDAP_GROUP_STUDENT_DN = env.str('LDAP_GROUP_STUDENT_DN', default='')
 configure_ldap_from_env(globals(), env)
 
 # ML Model Configuration for Exposure Type Classification
+# Legacy model, v2 model or ensemble file (<stem>_ensemble.json of ost_image_classification). Leave thresholds
+# and temperature unset for v2 models and ensembles: the classifier then uses the calibration saved with the
+# model (fitted on val); unset for a legacy model means no thresholds (0.5) and temperature 0.7
 ML_EXPOSURE_TYPE_MODEL_PATH = env('ML_EXPOSURE_TYPE_MODEL_PATH', default=None)
 ML_EXPOSURE_TYPE_THRESHOLDS_PATH = env('ML_EXPOSURE_TYPE_THRESHOLDS_PATH', default=None)
-ML_EXPOSURE_TYPE_TEMPERATURE = env.float('ML_EXPOSURE_TYPE_TEMPERATURE', default=0.7)
+ML_EXPOSURE_TYPE_TEMPERATURE = env.float('ML_EXPOSURE_TYPE_TEMPERATURE', default=None)
 ML_EXPOSURE_TYPE_TTA = env.bool('ML_EXPOSURE_TYPE_TTA', default=False)
 ML_EXPOSURE_TYPE_ABSTAIN_UNKNOWN = env.bool('ML_EXPOSURE_TYPE_ABSTAIN_UNKNOWN', default=True)
 ML_EXPOSURE_TYPE_SUPPORTED_FORMATS = env.list('ML_EXPOSURE_TYPE_SUPPORTED_FORMATS', default=['FITS', 'TIFF'])

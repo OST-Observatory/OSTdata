@@ -70,3 +70,5 @@ django-stubs==6.1.0
 
 # ML exposure-type classification (pulls tensorflow, keras, pillow, scikit-learn, …)
 git+https://github.com/OST-Observatory/ost_image_classification.git@4d081e5416434596089fc78245dc41d7f534f781
+# LightGBM models and ensembles with a LightGBM member (pipeline v2)
+lightgbm==4.7.0

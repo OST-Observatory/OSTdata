@@ -80,7 +80,8 @@ class ExposureTypeClassifier:
 
         try:
             # Initialize ClassifierService with configuration from settings
-            temperature = getattr(settings, 'ML_EXPOSURE_TYPE_TEMPERATURE', 0.7)
+            # None: calibration saved with a v2 model/ensemble, 0.7 for legacy models (ClassifierService)
+            temperature = getattr(settings, 'ML_EXPOSURE_TYPE_TEMPERATURE', None)
             tta = getattr(settings, 'ML_EXPOSURE_TYPE_TTA', False)
             abstain_unknown = getattr(settings, 'ML_EXPOSURE_TYPE_ABSTAIN_UNKNOWN', True)
             target_size = getattr(settings, 'ML_EXPOSURE_TYPE_TARGET_SIZE', [448, 448])
@@ -89,13 +90,14 @@ class ExposureTypeClassifier:
             if isinstance(target_size, list):
                 target_size = tuple(target_size)
 
+            options = {'temperature': temperature} if temperature is not None else {}
             self._classifier = ClassifierService(
                 model_path=str(model_path),
                 thresholds_path=str(thresholds_path) if thresholds_path else None,
-                temperature=temperature,
                 tta=tta,
                 abstain_unknown=abstain_unknown,
                 target_size=target_size,
+                **options,
             )
             logger.info(f'ML Exposure Type Classifier initialized with model: {model_path}')
         except Exception as e:

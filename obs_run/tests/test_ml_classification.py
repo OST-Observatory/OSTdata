@@ -1,6 +1,7 @@
 """Classifier integration: archive metadata for v2 models, top class when abstaining, storing the result."""
 import tempfile
 from pathlib import Path
+from unittest import mock
 
 from django.test import TestCase, override_settings
 
@@ -77,3 +78,33 @@ class ClassifyDatafileTest(TestCase):
         # the raw suggestion is kept, the stored spectrograph follows the rules (header LI vs. classifier DA -> UK)
         self.assertEqual((self.datafile.spectrograph_ml, self.datafile.ml_top_class), ('B', 'darks'))
         self.assertEqual(self.datafile.exposure_type_ml, 'DA')
+
+
+class ClassifierInitTest(TestCase):
+    """Temperature unset -> not passed, so v2 models and ensembles use their saved calibration."""
+
+    def setUp(self):
+        model = Path(tempfile.mkdtemp()) / 'v2b_cnn+v2b_lgbm_ensemble.json'
+        model.write_text('{}')
+        self.model = str(model)
+        self.service = ExposureTypeClassifier()
+        self.service._classifier = None
+        self.addCleanup(setattr, self.service, '_classifier', None)
+
+    def _init(self, **settings):
+        with override_settings(ML_EXPOSURE_TYPE_ENABLED=True, ML_EXPOSURE_TYPE_MODEL_PATH=self.model,
+                               ML_EXPOSURE_TYPE_THRESHOLDS_PATH=None, **settings), \
+                mock.patch('obs_run.ml_classification.CLASSIFIER_AVAILABLE', True), \
+                mock.patch('obs_run.ml_classification.ClassifierService', create=True) as service:
+            self.service._classifier = None
+            self.service._ensure_initialized()
+        return service.call_args.kwargs
+
+    def test_unset_temperature_is_not_passed(self):
+        kwargs = self._init(ML_EXPOSURE_TYPE_TEMPERATURE=None)
+        self.assertEqual(kwargs['model_path'], self.model)
+        self.assertNotIn('temperature', kwargs)
+        self.assertIsNone(kwargs['thresholds_path'])
+
+    def test_explicit_temperature_is_passed(self):
+        self.assertEqual(self._init(ML_EXPOSURE_TYPE_TEMPERATURE=0.9)['temperature'], 0.9)
