@@ -2,6 +2,7 @@
 import json
 import random
 import tempfile
+from collections import Counter
 from io import StringIO
 from pathlib import Path
 from unittest import mock
@@ -107,6 +108,16 @@ class CapAndSplitTest(TestCase):
         self.assertIn(100, {r['pk'] for r in kept})
         self.assertEqual({r['run'] for r in kept if not r['hard']}, {0, 1, 2, 3})
 
+    def test_cap_reserves_room_for_ordinary_files(self):
+        hard = [_record(i, 'deep_sky', run=i % 5, hard=True) for i in range(100)]
+        ordinary = [_record(1000 + i, 'deep_sky', run=10 + i % 8) for i in range(100)]
+        kept = cap_per_class(hard + ordinary, 20, random.Random(1), hard_share=0.5)
+        self.assertEqual(sum(r['hard'] for r in kept), 10)
+        self.assertEqual({r['run'] for r in kept if not r['hard']}, set(range(10, 18)))
+        # few ordinary files: hard files fill the unused quota
+        kept = cap_per_class(hard + ordinary[:3], 20, random.Random(1), hard_share=0.5)
+        self.assertEqual((sum(r['hard'] for r in kept), len(kept)), (17, 20))
+
     def test_split_by_run(self):
         records = [_record(i, 'deep_sky', run=i // 10) for i in range(400)]  # 40 runs
         records += [_record(1000 + i, 'einsteinturm', run=100 + i) for i in range(3)]  # rare: 3 runs
@@ -147,6 +158,13 @@ class ExportCommandTest(TestCase):
             'pk', 'path', 'class', 'label_source', 'hard', 'run', 'instrument', 'year', 'file_type', 'exptime',
             'plate_solved', 'run_spectroscopy', 'split',
         })
+
+    def test_eval_splits_capped_per_run_only(self):
+        export = self._export('--max-eval-per-run', '1', '--max-per-class', '100')
+        per_run = Counter((f['split'], f['run']) for f in export['files'])
+        self.assertTrue(all(n == 1 for (split, _), n in per_run.items() if split != 'train'))
+        self.assertTrue(all(n == 3 for (split, _), n in per_run.items() if split == 'train'))
+        self.assertEqual(export['params']['max_eval_per_run'], 1)
 
     def test_v1_still_available(self):
         DataFile.objects.update(obs_date='2024-01-01T00:00:00')

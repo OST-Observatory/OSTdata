@@ -39,7 +39,21 @@ class Command(BaseCommand):
             '--max-per-class',
             type=int,
             default=None,
-            help='Maximum number of files per class; v2 keeps all hard files (default: v1 4000, v2 8000)',
+            help='Maximum number of files per class; v2: training split only (default: v1 4000, v2 8000)',
+        )
+        parser.add_argument(
+            '--hard-share',
+            type=float,
+            default=0.5,
+            help='v2: share of the per-class cap for hard files in the training split; ordinary files get the '
+                 'rest, unused quota goes to the other part (default: 0.5)',
+        )
+        parser.add_argument(
+            '--max-eval-per-run',
+            type=int,
+            default=50,
+            help='v2: maximum number of files per run and class in the validation and test splits, random '
+                 '(no class cap, archive class mix; default: 50)',
         )
         parser.add_argument(
             '--max-per-run',
@@ -282,7 +296,8 @@ class Command(BaseCommand):
 
         export = build_export(
             formats, data_directory, options['split'], max_per_class, rng, min_year=options['min_year'],
-            max_per_run=options['max_per_run'],
+            max_per_run=options['max_per_run'], hard_share=options['hard_share'],
+            max_eval_per_run=options['max_eval_per_run'],
         )
 
         self.stdout.write(f"Labelled files: {export['labelled_files']}, exported: {len(export['files'])}")

@@ -5,8 +5,13 @@ One record per file with class label, label source, metadata and split. Compared
 - Labels: manual labels (incl. files where header or classifier were wrong, marked ``hard``) and
   header/classifier agreement; no year restriction by default.
 - Splits are assigned per observation run, so frames of one run never end up in two splits.
-- Per-class caps keep all hard files and spread the remaining quota over runs; a cap per run and class
-  keeps single large runs (e.g. thousands of frames of one capture series) from dominating a split.
+- A cap per run and class keeps single large runs (e.g. thousands of frames of one capture series) from
+  dominating a split.
+- Training split: per-class cap, at most ``hard_share`` of it for hard files, the rest for ordinary files,
+  both spread over runs. (Keeping all hard files left almost no ordinary light frames in the training data:
+  the archive comparison of 2026-11-20 found typical photometry frames classified as darks.)
+- Validation and test splits: only a (smaller) cap per run and class, no class cap and no preference for hard
+  files, so evaluation and the calibration fitted on val see the class mix of the archive.
 """
 from collections import Counter, defaultdict
 from itertools import zip_longest
@@ -109,8 +114,8 @@ def _group(record):
     return record['run'] if record['run'] is not None else f"file-{record['pk']}"
 
 
-def cap_per_run(records, max_per_run, rng):
-    """Keep at most ``max_per_run`` files per run and class, hard files first."""
+def cap_per_run(records, max_per_run, rng, hard_first=True):
+    """Keep at most ``max_per_run`` files per run and class, hard files first (or a random choice)."""
     groups = defaultdict(list)
     for record in records:
         groups[(_group(record), record['class'])].append(record)
@@ -118,33 +123,40 @@ def cap_per_run(records, max_per_run, rng):
     for items in groups.values():
         if len(items) > max_per_run:
             rng.shuffle(items)
-            items.sort(key=lambda r: not r['hard'])  # stable: hard files first, otherwise random
+            if hard_first:
+                items.sort(key=lambda r: not r['hard'])  # stable: hard files first, otherwise random
             items = items[:max_per_run]
         kept.extend(items)
     return kept
 
 
-def cap_per_class(records, max_per_class, rng):
-    """Keep at most ``max_per_class`` files per class: all hard files, the rest round-robin over runs."""
+def _round_robin(records, rng):
+    """Records interleaved over runs (one per run in turn, runs and files shuffled)."""
+    by_run = defaultdict(list)
+    for record in records:
+        by_run[_group(record)].append(record)
+    runs = list(by_run.values())
+    rng.shuffle(runs)
+    for run in runs:
+        rng.shuffle(run)
+    return [r for batch in zip_longest(*runs) for r in batch if r is not None]
+
+
+def cap_per_class(records, max_per_class, rng, hard_share=0.5):
+    """
+    Keep at most ``max_per_class`` files per class, each part spread over runs: hard files up to
+    ``hard_share`` of the cap, ordinary files for the rest; a part with fewer files leaves its quota to the other.
+    """
     by_class = defaultdict(list)
     for record in records:
         by_class[record['class']].append(record)
     kept = []
     for items in by_class.values():
-        hard = [r for r in items if r['hard']]
-        rest = [r for r in items if not r['hard']]
-        quota = max(0, max_per_class - len(hard))
-        if len(rest) > quota:
-            by_run = defaultdict(list)
-            for record in rest:
-                by_run[_group(record)].append(record)
-            runs = list(by_run.values())
-            rng.shuffle(runs)
-            for run in runs:
-                rng.shuffle(run)
-            interleaved = [r for batch in zip_longest(*runs) for r in batch if r is not None]
-            rest = interleaved[:quota]
-        kept.extend(hard + rest)
+        hard = _round_robin([r for r in items if r['hard']], rng)
+        rest = _round_robin([r for r in items if not r['hard']], rng)
+        n_hard = min(len(hard), max(int(max_per_class * hard_share), max_per_class - len(rest)))
+        n_rest = min(len(rest), max_per_class - n_hard)
+        kept.extend(hard[:n_hard] + rest[:n_rest])
     return kept
 
 
@@ -186,13 +198,16 @@ def split_by_run(records, ratios, rng):
     return records
 
 
-def build_export(formats, data_directory, ratios, max_per_class, rng, min_year=None, max_per_run=500):
+def build_export(formats, data_directory, ratios, max_per_class, rng, min_year=None, max_per_run=500,
+                 hard_share=0.5, max_eval_per_run=50):
     """Complete v2 export document."""
     records = collect_records(formats, data_directory, min_year=min_year)
     labelled = len(records)
     records = cap_per_run(records, max_per_run, rng)
-    records = cap_per_class(records, max_per_class, rng)
     records = split_by_run(records, ratios, rng)
+    train = cap_per_class([r for r in records if r['split'] == 'train'], max_per_class, rng, hard_share)
+    evaluation = cap_per_run([r for r in records if r['split'] != 'train'], max_eval_per_run, rng, hard_first=False)
+    records = train + evaluation
     records.sort(key=lambda r: (SPLITS.index(r['split']), r['class'], r['path']))
 
     counts = {split: Counter() for split in SPLITS}
@@ -206,6 +221,7 @@ def build_export(formats, data_directory, ratios, max_per_class, rng, min_year=N
         'format': FORMAT,
         'params': {
             'formats': formats, 'min_year': min_year, 'max_per_class': max_per_class, 'max_per_run': max_per_run,
+            'hard_share': hard_share, 'max_eval_per_run': max_eval_per_run,
             'split': dict(zip(SPLITS, ratios)), 'data_directory': str(data_directory),
         },
         'labelled_files': labelled,
