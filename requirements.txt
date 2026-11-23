@@ -69,6 +69,6 @@ werkzeug==3.1.9
 django-stubs==6.1.0
 
 # ML exposure-type classification (pulls tensorflow, keras, pillow, scikit-learn, …)
-git+https://github.com/OST-Observatory/ost_image_classification.git@ba8ed9269428f9291c905a31e8d277810b537a83
+git+https://github.com/OST-Observatory/ost_image_classification.git@28538a4bd76581b2e984b45f51604f596ec2deac
 # LightGBM models and ensembles with a LightGBM member (pipeline v2)
 lightgbm==4.7.0
